@@ -69,7 +69,7 @@ def ordering_preserving(program: Program,
     argsort_pred = len(data_ord) - 1 - np.argsort(data_ord['pred'].to_numpy())
 
     if method == 'inversions':
-        from Multiobjective.utils import merge_sort_inversions
+        from symbolic_regression.multiobjective.utils import merge_sort_inversions
         inversions = merge_sort_inversions(argsort_pred)
 
         return inversions
