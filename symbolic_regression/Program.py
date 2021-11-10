@@ -26,7 +26,7 @@ class Program:
     random numerical constant.
 
     The program can be evaluated and also printed.
-    The evaluation simply execute recursively the defined operation using the values
+    The evaluation execute recursively the defined operation using the values
     provided by the dataset. In the same way, printing the tree will recursively print
     each operation and terminal node based on its formatting pattern or numerical value.
 
@@ -48,10 +48,9 @@ class Program:
         Args:
             operations: The list of possible operations to use as operations
             features: The list of possible features to use as terminal nodes
-            const_range: 
-            max_depth: 
-            seed: 
-            program: 
+            const_range: The range of possible values for constant terminals in the program
+            max_depth: The max depth of a program (when reached the program is cut)
+            program: An existing program from which to initialize this object
         """
 
         self.operations = operations
@@ -81,7 +80,21 @@ class Program:
         self.max_depth: int = max_depth
 
     def cross_over(self, other=None, inplace: bool = False) -> None:
-        """
+        """ This module perform a cross-over between this program and another from the population
+
+        A cross-over is the switch between sub-trees from two different programs.
+        The cut point are chosen randomly from both programs and the sub-tree from the second
+        program (other) will replace the sub-tree from the current program.
+
+        This is a modification only on the current program, so the other one will not be
+        affected by this switch.
+
+        It can be performed inplace, overwriting the current program, or returning a new program
+        equivalent to the current one after the cross-over is applied.
+
+        Args:
+            other: the program from which to extract a sub-tree
+            inplace: whether to overwrite this object or return a new equivalent object
         """
         if self.program_depth == 0:
             raise AssertionError(
@@ -121,6 +134,10 @@ class Program:
 
         cross_over_point1.operands[child_to_replace] = cross_over_point2
 
+        ''' We need to reset the operations and feature usage counts and
+        also re-evaluate the depth of all nodes because we mixed two programs
+        and those information are not consistent anymore.
+        '''
         if inplace:
             self.program = offspring
             self._reset_operations_feature_usage()
@@ -140,6 +157,14 @@ class Program:
         return new
 
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+        """ This call evaluate the program on some given data calling the function
+        of the evaluation of the root node of the program.
+        This will recursively call the evaluation on all the children returning the
+        final result based on the given data
+
+        Args:
+            data: the data on which to evaluate this program
+        """
         return self.program.evaluate(data=data)
 
     def init_program(self,
@@ -148,7 +173,17 @@ class Program:
                      max_depth: int = np.inf,
                      current_depth: int = 0,
                      ) -> None:
-        """ This method initialize a new program calling the recursive generaion function.
+        """ This method initialize a new program calling the recursive generation function.
+
+        The generation of a program follows a genetic algorithm in which the choice on how to
+        progress in the generation randomly choose whether to put anothe operation (deepening
+        the program) or to put a terminal node (a feature from the dataset or a constant)
+
+        Args:
+            parsimony: The ratio with which to choose operations among terminal nodes
+            parsimony_decay: The ratio with which the parsimony decreases to prevent infinite programs
+            max_depth: The program depth after which the generation will force a terminal node
+            current_depth: Used by the recursive call to be aware to which depth the recursion is
         """
 
         self.parsimony = parsimony
@@ -160,6 +195,7 @@ class Program:
         logging.debug(
             f'Generating a tree with parsimony={parsimony} and parsimony_decay={parsimony_decay}')
 
+        # Father=None is used to identify the root node of the program
         self.program = self._generate_tree(
             parsimony=parsimony, parsimony_decay=parsimony_decay,
             current_depth=0, father=None)
@@ -170,6 +206,17 @@ class Program:
         logging.debug(self.program)
 
     def __lt__(self, other):
+        """ This ordering function allow to compare programs by their fitness value
+
+        The fitnes can be a single or a list of values depending on the number of
+        objective functions. If the objective is only one, the fitness will be a generic
+        numeric comparison, wherheas in case of multiple objective functions, the 
+        Pareto Front and the Crowding Distance methods are used in a multi-dimensional
+        evaluation of the fitness ordering.
+
+        Args:
+            other: The program to which compare the current one
+        """
         if isinstance(self.fitness, float):
             return self.fitness < other.fitness
 
@@ -192,8 +239,14 @@ class Program:
         If the node is a FeatureNode instead, the recursion terminate and a FeatureNode
         is added to the operation's operands list
 
-        If max_depth is set and the current recustion level reach that level,
-        a FeatureNode is forced to be generated.
+        If max_depth is set and the current recusion level reach that level,
+        a FeatureNode node, which is terminal, is forced to be generated. 
+
+        Args:
+            parsimony: The ratio with which to choose operations among terminal nodes
+            parsimony_decay: The ratio with which the parsimony decreases to prevent infinite programs
+            current_depth: Used by the recursive call to be aware to which depth the recursion is
+            father: The father to the next generated node (None for the root node)
         """
 
         current_depth += 1
@@ -202,9 +255,9 @@ class Program:
             raise AssertionError(
                 f'Max depth is reached and something went wrong')
 
-        # If max_depth is reached, no more OperationNode will be generated
+        # If max_depth is reached, no more OperationNode will be generated and a FeatureNode is forced
         if self.program_depth == 0 or (random.random() < parsimony and current_depth < self.max_depth):
-            # Generate an OperationNode
+
             operation = random.choice(self.operations)
             self.operations_used[operation['func']] += 1
 
@@ -230,10 +283,10 @@ class Program:
                     )
                 )
 
-        else:
-            # Generate a FeatureNode
+        else:  # Generate a FeatureNode
             if random.random() > (1 / len(self.features)):
-                # Use a feature from the dataset
+                # A Feature from the dataset
+
                 feature = random.choice(self.features)
                 self.features_used[feature] += 1
 
@@ -245,9 +298,10 @@ class Program:
                 )
             else:
                 # Generate a constant
+                
                 feature = random.uniform(self.const_range[0], self.const_range[1])
                 
-                feature = round(feature, 3)
+                feature = round(feature, 3)  # Arbitrary rounding of the generated constant
 
                 node = FeatureNode(
                     feature=feature,
@@ -259,7 +313,13 @@ class Program:
         return node
 
     def mutate(self, inplace: bool = False):
-        """
+        """ This method perform a mutation on a random node of the current program
+
+        A mutation is a random generation of a new sub-tree replacing another random
+        sub-tree from the current program.
+
+        Args:
+            inplace: Whether to overwrite the current program or to return a new mutated object
         """
 
         if self.program_depth == 0:
@@ -300,7 +360,7 @@ class Program:
         new = Program(program=offspring, operations=self.operations,
                        features=self.features, const_range=self.const_range,
                        max_depth=self.max_depth)
-
+        
         new.parsimony = self.parsimony
         new.parsimony_decay = self.parsimony_decay
 
@@ -311,6 +371,11 @@ class Program:
 
         This method should be called when a mutation or a cross-over are performed to ensure
         that all nodes' depths and parenthoods are set up correctly.
+
+        Args:
+            node: The node of which update the depth
+            current_depth: Used for the recursive call to propagate the value to lower nodes
+            father: The node to set as father to the children
         """
         node.depth = current_depth
         node.father = father
@@ -331,7 +396,7 @@ class Program:
             self.features_used[node.feature] += 1
 
     def _reset_operations_feature_usage(self) -> None:
-        """
+        """ This method re-evaluate the usage of features and operations of the program
         """
         self.operations_used = {}
 
@@ -344,7 +409,15 @@ class Program:
                             root_node: Union[OperationNode, FeatureNode],
                             deepness: float = 0.25
                             ) -> Union[OperationNode, FeatureNode]:
-        """
+        """ This method return a random node of a sub-tree starting from root_node.
+
+        To modulate the deepness to which the returned node will likely be, we can use 
+        'deepness'. Should be between 0 and 1; the higher the value, the closest to the
+        root_node the returned node will be. 
+
+        Args:
+            root_node: The node from which start the descent to select a random child node
+            deepness: This modulates how deep the returned node will be
         """
 
         to_return = None
