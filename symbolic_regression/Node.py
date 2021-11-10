@@ -139,7 +139,7 @@ class FeatureNode(Node):
             return self.evaluate(data=data)
         return self.feature
 
-    def evaluate(self, data) -> Union[int, float]:
+    def evaluate(self, data: Union[dict, pd.Series]) -> Union[int, float]:
         """ This function evaluate the value of a FeatureNode, which is the datapoint passed as argument
         
         The data argument needs to be accessible by the name of the feature of this node.
