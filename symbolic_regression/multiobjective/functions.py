@@ -8,16 +8,22 @@ from symbolic_regression.Program import Program
 def not_constant(program: Program,
                  data: Union[dict, pd.DataFrame],
                  epsilon: float = .01) -> float:
-    """
+    """ This function measures how much a program differs from a constant.
 
+    We use the standard deviation as a measure of the variability
+    of the output of the program when evaluated on the given dataset
+
+    Args:
+        program: The program to evaluate
+        data: The data on which to evaluate the program
+        epsilon: A minimum accepted variation for the given program
     """
+    
     result = program.evaluate(data=data)
 
-    # I consider only the maximum difference because if it is < epsilon
-    # then every other difference is < epsilon as well
-    diff = np.max(np.abs(np.diff(result)))
-
-    return np.max([0, epsilon - diff])
+    std_dev = np.std(result)
+    
+    return np.max([0, epsilon - std_dev])
 
 
 def value_range(program: Program,
