@@ -144,7 +144,7 @@ class FeatureNode(Node):
             return self.evaluate(data=data)
         return self.feature
 
-    def evaluate(self, data: Union[dict, pd.Series]) -> Union[int, float]:
+    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
         """ This function evaluate the value of a FeatureNode, which is the datapoint passed as argument
 
         The data argument needs to be accessible by the name of the feature of this node.
@@ -158,7 +158,20 @@ class FeatureNode(Node):
         Args:
             data: The data on which to evaluate the node
         """
-        if self.is_constant:
-            return self.feature
 
-        return data[self.feature]
+        result = None
+
+        if isinstance(data, pd.DataFrame):  # Case in which FeatureNode is also the root
+            result = list()
+            for _, row in data.iterrows():
+                if self.is_constant:
+                    result.append(self.feature)
+                else:
+                    result.append(row[self.feature])
+        else:
+            if self.is_constant:
+                result = self.feature
+            else:
+                result = data[self.feature]
+
+        return result
