@@ -10,7 +10,7 @@ class Node(ABC):
 
     depth: int
 
-    def __init__(self, depth: int, father = None) -> None:
+    def __init__(self, depth: int, father=None) -> None:
         self.depth = depth
         self.father = father
 
@@ -65,7 +65,7 @@ class OperationNode(Node):
 
     def render(self, data: Union[dict, None] = None) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
-        
+
         This call recursively itself untile the terminal nodes are reached. 
         """
         return self.format_str.format(*[node.render(data=data) for node in self.operands])
@@ -83,22 +83,27 @@ class OperationNode(Node):
         try:
             result = None
             if isinstance(data, dict):
-                result = self.operation(*[node.evaluate(data=data) for node in self.operands])
+                result = self.operation(
+                    *[node.evaluate(data=data) for node in self.operands])
 
             elif isinstance(data, pd.Series):
-                result = self.operation(*[node.evaluate(data=data) for node in self.operands])
+                result = self.operation(
+                    *[node.evaluate(data=data) for node in self.operands])
 
             elif isinstance(data, pd.DataFrame):
                 result = list()
                 for _, row in data.iterrows():
-                    result.append(self.operation(*[node.evaluate(data=row) for node in self.operands]))
+                    result.append(self.operation(
+                        *[node.evaluate(data=row) for node in self.operands]))
 
             else:
-                raise TypeError(f'Evaluation supports only data as dict, pd.Series or pd.DataFrame objects')
+                raise TypeError(
+                    f'Evaluation supports only data as dict, pd.Series or pd.DataFrame objects')
         except ValueError:
             print(f'VALUE ERROR {self.operation}, {self.operands}')
 
         return result
+
 
 class FeatureNode(Node):
     """ A FeatureNode represent a terminal node of the binary tree of the program and is always a feature or a constant
@@ -113,7 +118,7 @@ class FeatureNode(Node):
             father: The father node of the current FeatureNode
             is_constant: To specify whether this is a feature from the training data or a numerical constant
         """
-        super().__init__(depth , father)
+        super().__init__(depth, father)
 
         self.feature = feature
         self.arity = 0  # because it is a constand and not an operator
@@ -141,7 +146,7 @@ class FeatureNode(Node):
 
     def evaluate(self, data: Union[dict, pd.Series]) -> Union[int, float]:
         """ This function evaluate the value of a FeatureNode, which is the datapoint passed as argument
-        
+
         The data argument needs to be accessible by the name of the feature of this node.
         This is a FeatureNode, the end of a branch of a tree, so its evaluation is simply the value of that
         feature in a specific datapoint.

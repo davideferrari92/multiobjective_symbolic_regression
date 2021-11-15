@@ -1,10 +1,10 @@
-from copy import deepcopy
 import logging
 import random
+from copy import deepcopy
 from typing import Union
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from symbolic_regression.Node import FeatureNode, Node, OperationNode
 
@@ -34,7 +34,7 @@ class Program:
     A mutation is a modification of a random inner node of the tree with a newly generated
     subtree. The cross-over is the replacement of a random subtree of this program with
     a random subtree of another given program.
-    
+
     The program need to be provided with a set of possible operations, and a set of
     possible terminal node features from which to choose. Also, if numerical constant are
     desired, also the range from which to choose the constant must be provided.
@@ -72,11 +72,11 @@ class Program:
             self._reset_depths(
                 node=self.program, current_depth=0)
 
-            # Do not set self.fitness because it should be already calculated 
+            # Do not set self.fitness because it should be already calculated
         else:
             self.program: Node = None
             self.fitness = float(np.inf)
-        
+
         self.max_depth: int = max_depth
 
     def cross_over(self, other=None, inplace: bool = False) -> None:
@@ -145,15 +145,15 @@ class Program:
             return self
 
         new = Program(program=offspring, operations=self.operations,
-                       features=self.features, max_depth=self.max_depth,
-                       const_range=self.const_range)
-        
+                      features=self.features, max_depth=self.max_depth,
+                      const_range=self.const_range)
+
         new.parsimony = self.parsimony
         new.parsimony_decay = self.parsimony_decay
 
         new._reset_operations_feature_usage()
         new._reset_depths(node=new.program, current_depth=0, father=None)
-        
+
         return new
 
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
@@ -298,10 +298,12 @@ class Program:
                 )
             else:
                 # Generate a constant
-                
-                feature = random.uniform(self.const_range[0], self.const_range[1])
-                
-                feature = round(feature, 3)  # Arbitrary rounding of the generated constant
+
+                feature = random.uniform(
+                    self.const_range[0], self.const_range[1])
+
+                # Arbitrary rounding of the generated constant
+                feature = round(feature, 3)
 
                 node = FeatureNode(
                     feature=feature,
@@ -358,9 +360,9 @@ class Program:
             return self
 
         new = Program(program=offspring, operations=self.operations,
-                       features=self.features, const_range=self.const_range,
-                       max_depth=self.max_depth)
-        
+                      features=self.features, const_range=self.const_range,
+                      max_depth=self.max_depth)
+
         new.parsimony = self.parsimony
         new.parsimony_decay = self.parsimony_decay
 
@@ -403,7 +405,7 @@ class Program:
         for op in self.operations:
             self.operations_used[op['func']] = 0
 
-        self.features_used = {ft: 0 for ft in self.features} 
+        self.features_used = {ft: 0 for ft in self.features}
 
     def _select_random_node(self,
                             root_node: Union[OperationNode, FeatureNode],

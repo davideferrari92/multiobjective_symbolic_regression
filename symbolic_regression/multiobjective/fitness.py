@@ -1,7 +1,7 @@
 from typing import Union
-from symbolic_regression.Program import Program
 
 import pandas as pd
+from symbolic_regression.Program import Program
 
 
 def wmse(program: Program,

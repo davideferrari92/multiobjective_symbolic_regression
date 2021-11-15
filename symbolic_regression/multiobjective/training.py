@@ -1,8 +1,8 @@
 import logging
-from symbolic_regression.Program import Program
 import random
 
 import pandas as pd
+from symbolic_regression.Program import Program
 
 
 def dominance(program1: Program, program2: Program) -> bool:
@@ -94,7 +94,8 @@ def crowding_distance(population: list):
             # Highest fitness first for each objective
             pareto_front.sort(key=lambda p: p.fitness[i], reverse=True)
 
-            norm = pareto_front[0].fitness[i] - pareto_front[-1].fitness[i] + 1e-20
+            norm = pareto_front[0].fitness[i] - \
+                pareto_front[-1].fitness[i] + 1e-20
 
             for index, program in enumerate(pareto_front):
                 if index == 0 or index == len(pareto_front) - 1:
@@ -123,7 +124,7 @@ def tournament_selection(population: list,
     for member in torunament_members:
         if iterations == 0:
             # The first round compare only wmse, then also the multiobj funcs
-            
+
             if not best_member or best_member.fitness[0] > member.fitness[0]:
                 best_member = member
         else:

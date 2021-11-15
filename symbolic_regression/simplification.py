@@ -54,7 +54,7 @@ def extract_operation(element, depth: int = 0, father = None):
         current_operation = OPERATOR_MUL
 
     else:
-        print(element)
+        print("New Element:", element)
 
     new_operation = OperationNode(
             operation=current_operation['func'],

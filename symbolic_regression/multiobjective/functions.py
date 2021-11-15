@@ -54,7 +54,8 @@ def ordering_preserving(program: Program,
     """
 
     if method not in ['abs_val', 'inversions']:
-        raise AttributeError(f'Only support abs_val or inversions. Default is abs_val')
+        raise AttributeError(
+            f'Only support abs_val or inversions. Default is abs_val')
 
     data_ord = data.copy(deep=True)
 
@@ -64,28 +65,31 @@ def ordering_preserving(program: Program,
 
     ''' Index ordered by program prediction '''
     data_ord['pred'] = program.evaluate(data=data_ord)
-    
+
     # The number of inversions to match target ordering
     argsort_pred = len(data_ord) - 1 - np.argsort(data_ord['pred'].to_numpy())
 
     if method == 'inversions':
-        from symbolic_regression.multiobjective.utils import merge_sort_inversions
+        from symbolic_regression.multiobjective.utils import \
+            merge_sort_inversions
         inversions = merge_sort_inversions(argsort_pred)
 
         return inversions
 
     elif method == 'abs_val':
         data_ord.sort_values(by='pred', ascending=False, inplace=True)
-        data_ord['ordering_program'] = data_ord.reset_index(inplace=False).index
+        data_ord['ordering_program'] = data_ord.reset_index(
+            inplace=False).index
 
         data_ord['error'] = data_ord['pred'] - data_ord[target]
-        data_ord['error_ordering'] = data_ord['ordering_program'] - data_ord['ordering_target']
+        data_ord['error_ordering'] = data_ord['ordering_program'] - \
+            data_ord['ordering_target']
 
         error = 0.0
 
         for _, row_i in data_ord.iterrows():
             for _, row_j in data_ord.iterrows():
-                
+
                 if row_j[target] < row_i[target]:
                     error += row_i['pred'] - row_j['pred']
         return error
