@@ -72,7 +72,6 @@ class Program:
             self._reset_depths(
                 node=self.program, current_depth=0)
 
-            # Do not set self.fitness because it should be already calculated
         else:
             self.program: Node = None
             self.fitness = float(np.inf)
@@ -96,13 +95,8 @@ class Program:
             other: the program from which to extract a sub-tree
             inplace: whether to overwrite this object or return a new equivalent object
         """
-        if self.program_depth == 0:
-            raise AssertionError(
-                f'This program has depth 0 and cannot undergo cross-over')
-
-        if other.program_depth == 0:
-            raise AssertionError(
-                f'The argument program has depth 0 and cannot be used for cross-over')
+        if self.program_depth == 0 or other.program_depth == 0:
+            return self.mutate()
 
         if not isinstance(other, Program):
             raise TypeError(
@@ -124,7 +118,8 @@ class Program:
 
         cross_over_point2 = deepcopy(
             self._select_random_node(root_node=other.program))
-        cross_over_point2.father = cross_over_point1
+
+        cross_over_point1 = cross_over_point2
 
         child_count_cop1 = len(cross_over_point1.operands)
 
@@ -325,8 +320,20 @@ class Program:
         """
 
         if self.program_depth == 0:
-            raise AssertionError(
-                f'This program has depth 0 and cannot undergo mutation')
+            # Case in which a one FeatureNode only program is passed.
+            # A new tree is generated.
+            new = Program(operations=self.operations,
+                          features=self.features, const_range=self.const_range,
+                          max_depth=self.max_depth)
+
+            new._generate_tree(
+                parsimony=self.parsimony,
+                parsimony_decay=self.parsimony_decay,
+                current_depth=0,
+                father=None
+            )
+
+            return new
 
         offspring = deepcopy(self.program)
         mutate_point = self._select_random_node(root_node=offspring)
@@ -409,7 +416,7 @@ class Program:
 
     def _select_random_node(self,
                             root_node: Union[OperationNode, FeatureNode],
-                            deepness: float = 0.25
+                            deepness: float = 0.75
                             ) -> Union[OperationNode, FeatureNode]:
         """ This method return a random node of a sub-tree starting from root_node.
 
@@ -425,24 +432,16 @@ class Program:
         to_return = None
 
         if random.random() < deepness:
-            # Favor nodes higher in the tree (near the root)
-            # In case it doesn't return here, it will eventually call recursively this function
-            # so that the depth of the node will be such that the probability of returning
-            # here increase at every call.
-            #logging.debug(f'Node selected {subtree}')
             to_return = root_node
 
-        if isinstance(root_node, FeatureNode):
-            # Final recursion!
-            # Case in which the node does not have children. It is a leaf node for sure
-            # and therefore we need its parent (the operation node above)
-            logging.debug(
-                f'FeatureNode selected: returning its father {root_node.father}')
-            to_return = root_node.father
+            if isinstance(to_return, FeatureNode):
+                to_return = root_node.father  # Can be OperationNode or None
 
-        if to_return:
-            logging.debug(
-                f'Selected a {to_return.operation} node deep {to_return.depth}')
-            return to_return
+        else:
+            try:
+                to_return = self._select_random_node(root_node=random.choice(root_node.operands), deepness=deepness)
+            except AttributeError as e:
+                # TypeError happens when root_node is a FeatureNode
+                to_return = root_node.father  # Can be OperationNode or None
 
-        return self._select_random_node(root_node=random.choice(root_node.operands))
+        return to_return
