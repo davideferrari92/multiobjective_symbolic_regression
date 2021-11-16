@@ -5,6 +5,21 @@ import pandas as pd
 from symbolic_regression.Program import Program
 
 
+def generate_population(features, operations, fitness, data, target, weights, const_range, parsimony, parsimony_decay):
+    p = Program(
+        features=features,
+        operations=operations,
+        const_range=const_range
+    )
+
+    p.init_program(parsimony=parsimony, parsimony_decay=parsimony_decay)
+
+    p.fitness = fitness(program=p, data=data,
+                        target=target, weights=weights)
+
+    return p
+
+
 def dominance(program1: Program, program2: Program) -> bool:
     """
     Return True if program1 dominate over program2.
