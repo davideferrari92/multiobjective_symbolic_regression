@@ -1,4 +1,5 @@
 import logging
+from operator import ne
 import random
 from copy import deepcopy
 from typing import Union
@@ -96,7 +97,13 @@ class Program:
             inplace: whether to overwrite this object or return a new equivalent object
         """
         if self.program_depth == 0 or other.program_depth == 0:
-            return self.mutate()
+            new = deepcopy(self)
+
+            new.mutate(inplace=True)
+
+            new._reset_operations_feature_usage()
+            new._reset_depths(node=new.program, current_depth=0, father=None)
+            return new
 
         if not isinstance(other, Program):
             raise TypeError(
@@ -326,11 +333,11 @@ class Program:
                           features=self.features, const_range=self.const_range,
                           max_depth=self.max_depth)
 
-            new._generate_tree(
+            new.init_program(
                 parsimony=self.parsimony,
                 parsimony_decay=self.parsimony_decay,
+                max_depth=new.max_depth,
                 current_depth=0,
-                father=None
             )
 
             return new
@@ -363,7 +370,7 @@ class Program:
             self.program = offspring
             self._reset_operations_feature_usage()
             self._reset_depths(node=self.program, current_depth=0, father=None)
-            logging.DEBUG(f'Now the program has depth {self.depth}')
+            logging.debug(f'Now the program has depth {self.program_depth}')
             return self
 
         new = Program(program=offspring, operations=self.operations,
