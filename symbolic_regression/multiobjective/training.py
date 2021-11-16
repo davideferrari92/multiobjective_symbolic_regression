@@ -151,7 +151,7 @@ def get_offspring(population: list,
         population=population, tournament_size=tournament_size, iterations=iterations
     )
 
-    if random.random() > cross_over_perc:
+    if random.random() < cross_over_perc:
         program2 = tournament_selection(
             population=population, tournament_size=tournament_size, iterations=iterations
         )
