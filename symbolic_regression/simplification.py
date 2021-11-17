@@ -4,6 +4,7 @@ from typing import Union
 
 import pandas as pd
 import sympy
+from joblib import Parallel, delayed
 
 from symbolic_regression.Node import FeatureNode, OperationNode
 from symbolic_regression.operators import *
@@ -166,8 +167,6 @@ def simplify_population(population: list,
                                target=target, weights=weights)
         return simp
 
-    from joblib import Parallel, delayed
-    
     import time
     start_time = time.perf_counter()
 
