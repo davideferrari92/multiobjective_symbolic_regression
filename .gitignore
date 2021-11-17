@@ -1,3 +1,8 @@
+# Jupyter files
+.ipynb_checkpoints
+mlruns
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
