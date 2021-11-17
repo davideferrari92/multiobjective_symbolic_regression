@@ -41,6 +41,8 @@ def _protected_pow(x1, x2):
             return math.pow(abs(x1), x2)
         except OverflowError:
             return 0.
+        except ValueError:  # The math domain error
+            return 0.
 
 
 def _sigmoid(x1):
