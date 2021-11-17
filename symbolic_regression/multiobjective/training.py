@@ -1,11 +1,40 @@
 import logging
 import random
+from typing import Union
 
 import pandas as pd
 from symbolic_regression.Program import Program
 
 
-def generate_population(features, operations, fitness, data, target, weights, const_range, parsimony, parsimony_decay):
+def generate_population(
+    features: list, 
+    operations: list, 
+    parsimony: float, 
+    parsimony_decay: float,
+    fitness: list, 
+    const_range: tuple, 
+    data: Union[dict, pd.Series, pd.DataFrame], 
+    target: str, 
+    weights: str
+    ):
+    """ This method generate a new program and evaluate its fitness
+
+    The program generation is an iterative process that can be parallelized.
+    This function can therefore be called iteratively or parallely easily
+    as there are no shared resources. Moreover, the evaluation of the fitness
+    in this stage is convenient as it can be embedded in the parallel execution.
+
+    Args:
+        features: The features of the training dataset for the generation of FeatureNodes
+        operations: The allowed operation for the generation of the OperationNodes
+        parsimony: The parsimony that modulate the depth of the program
+        parsimony_decay: The decay ration to which the parsimony is decreased as the program depth increases
+        const_range: The numeric range between it is accepted to generate the constants in the program
+        fitness: The list of the fitness functions
+        data: The data on to which evaluate the fitness
+        target: The label of the target column for supervised tasks
+        weights: The label of the weights columns of a weighted WMSE in case of unbalanced datasets
+    """
     p = Program(
         features=features,
         operations=operations,
@@ -70,8 +99,8 @@ def create_pareto_front(population: list):
 
     i = 1
 
-    ''' Set the belonging pareto front to every element of the population
-    '''
+    # Set the belonging pareto front to every element of the population
+
     while pareto_front:
         next_pareto_front = []
 
@@ -128,7 +157,7 @@ def crowding_distance(population: list):
 
 def tournament_selection(population: list,
                          tournament_size: int,
-                         iterations: int):
+                         generation: int):
     """
     """
 
@@ -137,13 +166,14 @@ def tournament_selection(population: list,
     best_member = None
 
     for member in torunament_members:
-        if iterations == 0:
-            # The first round compare only wmse, then also the multiobj funcs
+        if generation == 0:
+            # The first generation compare only the fitness
 
             if not best_member or best_member.fitness[0] > member.fitness[0]:
                 best_member = member
         else:
-
+            
+            # In the other generations use the pareto front rank and the crowding distance
             if best_member == None or \
                     member.rank < best_member.rank or \
                     (member.rank == best_member.rank and
@@ -157,18 +187,42 @@ def get_offspring(population: list,
                   data: pd.DataFrame,
                   target: str,
                   weights: str,
-                  fitness,
+                  fitness: list,
+                  generations: int,
                   tournament_size: int,
-                  cross_over_perc: float = .7,
-                  iterations: int = 0):
+                  cross_over_perc: float = .5):
 
+    """ This function generate an offspring of a program from the current population
+
+    The offspring is a mutation of a program from the current population by means of
+    cross-over or mutation. The choice of the two is random according to the genetic
+    nature of this algorithm. The prevalence of one over the other can be modulated
+    using the parameter `cross_over_perc` (the higher the likely the cross-over will
+    be chosen).
+    In case the cross-over is chosen, a second program is extracted from the population
+    and the operation is performed selecting a sub-tree from the program 2 and appending
+    in place of a random sub-tree of program 1.
+    In case the mutation is chosen, a random sub-tree of the program 1 is replaces by a 
+    newly generated subtree.
+    The generated mutated program will then be returned as a new object for the population.
+
+    Args:
+        population: The population of programs from which to extract the program for the mutation
+        data: The data on which to evaluate the fitness of the mutated program
+        target: The label of the target variable in the training dataset for supervised tasks
+        weights: The label of the weights columns of a weighted WMSE in case of unbalanced datasets
+        fitness: The list of fitness functions for this task
+        tournament_size: The size of the pool of random programs from which to choose in for the mutations
+        cross_over_perc: The value that modulates the prevalence of cross-over over simple mutations
+        generations: The number of training generations (used to appropriately behave in the first one)
+    """
     program1 = tournament_selection(
-        population=population, tournament_size=tournament_size, iterations=iterations
+        population=population, tournament_size=tournament_size, generation=generations
     )
 
     if random.random() < cross_over_perc:
         program2 = tournament_selection(
-            population=population, tournament_size=tournament_size, iterations=iterations
+            population=population, tournament_size=tournament_size, generation=generations
         )
         p_ret = program1.cross_over(other=program2, inplace=False)
 
