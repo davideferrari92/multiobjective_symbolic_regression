@@ -5,6 +5,22 @@ import pandas as pd
 from symbolic_regression.Program import Program
 
 
+def wmse(program: Program,
+         data: Union[pd.DataFrame, pd.Series],
+         target: str,
+         weights: str = None) -> float:
+    """ Evaluates the weighted mean squared error
+    """
+
+    pred = program.evaluate(data=data)
+
+    if weights:
+        wmse = (((pred - data[target]) ** 2) * data[weights]).mean()
+    else:
+        wmse = (((pred - data[target]) ** 2)).mean()
+    return wmse
+
+
 def not_constant(program: Program,
                  data: Union[dict, pd.DataFrame],
                  epsilon: float = .01) -> float:
@@ -18,11 +34,11 @@ def not_constant(program: Program,
         data: The data on which to evaluate the program
         epsilon: A minimum accepted variation for the given program
     """
-    
+
     result = program.evaluate(data=data)
 
     std_dev = np.std(result)
-    
+
     return np.max([0, epsilon - std_dev])
 
 
