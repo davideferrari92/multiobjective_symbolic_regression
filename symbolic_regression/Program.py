@@ -286,6 +286,11 @@ class Program:
                 )
 
         else:  # Generate a FeatureNode
+            ''' The probability to get a feature from the training data is
+            (n-1) / n where n is the number of features.
+            Otherwise a constant value will be generated.
+            '''
+
             if random.random() > (1 / len(self.features)):
                 # A Feature from the dataset
 
@@ -305,7 +310,7 @@ class Program:
                     self.const_range[0], self.const_range[1])
 
                 # Arbitrary rounding of the generated constant
-                feature = round(feature, 3)
+                feature = round(feature, 2)
 
                 node = FeatureNode(
                     feature=feature,
