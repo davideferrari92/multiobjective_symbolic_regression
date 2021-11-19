@@ -53,9 +53,9 @@ def value_range(program: Program,
 
     result = program.evaluate(data=data)
 
-    upper_bound_constraint = np.sum(np.where(
+    upper_bound_constraint = np.mean(np.where(
         np.array(result) - upper_bound >= 0, np.array(result) - upper_bound, 0))
-    lower_bound_constraint = np.sum(np.where(
+    lower_bound_constraint = np.mean(np.where(
         lower_bound - np.array(result) >= 0, lower_bound - np.array(result), 0))
 
     return upper_bound_constraint + lower_bound_constraint
