@@ -75,9 +75,11 @@ def ordering_preserving(program: Program,
     6) error = error + difference ????
     """
 
-    if method not in ['abs_val', 'inversions']:
-        raise AttributeError(
-            f'Only support abs_val or inversions. Default is abs_val')
+    if method not in ['abs_val', 'inversions', 'inversions_and_error', 'error']:
+        print(
+            f'Only support abs_val, inversions, inversions_and_error, or error. Default is inversions')
+        
+        method == 'inversion'
 
     data_ord = data.copy(deep=True)
 
@@ -91,12 +93,25 @@ def ordering_preserving(program: Program,
     # The number of inversions to match target ordering
     argsort_pred = len(data_ord) - 1 - np.argsort(data_ord['pred'].to_numpy())
 
-    if method == 'inversions':
+    if method in ['inversions', 'inversions_and_error', 'error']:
         from symbolic_regression.multiobjective.utils import \
             merge_sort_inversions
-        inversions = merge_sort_inversions(argsort_pred)
+        inversions, err = merge_sort_inversions(arr=argsort_pred, data_ord_pred=data_ord['pred'])
 
-        return inversions
+        # Maximum number of inversions
+        inv = len(argsort_pred) * (len(argsort_pred) - 1) * 0.5
+
+        if method == 'inversions':
+            
+            return inversions / inv
+
+        if method == 'inversions_and_error':
+            
+            return inversions / inv, err / inversions
+
+        if method == 'error':
+            
+            return err / inversions
 
     elif method == 'abs_val':
         data_ord.sort_values(by='pred', ascending=False, inplace=True)

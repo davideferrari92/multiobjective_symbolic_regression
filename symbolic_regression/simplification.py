@@ -7,6 +7,7 @@ import sympy
 from joblib import Parallel, delayed
 
 from symbolic_regression.Node import FeatureNode, OperationNode
+from symbolic_regression.multiobjective.training import eval_fitness
 from symbolic_regression.operators import *
 from symbolic_regression.Program import Program
 
@@ -163,8 +164,8 @@ def simplify_population(population: list,
         warnings.filterwarnings("ignore")
 
         simp = simplify_program(p)
-        simp.fitness = fitness(program=simp, data=data,
-                               target=target, weights=weights)
+        simp.fitness = eval_fitness(fitness=fitness, program=p, data=data, target=target, weights=weights)
+
         return simp
 
     import time

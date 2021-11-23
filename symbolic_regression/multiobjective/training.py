@@ -6,17 +6,40 @@ import pandas as pd
 from symbolic_regression.Program import Program
 
 
+def eval_fitness(fitness, program, data, target, weights):
+    f = fitness(
+        program=program,
+        data=data,
+        target=target,
+        weights=weights
+    )
+
+    fitn = []
+
+    for f in fitness(program=program, data=data,
+                     target=target, weights=weights):
+        if isinstance(f, float) or isinstance(f, int):
+            fitn.append(f)
+        elif isinstance(f, tuple):
+            for elem in f:
+                fitn.append(elem)
+        else:
+            print(f'Fitness shape error: {f}')
+
+    return fitn
+
+
 def generate_population(
-    features: list, 
-    operations: list, 
-    parsimony: float, 
+    features: list,
+    operations: list,
+    parsimony: float,
     parsimony_decay: float,
-    fitness: list, 
-    const_range: tuple, 
-    data: Union[dict, pd.Series, pd.DataFrame], 
-    target: str, 
+    fitness: list,
+    const_range: tuple,
+    data: Union[dict, pd.Series, pd.DataFrame],
+    target: str,
     weights: str
-    ):
+):
     """ This method generate a new program and evaluate its fitness
 
     The program generation is an iterative process that can be parallelized.
@@ -43,8 +66,8 @@ def generate_population(
 
     p.init_program(parsimony=parsimony, parsimony_decay=parsimony_decay)
 
-    p.fitness = fitness(program=p, data=data,
-                        target=target, weights=weights)
+    p.fitness = eval_fitness(fitness=fitness, program=p,
+                             data=data, target=target, weights=weights)
 
     return p
 
@@ -172,7 +195,7 @@ def tournament_selection(population: list,
             if not best_member or best_member.fitness[0] > member.fitness[0]:
                 best_member = member
         else:
-            
+
             # In the other generations use the pareto front rank and the crowding distance
             if best_member == None or \
                     member.rank < best_member.rank or \
@@ -191,7 +214,6 @@ def get_offspring(population: list,
                   generations: int,
                   tournament_size: int,
                   cross_over_perc: float = .5):
-
     """ This function generate an offspring of a program from the current population
 
     The offspring is a mutation of a program from the current population by means of
@@ -230,6 +252,7 @@ def get_offspring(population: list,
         p_ret = program1.mutate(inplace=False)
 
     # Add the fitness to the object after the cross_over or mutation
-    p_ret.fitness = fitness(program=p_ret, data=data,
-                            target=target, weights=weights)
+    p_ret.fitness = eval_fitness(
+        fitness=fitness, program=p_ret, data=data, target=target, weights=weights)
+
     return p_ret
