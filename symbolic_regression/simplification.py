@@ -21,7 +21,7 @@ def extract_operation(element, depth: int = 0, father=None):
     '''
     if element.is_Float or element.is_Integer or element.is_Rational:
         new_feature = FeatureNode(
-            feature=float(list(element.expr_free_symbols)[0]),
+            feature=round(float(list(element.expr_free_symbols)[0]), 2),
             depth=depth,
             is_constant=True
         )
