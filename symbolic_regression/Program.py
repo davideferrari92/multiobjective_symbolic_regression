@@ -414,6 +414,8 @@ class Program:
                     node=operand, current_depth=current_depth+1, father=node)
 
         if isinstance(node, FeatureNode) and not node.is_constant:
+            if not self.features_used.get(node.feature):
+                self.features_used[node.feature] = 0
             self.features_used[node.feature] += 1
 
     def _reset_operations_feature_usage(self) -> None:
