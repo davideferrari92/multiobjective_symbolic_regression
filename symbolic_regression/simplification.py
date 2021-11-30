@@ -37,7 +37,7 @@ def extract_operation(element, depth: int = 0, father=None):
 
     elif element == sympy.simplify('E'):
         new_feature = FeatureNode(
-            feature=2.71828,
+            feature=np.exp(1.),
             depth=depth,
             is_constant=True
         )
