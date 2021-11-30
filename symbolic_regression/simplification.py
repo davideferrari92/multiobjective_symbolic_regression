@@ -19,24 +19,32 @@ def extract_operation(element, depth: int = 0, father=None):
 
     ''' Two terminals: constants and features
     '''
+    new_feature = None
+
     if element.is_Float or element.is_Integer or element.is_Rational:
         new_feature = FeatureNode(
             feature=round(float(list(element.expr_free_symbols)[0]), 2),
             depth=depth,
             is_constant=True
         )
-        return new_feature
 
-    if element.is_Symbol:
+    elif element.is_Symbol:
         new_feature = FeatureNode(
             feature=str(list(element.expr_free_symbols)[0]),
             depth=depth,
             is_constant=False
         )
+
+    elif element == sympy.simplify('E'):
+        new_feature = FeatureNode(
+            feature=2.71828,
+            depth=depth,
+            is_constant=True
+        )
+    
+    if new_feature:
         return new_feature
 
-    ''' Non terminal cases
-    '''
     if str(element.func) == 'exp':
         current_operation = OPERATOR_EXP
 
@@ -110,11 +118,14 @@ def simplify_program(program: Program) -> Program:
     """
 
     logging.debug(f'Simplifying program {program}')
-    simplified = sympy.simplify(program.program)
+    simplified = sympy.simplify(program.program, rational=True, inverse=True)
 
     logging.debug(f'Extracting the program tree from the simplified')
-    extracted_program = extract_operation(
-        element=simplified, depth=0, father=None)
+    try:
+        extracted_program = extract_operation(
+            element=simplified, depth=0, father=None)
+    except UnboundLocalError:
+        print(simplified)
 
     new_program = Program(
         operations=program.operations,
@@ -163,7 +174,11 @@ def simplify_population(population: list,
     def simplify_single_p(p, fitness, data, target, weights):
         warnings.filterwarnings("ignore")
 
-        simp = simplify_program(p)
+        try:
+            simp = simplify_program(p)
+        except UnboundLocalError:
+            return None
+        
         simp.fitness = eval_fitness(fitness=fitness, program=p, data=data, target=target, weights=weights)
 
         return simp
