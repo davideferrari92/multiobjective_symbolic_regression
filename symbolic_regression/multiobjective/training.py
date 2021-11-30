@@ -192,7 +192,7 @@ def tournament_selection(population: list,
         if generation == 0:
             # The first generation compare only the fitness
 
-            if not best_member or best_member.fitness[0] > member.fitness[0]:
+            if best_member is None or best_member.fitness[0] > member.fitness[0]:
                 best_member = member
         else:
 
