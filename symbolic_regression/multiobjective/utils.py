@@ -83,7 +83,7 @@ def merge(arr, data_ord_pred, temp_arr, left, mid, right):
             temp_arr[k] = arr[j]
             inv_count += (mid-i + 1)
 
-            squared_error += np.sum((data_ord_pred[i:j-1] - data_ord_pred[j])**2)
+            squared_error += np.sum((data_ord_pred[i:mid+1] - data_ord_pred[j])**2)
             
             k += 1
             j += 1
