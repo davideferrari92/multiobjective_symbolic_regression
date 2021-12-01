@@ -78,3 +78,7 @@ OPERATOR_EXP = {"func": _protected_exp, "arity": 1, "format_str": "exp({})"}
 OPERATOR_POW = {"func": _protected_pow, "arity": 2, "format_str": "({} ** {})"}
 
 OPERATOR_SQRT = {"func": _protected_sqrt, "arity": 1, "format_str": "sqrt({})"}
+
+OPERATOR_MAX = {"func": max, "arity": 2, "format_str": "max({}, {})"}
+
+OPERATOR_MIN = {"func": min, "arity": 2, "format_str": "min({}, {})"}
