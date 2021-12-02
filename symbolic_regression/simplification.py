@@ -162,13 +162,6 @@ def simplify_population(population: list,
         n_jobs: The number of threads to allocate
     """
 
-    if n_jobs == -1:
-        import os
-        n_jobs = os.cpu_count()
-
-    if n_jobs < 1:
-        raise ValueError(f'Must choose at least 1 job')
-
     logging.info(f'Simplifying population with {n_jobs} threads')
 
     def simplify_single_p(p, fitness, data, target, weights):
