@@ -169,6 +169,31 @@ class Program:
         """
         return self.program.evaluate(data=data)
 
+    def evaluate_fitness(self, data, fitness, target, weights, constants_optimization: bool = False):
+
+        self.fitness = list()
+
+        if constants_optimization:
+            # train tf
+            pass
+
+        evaluated = fitness(program=self, data=data,
+                            target=target, weights=weights)
+
+        for ftn_label, ftn in evaluated.items():
+
+            f = ftn['func']
+
+            if isinstance(f, float) or isinstance(f, int) or isinstance(f, np.float):
+                self.fitness.append(f)
+            elif isinstance(f, tuple):
+                for elem in f:
+                    self.fitness.append(elem)
+            else:
+                print(f'Fitness shape error: {f}')
+
+        return self.fitness
+
     def init_program(self,
                      parsimony: float = 0.95,
                      parsimony_decay: float = 0.95,
@@ -453,7 +478,8 @@ class Program:
 
         else:
             try:
-                to_return = self._select_random_node(root_node=random.choice(root_node.operands), deepness=deepness)
+                to_return = self._select_random_node(
+                    root_node=random.choice(root_node.operands), deepness=deepness)
             except AttributeError as e:
                 # TypeError happens when root_node is a FeatureNode
                 to_return = root_node.father  # Can be OperationNode or None

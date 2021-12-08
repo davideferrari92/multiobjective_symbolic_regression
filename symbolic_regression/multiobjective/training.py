@@ -6,29 +6,6 @@ import pandas as pd
 from symbolic_regression.Program import Program
 
 
-def eval_fitness(fitness, program, data, target, weights):
-    f = fitness(
-        program=program,
-        data=data,
-        target=target,
-        weights=weights
-    )
-
-    fitn = []
-
-    for f in fitness(program=program, data=data,
-                     target=target, weights=weights):
-        if isinstance(f, float) or isinstance(f, int):
-            fitn.append(f)
-        elif isinstance(f, tuple):
-            for elem in f:
-                fitn.append(elem)
-        else:
-            print(f'Fitness shape error: {f}')
-
-    return fitn
-
-
 def generate_population(
     features: list,
     operations: list,
@@ -66,8 +43,8 @@ def generate_population(
 
     p.init_program(parsimony=parsimony, parsimony_decay=parsimony_decay)
 
-    p.fitness = eval_fitness(fitness=fitness, program=p,
-                             data=data, target=target, weights=weights)
+    p.evaluate_fitness(fitness=fitness,
+                       data=data, target=target, weights=weights)
 
     return p
 
@@ -252,7 +229,7 @@ def get_offspring(population: list,
         p_ret = program1.mutate(inplace=False)
 
     # Add the fitness to the object after the cross_over or mutation
-    p_ret.fitness = eval_fitness(
-        fitness=fitness, program=p_ret, data=data, target=target, weights=weights)
+    p_ret.evaluate_fitness(
+        fitness=fitness, data=data, target=target, weights=weights)
 
     return p_ret
