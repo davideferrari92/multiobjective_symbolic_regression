@@ -2,6 +2,7 @@ from abc import ABC
 from typing import Union
 
 import pandas as pd
+import tensorflow as tf
 
 
 class Node(ABC):
@@ -18,10 +19,10 @@ class Node(ABC):
 class OperationNode(Node):
     """ An OperationNode represents an arithmetic operation.
     It is characterized by the callable of the operation itself, the arity of the operation
-    (i.e., the number of operands accepted), and the format to represent the operation in 
+    (i.e., the number of operands accepted), and the format to represent the operation in
     the formula.
     Finally there is the list with the operands; it must be long at most as arity.
-    The operands can be OperationNode, if the formula continues deeply, or FeatureNode if 
+    The operands can be OperationNode, if the formula continues deeply, or FeatureNode if
     the formula terminate and a feature is chosen.
     """
 
@@ -63,10 +64,10 @@ class OperationNode(Node):
 
         self.operands.append(operand)
 
-    def render(self, data: Union[dict, None] = None) -> str:
+    def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
 
-        This call recursively itself untile the terminal nodes are reached. 
+        This call recursively itself untile the terminal nodes are reached.
         """
         return self.format_str.format(*[node.render(data=data) for node in self.operands])
 
@@ -80,29 +81,37 @@ class OperationNode(Node):
         Args:
             data: The data on which to evaluate this node
         """
-        try:
-            result = None
-            if isinstance(data, dict):
-                result = self.operation(
-                    *[node.evaluate(data=data) for node in self.operands])
+        result = None
+        if isinstance(data, dict):
+            result = self.operation(
+                *[node.evaluate(data=data) for node in self.operands])
 
-            elif isinstance(data, pd.Series):
-                result = self.operation(
-                    *[node.evaluate(data=data) for node in self.operands])
+        elif isinstance(data, pd.Series):
+            result = self.operation(
+                *[node.evaluate(data=data) for node in self.operands])
 
-            elif isinstance(data, pd.DataFrame):
-                result = list()
-                for _, row in data.iterrows():
-                    result.append(self.operation(
-                        *[node.evaluate(data=row) for node in self.operands]))
+        elif isinstance(data, pd.DataFrame):
+            result = list()
+            for _, row in data.iterrows():
+                result.append(self.operation(
+                    *[node.evaluate(data=row) for node in self.operands]))
 
-            else:
-                raise TypeError(
-                    f'Evaluation supports only data as dict, pd.Series or pd.DataFrame objects')
-        except ValueError:
-            print(f'VALUE ERROR {self.operation}, {self.operands}')
+        else:
+            raise TypeError(
+                f'Evaluation supports only data as dict, pd.Series or pd.DataFrame objects')
 
         return result
+
+    def _get_constants(self, const_list: list):
+        """
+        """
+        for child in self.operands:
+            if isinstance(child, OperationNode):
+                const_list = child._get_constants(const_list=const_list)
+            elif child.is_constant:
+                const_list += [child]
+
+        return const_list
 
 
 class FeatureNode(Node):
@@ -127,9 +136,9 @@ class FeatureNode(Node):
     def __repr__(self) -> str:
         """ To print the current node in a readable way
         """
-        return self.render()
+        return f'FeatureNode({self.render()})'
 
-    def render(self, data: Union[dict, None] = None) -> str:
+    def render(self, data: Union[dict, pd.Series, None] = None) -> str:
         """ This method render the string representation of this FeatureNode
 
         If data is provided, the rendering consist of the value of the datapoint of the feature of this
@@ -140,11 +149,12 @@ class FeatureNode(Node):
         if self.is_constant:
             return str(self.feature)
 
-        if data:  # Case in which I render the value of the feature in the datapoint instead of its name
+        if data is not None:  # Case in which I render the value of the feature in the datapoint instead of its name
             return self.evaluate(data=data)
+
         return self.feature
 
-    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> Union[int, float]:
         """ This function evaluate the value of a FeatureNode, which is the datapoint passed as argument
 
         The data argument needs to be accessible by the name of the feature of this node.
@@ -161,17 +171,14 @@ class FeatureNode(Node):
 
         result = None
 
-        if isinstance(data, pd.DataFrame):  # Case in which FeatureNode is also the root
-            result = list()
-            for _, row in data.iterrows():
-                if self.is_constant:
-                    result.append(self.feature)
-                else:
-                    result.append(row[self.feature])
+        if self.is_constant:
+            result = self.feature
+
+        elif data is not None and (isinstance(data, pd.Series) or isinstance(data, dict)):
+            result = data[self.feature]
+
         else:
-            if self.is_constant:
-                result = self.feature
-            else:
-                result = data[self.feature]
+            raise TypeError(
+                f'Non constants FeatureNodes need data to be evaluated')
 
         return result

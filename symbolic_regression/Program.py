@@ -57,6 +57,7 @@ class Program:
         self.operations = operations
         self.features = features
         self.const_range = const_range
+        self._constants = []
 
         self.program_depth: int = 0
 
@@ -78,6 +79,23 @@ class Program:
             self.fitness = float(np.inf)
 
         self.max_depth: int = max_depth
+
+    def get_constants(self):
+
+        if isinstance(self.program, OperationNode):
+            return self.program._get_constants(const_list = [])
+
+        # Only one constant FeatureNode
+        elif self.program.is_constant:
+            return [self]
+
+        # Only one non-constant FeatureNode
+        return []
+
+    def set_constants(self, new):
+        
+        for constant, new_value in zip(self.get_constants(), new):
+            constant.feature = new_value
 
     def cross_over(self, other=None, inplace: bool = False) -> None:
         """ This module perform a cross-over between this program and another from the population
