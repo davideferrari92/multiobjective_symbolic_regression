@@ -2,6 +2,7 @@ from abc import ABC
 from typing import Union
 
 import pandas as pd
+from pandas.core import base
 import tensorflow as tf
 
 
@@ -9,10 +10,7 @@ class Node(ABC):
     """ A node can represent an operation or a feature in a binary tree
     """
 
-    depth: int
-
-    def __init__(self, depth: int, father=None) -> None:
-        self.depth = depth
+    def __init__(self, father=None) -> None:
         self.father = father
 
 
@@ -26,7 +24,7 @@ class OperationNode(Node):
     the formula terminate and a feature is chosen.
     """
 
-    def __init__(self, operation: callable, format_tf: str, arity: int, format_str: str, depth: int, father) -> None:
+    def __init__(self, operation: callable, format_tf: str, arity: int, format_str: str, father) -> None:
         """ To initialize an OperationNode
 
         Args:
@@ -34,10 +32,9 @@ class OperationNode(Node):
             format_tf: The string representation of the tensorflow equivalent for constants optimization
             arity: The number of arguments that the operation accepts
             format_str: The string representation of the operation
-            depth: The depth in the program to which this node is
             father: The node above the current one (None for the root_node of the program)
         """
-        super().__init__(depth, father)
+        super().__init__(father)
 
         self.operation = operation
         self.arity = arity
@@ -65,17 +62,28 @@ class OperationNode(Node):
                 f'This operation support only {self.arity} operands: {self.arity} given.')
 
         self.operands.append(operand)
-    
+
     def _get_complexity(self, base_complexity=0):
         """ This method recursively increment the complexity count of this program
         """
-        
+
         base_complexity += 1  # Count for this operation contribution
-        
+
         for child in self.operands:
-            base_complexity = child._get_complexity(base_complexity=base_complexity)
-        
+            base_complexity = child._get_complexity(
+                base_complexity=base_complexity)
+
         return base_complexity
+
+    def _get_depth(self, base_depth=0):
+
+        base_depth += 1
+
+        for child in self.operands:
+            new_depth = max(child._get_depth(base_depth=base_depth)
+                            for child in self.operands)
+
+        return new_depth
 
     def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None, format_tf: bool = False) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
@@ -133,7 +141,8 @@ class OperationNode(Node):
         """
         for child in self.operands:
             if isinstance(child, OperationNode):
-                features_list = child._get_features(features_list=features_list)
+                features_list = child._get_features(
+                    features_list=features_list)
             elif not child.is_constant:
                 features_list += [child.feature]
 
@@ -144,16 +153,15 @@ class FeatureNode(Node):
     """ A FeatureNode represent a terminal node of the binary tree of the program and is always a feature or a constant
     """
 
-    def __init__(self, feature: Union[str, float], depth: int, father: Union[OperationNode, None] = None, is_constant: bool = False) -> None:
+    def __init__(self, feature: Union[str, float], father: Union[OperationNode, None] = None, is_constant: bool = False) -> None:
         """ To initalize this FeatureNode
 
         Args:
             feature: The name of the feature from the training dataset or the numerical value of a constant
-            depth: The depth to which this node is in the program tree
             father: The father node of the current FeatureNode
             is_constant: To specify whether this is a feature from the training data or a numerical constant
         """
-        super().__init__(depth, father)
+        super().__init__(father)
 
         self.feature = feature
         self.arity = 0  # because it is a constand and not an operator
@@ -165,14 +173,17 @@ class FeatureNode(Node):
         """
         return f'FeatureNode({self.render()})'
 
-    def _get_complexity(base_complexity=0):
+    def _get_complexity(self, base_complexity=0):
         """ This method increase the complexity of the program by 1
         It is usually called by an OperationNode _get_complexity which
         accounts for the rest of the program.
         """
         return base_complexity + 1
 
-    def render(self, data: Union[dict, pd.Series, None] = None, format_tf = False) -> str:
+    def _get_depth(self, base_depth=0):
+        return base_depth + 1
+
+    def render(self, data: Union[dict, pd.Series, None] = None, format_tf=False) -> str:
         """ This method render the string representation of this FeatureNode
 
         If data is provided, the rendering consist of the value of the datapoint of the feature of this
@@ -213,7 +224,7 @@ class FeatureNode(Node):
         if self.is_constant:
             result = self.feature
 
-        elif data is not None and (isinstance(data, pd.Series) or isinstance(data, dict)):
+        elif data is not None and (isinstance(data, pd.Series) or isinstance (data, pd.DataFrame) or isinstance(data, dict)):
             result = data[self.feature]
 
         else:

@@ -48,7 +48,6 @@ class Program:
                  operations: list,
                  features: list,
                  const_range: tuple = None,
-                 max_depth: int = np.inf,
                  program: Node = None,
                  constants_optimization: bool = False,
                  constants_optimization_conf: dict = {}
@@ -59,7 +58,6 @@ class Program:
             operations: The list of possible operations to use as operations
             features: The list of possible features to use as terminal nodes
             const_range: The range of possible values for constant terminals in the program
-            max_depth: The max depth of a program (when reached the program is cut)
             program: An existing program from which to initialize this object
         """
 
@@ -70,7 +68,7 @@ class Program:
         self.constants_optimization_conf = constants_optimization_conf
         self._constants = []
 
-        self.program_depth: int = 0
+        self._program_depth: int = 0
         self._complexity: int = 0
 
         # Pareto Front Attributes
@@ -83,14 +81,10 @@ class Program:
         if program:
             self.program: Node = program
             self._reset_operations_feature_usage()
-            self._reset_depths(
-                node=self.program, current_depth=0)
 
         else:
             self.program: Node = None
             self.fitness = float(np.inf)
-
-        self.max_depth: int = max_depth
 
     @property
     def complexity(self):
@@ -101,6 +95,14 @@ class Program:
     @complexity.getter
     def complexity(self, base_complexity=0):
         return self.program._get_complexity(base_complexity)
+
+    @property
+    def program_depth(self):
+        return self._program_depth
+
+    @program_depth.getter
+    def program_depth(self, base_depth=0):
+        return self.program._get_depth(base_depth)
 
     def get_constants(self):
         to_return = None
@@ -164,7 +166,6 @@ class Program:
             new.mutate(inplace=True)
 
             new._reset_operations_feature_usage()
-            new._reset_depths(node=new.program, current_depth=0, father=None)
             return new
 
         if not isinstance(other, Program):
@@ -181,9 +182,6 @@ class Program:
 
         offspring = deepcopy(self.program)
         cross_over_point1 = self._select_random_node(root_node=offspring)
-
-        logging.debug(
-            f'Performing cross-over at depth {cross_over_point1.depth}')
 
         cross_over_point2 = deepcopy(
             self._select_random_node(root_node=other.program))
@@ -205,18 +203,16 @@ class Program:
         if inplace:
             self.program = offspring
             self._reset_operations_feature_usage()
-            self._reset_depths(node=self.program, current_depth=0, father=None)
             return self
 
         new = Program(program=offspring, operations=self.operations,
-                      features=self.features, max_depth=self.max_depth,
+                      features=self.features,
                       const_range=self.const_range)
 
         new.parsimony = self.parsimony
         new.parsimony_decay = self.parsimony_decay
 
         new._reset_operations_feature_usage()
-        new._reset_depths(node=new.program, current_depth=0, father=None)
 
         return new
 
@@ -237,7 +233,7 @@ class Program:
 
         features_used = self.get_features()
         constants = self.get_constants()
-        
+
         n_features = len(features_used)
         n_constants = len(constants)
 
@@ -261,7 +257,8 @@ class Program:
                     data=data.iloc[0, :], format_tf=True)
             )
 
-            data_tensor = tf.constant(data[self.features].to_numpy(), dtype=tf.float32)
+            data_tensor = tf.constant(
+                data[self.features].to_numpy(), dtype=tf.float32)
 
             target_tensor = tf.constant(
                 data[target].to_numpy(), dtype=tf.float32)
@@ -311,8 +308,6 @@ class Program:
     def init_program(self,
                      parsimony: float = 0.95,
                      parsimony_decay: float = 0.95,
-                     max_depth: int = np.inf,
-                     current_depth: int = 0,
                      ) -> None:
         """ This method initialize a new program calling the recursive generation function.
 
@@ -323,15 +318,10 @@ class Program:
         Args:
             parsimony: The ratio with which to choose operations among terminal nodes
             parsimony_decay: The ratio with which the parsimony decreases to prevent infinite programs
-            max_depth: The program depth after which the generation will force a terminal node
-            current_depth: Used by the recursive call to be aware to which depth the recursion is
         """
 
         self.parsimony = parsimony
         self.parsimony_decay = parsimony_decay
-
-        self.program_depth = current_depth
-        self.max_depth = max_depth
 
         logging.debug(
             f'Generating a tree with parsimony={parsimony} and parsimony_decay={parsimony_decay}')
@@ -339,7 +329,7 @@ class Program:
         # Father=None is used to identify the root node of the program
         self.program = self._generate_tree(
             parsimony=parsimony, parsimony_decay=parsimony_decay,
-            current_depth=0, father=None)
+            father=None)
 
         logging.debug(f'Generated a program of depth {self.program_depth}')
         logging.debug(f'Operation Used: {self.operations_used}')
@@ -371,7 +361,6 @@ class Program:
     def _generate_tree(self,
                        parsimony: float,
                        parsimony_decay: float,
-                       current_depth: int = 0,
                        father: Union[Node, None] = None):
         """ This method run the recursive generation of a subtree.
 
@@ -380,24 +369,14 @@ class Program:
         If the node is a FeatureNode instead, the recursion terminate and a FeatureNode
         is added to the operation's operands list
 
-        If max_depth is set and the current recusion level reach that level,
-        a FeatureNode node, which is terminal, is forced to be generated. 
 
         Args:
             parsimony: The ratio with which to choose operations among terminal nodes
             parsimony_decay: The ratio with which the parsimony decreases to prevent infinite programs
-            current_depth: Used by the recursive call to be aware to which depth the recursion is
             father: The father to the next generated node (None for the root node)
         """
 
-        current_depth += 1
-
-        if self.max_depth and self.max_depth < self.program_depth:
-            raise AssertionError(
-                f'Max depth is reached and something went wrong')
-
-        # If max_depth is reached, no more OperationNode will be generated and a FeatureNode is forced
-        if self.program_depth == 0 or (random.random() < parsimony and current_depth < self.max_depth):
+        if random.random() < parsimony:
 
             operation = random.choice(self.operations)
             self.operations_used[operation['func']] += 1
@@ -407,12 +386,8 @@ class Program:
                 arity=operation['arity'],
                 format_str=operation['format_str'],
                 format_tf=operation.get('format_tf'),
-                depth=current_depth,
                 father=father
             )
-
-            if current_depth > self.program_depth:
-                self.program_depth = current_depth
 
             # Recursive call to populate the operands of the new OperationNode
             for _ in range(node.arity):
@@ -420,7 +395,6 @@ class Program:
                     self._generate_tree(
                         parsimony=parsimony * parsimony_decay,
                         parsimony_decay=parsimony_decay,
-                        current_depth=current_depth+1,
                         father=node
                     )
                 )
@@ -439,7 +413,6 @@ class Program:
 
                 node = FeatureNode(
                     feature=feature,
-                    depth=current_depth,
                     father=father,
                     is_constant=False
                 )
@@ -454,7 +427,6 @@ class Program:
 
                 node = FeatureNode(
                     feature=feature,
-                    depth=current_depth,
                     father=father,
                     is_constant=True
                 )
@@ -475,23 +447,17 @@ class Program:
             # Case in which a one FeatureNode only program is passed.
             # A new tree is generated.
             new = Program(operations=self.operations,
-                          features=self.features, const_range=self.const_range,
-                          max_depth=self.max_depth)
+                          features=self.features, const_range=self.const_range)
 
             new.init_program(
                 parsimony=self.parsimony,
                 parsimony_decay=self.parsimony_decay,
-                max_depth=new.max_depth,
-                current_depth=0,
             )
 
             return new
 
         offspring = deepcopy(self.program)
         mutate_point = self._select_random_node(root_node=offspring)
-
-        logging.debug(
-            f'Performing mutation at depth {mutate_point.depth}/{self.program_depth} on a {mutate_point.operation} node')
 
         child_to_mutate = random.randrange(mutate_point.arity)
 
@@ -503,7 +469,6 @@ class Program:
         mutated = self._generate_tree(
             parsimony=self.parsimony,
             parsimony_decay=self.parsimony_decay,
-            current_depth=to_mutate.depth,
             father=mutate_point
         )
 
@@ -514,49 +479,16 @@ class Program:
         if inplace:
             self.program = offspring
             self._reset_operations_feature_usage()
-            self._reset_depths(node=self.program, current_depth=0, father=None)
             logging.debug(f'Now the program has depth {self.program_depth}')
             return self
 
         new = Program(program=offspring, operations=self.operations,
-                      features=self.features, const_range=self.const_range,
-                      max_depth=self.max_depth)
+                      features=self.features, const_range=self.const_range)
 
         new.parsimony = self.parsimony
         new.parsimony_decay = self.parsimony_decay
 
         return new
-
-    def _reset_depths(self, node: Union[OperationNode, FeatureNode], current_depth: int = 0, father: Union[Node, None] = None) -> None:
-        """ This method allow to re-evaluate all nodes depths when the tree is modified.
-
-        This method should be called when a mutation or a cross-over are performed to ensure
-        that all nodes' depths and parenthoods are set up correctly.
-
-        Args:
-            node: The node of which update the depth
-            current_depth: Used for the recursive call to propagate the value to lower nodes
-            father: The node to set as father to the children
-        """
-        node.depth = current_depth
-        node.father = father
-
-        if current_depth > self.program_depth:
-            self.program_depth = current_depth
-
-        if isinstance(node, OperationNode):
-            if not self.operations_used.get(node.operation):
-                self.operations_used[node.operation] = 0
-            self.operations_used[node.operation] += 1
-
-            for operand in node.operands:
-                self._reset_depths(
-                    node=operand, current_depth=current_depth+1, father=node)
-
-        if isinstance(node, FeatureNode) and not node.is_constant:
-            if not self.features_used.get(node.feature):
-                self.features_used[node.feature] = 0
-            self.features_used[node.feature] += 1
 
     def _reset_operations_feature_usage(self) -> None:
         """ This method re-evaluate the usage of features and operations of the program
