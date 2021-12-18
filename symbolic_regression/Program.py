@@ -71,6 +71,7 @@ class Program:
         self._constants = []
 
         self.program_depth: int = 0
+        self._complexity: int = 0
 
         # Pareto Front Attributes
         self.rank: int = None
@@ -90,6 +91,16 @@ class Program:
             self.fitness = float(np.inf)
 
         self.max_depth: int = max_depth
+
+    @property
+    def complexity(self):
+        """ The complexity of a program is the number of nodes (OperationNodes or FeatureNodes)
+        """
+        return self._complexity
+
+    @complexity.getter
+    def complexity(self, base_complexity=0):
+        return self.program._get_complexity(base_complexity)
 
     def get_constants(self):
         to_return = None

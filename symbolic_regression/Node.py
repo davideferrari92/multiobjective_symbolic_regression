@@ -65,6 +65,17 @@ class OperationNode(Node):
                 f'This operation support only {self.arity} operands: {self.arity} given.')
 
         self.operands.append(operand)
+    
+    def _get_complexity(self, base_complexity=0):
+        """ This method recursively increment the complexity count of this program
+        """
+        
+        base_complexity += 1  # Count for this operation contribution
+        
+        for child in self.operands:
+            base_complexity = child._get_complexity(base_complexity=base_complexity)
+        
+        return base_complexity
 
     def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None, format_tf: bool = False) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
@@ -153,6 +164,13 @@ class FeatureNode(Node):
         """ To print the current node in a readable way
         """
         return f'FeatureNode({self.render()})'
+
+    def _get_complexity(base_complexity=0):
+        """ This method increase the complexity of the program by 1
+        It is usually called by an OperationNode _get_complexity which
+        accounts for the rest of the program.
+        """
+        return base_complexity + 1
 
     def render(self, data: Union[dict, pd.Series, None] = None, format_tf = False) -> str:
         """ This method render the string representation of this FeatureNode
