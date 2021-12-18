@@ -7,15 +7,17 @@ from symbolic_regression.Program import Program
 
 
 def generate_population(
+    data: Union[dict, pd.Series, pd.DataFrame],
     features: list,
+    target: str,
+    weights: str,
     operations: list,
     parsimony: float,
     parsimony_decay: float,
     fitness: list,
     const_range: tuple,
-    data: Union[dict, pd.Series, pd.DataFrame],
-    target: str,
-    weights: str
+    constants_optimization: bool = False,
+    constants_optimization_conf: dict = {}
 ):
     """ This method generate a new program and evaluate its fitness
 
@@ -38,7 +40,9 @@ def generate_population(
     p = Program(
         features=features,
         operations=operations,
-        const_range=const_range
+        const_range=const_range,
+        constants_optimization=constants_optimization,
+        constants_optimization_conf=constants_optimization_conf
     )
 
     p.init_program(parsimony=parsimony, parsimony_decay=parsimony_decay)
