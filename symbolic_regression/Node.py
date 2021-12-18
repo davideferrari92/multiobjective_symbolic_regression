@@ -26,11 +26,12 @@ class OperationNode(Node):
     the formula terminate and a feature is chosen.
     """
 
-    def __init__(self, operation: callable, arity: int, format_str: str, depth: int, father) -> None:
+    def __init__(self, operation: callable, format_tf: str, arity: int, format_str: str, depth: int, father) -> None:
         """ To initialize an OperationNode
 
         Args:
             operation: The callable function of the operation
+            format_tf: The string representation of the tensorflow equivalent for constants optimization
             arity: The number of arguments that the operation accepts
             format_str: The string representation of the operation
             depth: The depth in the program to which this node is
@@ -41,6 +42,7 @@ class OperationNode(Node):
         self.operation = operation
         self.arity = arity
         self.format_str = format_str
+        self.format_tf = format_tf
 
         self.operands = []
 
@@ -64,11 +66,13 @@ class OperationNode(Node):
 
         self.operands.append(operand)
 
-    def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> str:
+    def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None, format_tf: bool = False) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
 
         This call recursively itself untile the terminal nodes are reached.
         """
+        if format_tf:
+            return self.format_tf.format(*[node.render(data=data, format_tf=True) for node in self.operands])
         return self.format_str.format(*[node.render(data=data) for node in self.operands])
 
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
@@ -113,6 +117,17 @@ class OperationNode(Node):
 
         return const_list
 
+    def _get_features(self, features_list: list):
+        """
+        """
+        for child in self.operands:
+            if isinstance(child, OperationNode):
+                features_list = child._get_features(features_list=features_list)
+            elif not child.is_constant:
+                features_list += [child.feature]
+
+        return features_list
+
 
 class FeatureNode(Node):
     """ A FeatureNode represent a terminal node of the binary tree of the program and is always a feature or a constant
@@ -132,13 +147,14 @@ class FeatureNode(Node):
         self.feature = feature
         self.arity = 0  # because it is a constand and not an operator
         self.is_constant = is_constant
+        self.index = None
 
     def __repr__(self) -> str:
         """ To print the current node in a readable way
         """
         return f'FeatureNode({self.render()})'
 
-    def render(self, data: Union[dict, pd.Series, None] = None) -> str:
+    def render(self, data: Union[dict, pd.Series, None] = None, format_tf = False) -> str:
         """ This method render the string representation of this FeatureNode
 
         If data is provided, the rendering consist of the value of the datapoint of the feature of this
@@ -146,10 +162,15 @@ class FeatureNode(Node):
         If data is not provided, the rendering will be the name of the feature.
         If this node is a constant value (is_constant==True) then that numerical value is returned
         """
+
         if self.is_constant:
+            if format_tf:
+                return f'constants[{self.index}]'
             return str(self.feature)
 
         if data is not None:  # Case in which I render the value of the feature in the datapoint instead of its name
+            if format_tf:
+                return f'X[{list(data.index).index(self.feature)}]'
             return self.evaluate(data=data)
 
         return self.feature

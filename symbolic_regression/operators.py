@@ -51,34 +51,92 @@ def _sigmoid(x1):
         return 1 / (1 + np.exp(-x1))
 
 
-OPERATOR_ADD = {"func": operator.add,
-                "arity": 2, "format_str": "({} + {})"}
-OPERATOR_SUB = {"func": operator.sub,
-                "arity": 2, "format_str": "({} - {})"}
+OPERATOR_ADD = {
+    "func": operator.add,
+    "format_tf": 'tf.add({}, {})',
+    "arity": 2,
+    "format_str": "({} + {})"
+}
 
-OPERATOR_MUL = {"func": operator.mul,
-                "arity": 2, "format_str": "({} * {})"}
-OPERATOR_DIV = {"func": _protected_division,
-                "arity": 2, "format_str": "({} / {})"}
+OPERATOR_SUB = {
+    "func": operator.sub,
+    "format_tf": 'tf.subtract({}, {})',
+    "arity": 2,
+    "format_str": "({} - {})"
+}
 
-OPERATOR_INV = {"func": _protected_inverse,
-                "arity": 1, "format_str": "(1 / {})"}
+OPERATOR_MUL = {
+    "func": operator.mul,
+    "format_tf": 'tf.multiply({}, {})',
+    "arity": 2,
+    "format_str": "({} * {})"
+}
 
-OPERATOR_NEG = {"func": operator.neg, "arity": 1, "format_str": "-({})"}
+OPERATOR_DIV = {
+    "func": _protected_division,
+    "format_tf": 'tf.divide({}, {})',
+    "arity": 2,
+    "format_str": "({} / {})"
+}
 
-OPERATOR_ABS = {"func": operator.abs, "arity": 1, "format_str": "abs({})"}
+OPERATOR_INV = {
+    "func": _protected_inverse,
+    "format_tf": 'tf.pow({}, -1)',
+    "arity": 1,
+    "format_str": "(1 / {})"
+}
 
-OPERATOR_MOD = {"func": operator.mod, "arity": 2, "format_str": "{} mod {}"}
+OPERATOR_NEG = {
+    "func": operator.neg,
+    "format_tf": 'tf.negative({})',
+    "arity": 1,
+    "format_str": "-({})"
+}
 
-OPERATOR_LOG = {"func": _protected_log,
-                "arity": 1, "format_str": "log(abs({}))"}
+OPERATOR_ABS = {
+    "func": operator.abs,
+    "format_tf": 'tf.abs({})',
+    "arity": 1,
+    "format_str": "abs({})"
+}
 
-OPERATOR_EXP = {"func": _protected_exp, "arity": 1, "format_str": "exp({})"}
+OPERATOR_LOG = {
+    "func": _protected_log,
+    "format_tf": 'tf.math.log({})',
+    "arity": 1,
+    "format_str": "log(abs({}))"
+}
 
-OPERATOR_POW = {"func": _protected_pow, "arity": 2, "format_str": "({} ** {})"}
+OPERATOR_EXP = {
+    "func": _protected_exp,
+    "format_tf": 'tf.exp({})',
+    "arity": 1,
+    "format_str": "exp({})"
+}
 
-OPERATOR_SQRT = {"func": _protected_sqrt, "arity": 1, "format_str": "sqrt({})"}
+OPERATOR_POW = {
+    "func": _protected_pow,
+    "format_tf": 'tf.pow({}, {})',
+    "arity": 2,
+    "format_str": "({} ** {})"
+}
 
-OPERATOR_MAX = {"func": max, "arity": 2, "format_str": "max({}, {})"}
+OPERATOR_SQRT = {
+    "func": _protected_sqrt,
+    "format_tf": 'tf.sqrt({})',
+    "arity": 1,
+    "format_str": "sqrt({})"}
 
-OPERATOR_MIN = {"func": min, "arity": 2, "format_str": "min({}, {})"}
+OPERATOR_MAX = {
+    "func": max,
+    "format_tf": 'tf.maximum({}, {})',
+    "arity": 2,
+    "format_str": "max({}, {})"
+}
+
+OPERATOR_MIN = {
+    "func": min,
+    "format_tf": 'tf.minimum({}, {})',
+    "arity": 2,
+    "format_str": "min({}, {})"
+}

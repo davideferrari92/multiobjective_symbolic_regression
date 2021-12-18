@@ -40,7 +40,7 @@ def extract_operation(element, depth: int = 0, father=None):
             depth=depth,
             is_constant=True
         )
-    
+
     if new_feature:
         return new_feature
 
@@ -72,6 +72,7 @@ def extract_operation(element, depth: int = 0, father=None):
         operation=current_operation['func'],
         arity=current_operation['arity'],
         format_str=current_operation['format_str'],
+        format_tf=current_operation['format_tf'],
         depth=depth,
         father=father
     )
@@ -131,7 +132,9 @@ def simplify_program(program: Program) -> Program:
         features=program.features,
         const_range=program.const_range,
         max_depth=program.max_depth,
-        program=extracted_program
+        program=extracted_program,
+        constants_optimization=program.constants_optimization,
+        constants_optimization_conf=program.constants_optimization_conf
     )
 
     new_program.parsimony = program.parsimony
@@ -170,8 +173,13 @@ def simplify_population(population: list,
             simp = simplify_program(p)
         except UnboundLocalError:
             return None
-        
-        simp.evaluate_fitness(fitness=fitness, data=data, target=target, weights=weights)
+
+        simp.evaluate_fitness(
+            fitness=fitness,
+            data=data,
+            target=target,
+            weights=weights,
+        )
 
         return simp
 

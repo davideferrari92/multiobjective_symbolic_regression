@@ -1,11 +1,13 @@
 import logging
-from operator import ne
 import random
 from copy import deepcopy
 from typing import Union
 
 import numpy as np
 import pandas as pd
+import tensorflow as tf
+from tensorflow.keras import Model
+from tensorflow.keras.layers import Input
 
 from symbolic_regression.Node import FeatureNode, Node, OperationNode
 
@@ -42,8 +44,15 @@ class Program:
 
     """
 
-    def __init__(self, operations: list, features: list, const_range: tuple, max_depth: int = np.inf,
-                 program: Node = None) -> None:
+    def __init__(self,
+                 operations: list,
+                 features: list,
+                 const_range: tuple = None,
+                 max_depth: int = np.inf,
+                 program: Node = None,
+                 constants_optimization: bool = False,
+                 constants_optimization_conf: dict = {}
+                 ) -> None:
         """
 
         Args:
@@ -57,6 +66,8 @@ class Program:
         self.operations = operations
         self.features = features
         self.const_range = const_range
+        self.constants_optimization = constants_optimization
+        self.constants_optimization_conf = constants_optimization_conf
         self._constants = []
 
         self.program_depth: int = 0
@@ -81,21 +92,43 @@ class Program:
         self.max_depth: int = max_depth
 
     def get_constants(self):
-
+        to_return = None
         if isinstance(self.program, OperationNode):
-            return self.program._get_constants(const_list = [])
+            to_return = self.program._get_constants(const_list=[])
 
         # Only one constant FeatureNode
         elif self.program.is_constant:
-            return [self]
+            to_return = [self]
+
+        else:
+            # Only one non-constant FeatureNode
+            to_return = []
+
+        for index, constant in enumerate(to_return):
+            self._set_constants_index(constant=constant, index=index)
+
+        return to_return
+
+    def get_features(self):
+
+        if isinstance(self.program, OperationNode):
+            return list(set(self.program._get_features(features_list=[])))
 
         # Only one non-constant FeatureNode
+        elif not self.program.is_constant:
+            return [self]
+
+        # Only one constant FeatureNode
         return []
 
     def set_constants(self, new):
-        
+
         for constant, new_value in zip(self.get_constants(), new):
             constant.feature = new_value
+
+    @staticmethod
+    def _set_constants_index(constant, index):
+        constant.index = index
 
     def cross_over(self, other=None, inplace: bool = False) -> None:
         """ This module perform a cross-over between this program and another from the population
@@ -187,13 +220,65 @@ class Program:
         """
         return self.program.evaluate(data=data)
 
-    def evaluate_fitness(self, data, fitness, target, weights, constants_optimization: bool = False):
+    def evaluate_fitness(self, data, fitness, target, weights):
 
         self.fitness = list()
 
-        if constants_optimization:
-            # train tf
-            pass
+        features_used = self.get_features()
+        constants = self.get_constants()
+        
+        n_features = len(features_used)
+        n_constants = len(constants)
+
+        if self.constants_optimization and n_constants > 0:
+            if self.const_range:
+                const_range_min = self.const_range[0]
+                const_range_max = self.const_range[1]
+            else:
+                const_range_min = -1
+                const_range_max = 1
+
+            from symbolic_regression.multiobjective.optimization import \
+                NNOptimizer
+            constants_optimizer = NNOptimizer(
+                units=1,
+                n_features=len(self.features),
+                n_constants=n_constants,
+                const_range_min=const_range_min,
+                const_range_max=const_range_max,
+                exec_string=self.program.render(
+                    data=data.iloc[0, :], format_tf=True)
+            )
+
+            data_tensor = tf.constant(data[self.features].to_numpy(), dtype=tf.float32)
+
+            target_tensor = tf.constant(
+                data[target].to_numpy(), dtype=tf.float32)
+            if weights:
+                weights_tensor = tf.constant(
+                    data[weights].to_numpy(), dtype=tf.float32)
+            else:
+                weights_tensor = tf.ones_like(target_tensor)
+
+            inputs = Input(shape=[len(self.features)], name="Input")
+            model = Model(inputs=inputs, outputs=constants_optimizer(inputs))
+            loss_mse = tf.keras.losses.MeanSquaredError()
+            opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
+
+            model.compile(loss=loss_mse, optimizer=opt, run_eagerly=False)
+
+            model.fit(
+                data_tensor,
+                target_tensor,
+                sample_weight=weights_tensor,
+                batch_size=self.constants_optimization_conf['batch_size'],
+                epochs=self.constants_optimization_conf['epochs'],
+                verbose=self.constants_optimization_conf['verbose']
+            )
+
+            final_parameters = list(model.get_weights()[0][0])
+
+            self.set_constants(new=final_parameters)
 
         evaluated = fitness(program=self, data=data,
                             target=target, weights=weights)
@@ -310,6 +395,7 @@ class Program:
                 operation=operation['func'],
                 arity=operation['arity'],
                 format_str=operation['format_str'],
+                format_tf=operation.get('format_tf'),
                 depth=current_depth,
                 father=father
             )
