@@ -61,20 +61,24 @@ def dominance(program1: Program, program2: Program) -> bool:
     """
 
     # How many element in the p1.fitness are less than p2.fitness
-    differences = [p1f - p2f for p1f,
-                   p2f in zip(program1.fitness, program2.fitness)]
-
-    # If all the elements of p1fitness are less than p2f
     at_least_one_less_than_zero = False
     all_less_or_eq_than_zero = True
 
-    for d in differences:
-        if d < 0:
-            at_least_one_less_than_zero = True
-        if d > 0:
-            all_less_or_eq_than_zero = False
+    if program1.program and program2.program:
+        for this_fitness in program1.fitness.keys():
+            try:
+                d = program1.fitness[this_fitness] - program2.fitness[this_fitness]
+            except KeyError:
+                return True
 
-    return at_least_one_less_than_zero and all_less_or_eq_than_zero
+            if d < 0:
+                at_least_one_less_than_zero = True
+            if d > 0:
+                all_less_or_eq_than_zero = False
+
+        return at_least_one_less_than_zero and all_less_or_eq_than_zero
+
+    return False
 
 
 def create_pareto_front(population: list):
@@ -85,11 +89,14 @@ def create_pareto_front(population: list):
 
     # Loop over the entire matrix, can be optimised to do only the triangular matrix
     for p1 in population:
+        if not p1:
+            continue
+
         p1.programs_dominates = []
         p1.programs_dominated_by = []
 
         for p2 in population:
-            if p1 == p2:
+            if p1 == p2 or not p2.is_valid:
                 continue
 
             if dominance(p1, p2):
@@ -117,14 +124,14 @@ def create_pareto_front(population: list):
                     next_pareto_front.append(p2)
 
         i += 1
-        logging.debug(f'Pareto Front: entering rank {i}')
+        #logging.debug(f'Pareto Front: entering rank {i}')
         pareto_front = next_pareto_front
 
 
 def extract_pareto_front(population: list, rank: int):
     pareto_front = []
     for p in population:
-        if p.rank == rank:
+        if p and p.rank == rank:
             pareto_front.append(p)
 
     return pareto_front
@@ -132,25 +139,26 @@ def extract_pareto_front(population: list, rank: int):
 
 def crowding_distance(population: list):
 
-    objectives = len(population[0].fitness)
+    objectives = population[0].fitness.keys()
 
     rank_iter = 1
-    pareto_front = extract_pareto_front(population=population, rank=rank_iter)
+    pareto_front = extract_pareto_front(
+        population=population, rank=rank_iter)
 
     while pareto_front:  # Exits when extract_pareto_front return an empty list
-        for i in range(objectives):
+        for obj in objectives:
             # Highest fitness first for each objective
-            pareto_front.sort(key=lambda p: p.fitness[i], reverse=True)
+            pareto_front.sort(key=lambda p: p.fitness[obj], reverse=True)
 
-            norm = pareto_front[0].fitness[i] - \
-                pareto_front[-1].fitness[i] + 1e-20
+            norm = pareto_front[0].fitness[obj] - \
+                pareto_front[-1].fitness[obj] + 1e-20
 
             for index, program in enumerate(pareto_front):
                 if index == 0 or index == len(pareto_front) - 1:
                     program.crowding_distance = float('inf')
                 else:
-                    delta = pareto_front[index - 1].fitness[i] - \
-                        pareto_front[index + 1].fitness[i]
+                    delta = pareto_front[index - 1].fitness[obj] - \
+                        pareto_front[index + 1].fitness[obj]
 
                     program.crowding_distance = delta / norm
 
@@ -165,16 +173,21 @@ def tournament_selection(population: list,
     """
     """
 
-    torunament_members = random.choices(population, k=tournament_size)
+    tournament_members = random.choices(population, k=tournament_size)
 
-    best_member = None
+    best_member = tournament_members[0]
 
-    for member in torunament_members:
+    for member in tournament_members:
+        if member is None or not member.is_valid:
+            continue
+        
         if generation == 0:
-            # The first generation compare only the fitness
+            try:
+                if best_member > member:
+                    best_member = member
+            except IndexError:
+                pass  # TODO fix
 
-            if best_member is None or best_member.fitness[0] > member.fitness[0]:
-                best_member = member
         else:
 
             # In the other generations use the pareto front rank and the crowding distance
@@ -223,10 +236,15 @@ def get_offspring(population: list,
         population=population, tournament_size=tournament_size, generation=generations
     )
 
+    if program1 is None or not program1.is_valid:
+        return program1
+
     if random.random() < cross_over_perc:
         program2 = tournament_selection(
             population=population, tournament_size=tournament_size, generation=generations
         )
+        if program2 is None or not program2.is_valid:
+            return program1
         p_ret = program1.cross_over(other=program2, inplace=False)
 
     else:

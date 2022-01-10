@@ -6,7 +6,7 @@ import pandas as pd
 import sympy
 from joblib import Parallel, delayed
 
-from symbolic_regression.Node import FeatureNode, OperationNode
+from symbolic_regression.Node import FeatureNode, InvalidNode, OperationNode
 from symbolic_regression.operators import *
 from symbolic_regression.Program import Program
 
@@ -18,7 +18,7 @@ def extract_operation(element, father=None):
 
     ''' Two terminals: constants and features
     '''
-    new_feature = None
+    new_feature = InvalidNode()
 
     if element.is_Float or element.is_Integer or element.is_Rational:
         new_feature = FeatureNode(
@@ -38,7 +38,7 @@ def extract_operation(element, father=None):
             is_constant=True
         )
 
-    if new_feature:
+    if isinstance(new_feature, FeatureNode):
         return new_feature
 
     if str(element.func) == 'exp':
@@ -60,7 +60,9 @@ def extract_operation(element, father=None):
         current_operation = OPERATOR_MUL
 
     else:
-        print("New Element:", element)
+        #logging.warning(f'Non valid object during simplification {element}')
+        return InvalidNode()
+
 
     new_operation = OperationNode(
         operation=current_operation['func'],
@@ -81,60 +83,59 @@ def extract_operation(element, father=None):
         binary tree.
         '''
         # Left child will be one of the arity+n operands
-        new_operation.add_operand(
-            extract_operation(element=args.pop(), father=element)
-        )
+        n_op = extract_operation(element=args.pop(), father=element)
+        new_operation.add_operand(n_op)
 
         # args now has one element removed and need to be overwritten to converge the recursion.
         element._args = tuple(args)
 
         # Right child will be again the same element (same operation and one less of the args)
         # until n_args == arity.
-        new_operation.add_operand(
-            extract_operation(element=element, father=element)
-        )
+        n_op = extract_operation(element=element, father=element)
+        new_operation.add_operand(n_op)
     else:
         # When n_args == arity, just loop on the remaining args and add as terminal children
         for op in args:
-            new_operation.add_operand(
-                extract_operation(element=op, father=new_operation)
-            )
+            n_op = extract_operation(element=op, father=new_operation)
+            new_operation.add_operand(n_op)
 
-    return new_operation
+    return new_operation 
 
 
 def simplify_program(program: Program) -> Program:
     """
 
     """
-
-    logging.debug(f'Simplifying program {program}')
-    simplified = sympy.simplify(program.program, rational=True, inverse=True)
-
-    logging.debug(f'Extracting the program tree from the simplified')
     try:
+        logging.debug(f'Simplifying program {program}')
+        simplified = sympy.simplify(program.program, rational=True, inverse=True)
+
+        logging.debug(f'Extracting the program tree from the simplified')
+        
         extracted_program = extract_operation(
             element=simplified, father=None)
+
+        new_program = Program(
+            operations=program.operations,
+            features=program.features,
+            const_range=program.const_range,
+            program=extracted_program,
+            constants_optimization=program.constants_optimization,
+            constants_optimization_conf=program.constants_optimization_conf
+        )
+
+        new_program.parsimony = program.parsimony
+        new_program.parsimony_decay = program.parsimony_decay
+        new_program.fitness = program.fitness
+
+        logging.debug(f'Simplified program {new_program}')
+
+        return new_program
+
     except UnboundLocalError:
-        print(simplified)
-
-    new_program = Program(
-        operations=program.operations,
-        features=program.features,
-        const_range=program.const_range,
-        program=extracted_program,
-        constants_optimization=program.constants_optimization,
-        constants_optimization_conf=program.constants_optimization_conf
-    )
-
-    new_program.parsimony = program.parsimony
-    new_program.parsimony_decay = program.parsimony_decay
-    new_program.fitness = program.fitness
-
-    logging.debug(f'Simplified program generator')
-
-    return new_program
-
+        return program
+    except sympy.core.sympify.SympifyError:
+        return program
 
 def simplify_population(population: list,
                         fitness: list,
@@ -160,8 +161,8 @@ def simplify_population(population: list,
 
         try:
             simp = simplify_program(p)
-        except UnboundLocalError:
-            return None
+        except Exception:
+            return p
 
         simp.evaluate_fitness(
             fitness=fitness,

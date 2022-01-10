@@ -1,9 +1,10 @@
 from abc import ABC
 from typing import Union
+from numpy.lib.arraysetops import isin
 
 import pandas as pd
-from pandas.core import base
-import tensorflow as tf
+import numpy as np
+from tensorflow.python.ops.gen_math_ops import Inv
 
 
 class Node(ABC):
@@ -84,6 +85,22 @@ class OperationNode(Node):
                             for child in self.operands)
 
         return new_depth
+
+    def is_valid(self):
+        
+        v = True
+
+        for child in self.operands:
+            if not child or isinstance(child, InvalidNode):
+                v_c = False
+            elif isinstance(child, FeatureNode):
+                v_c = True
+            else:
+                v_c = child.is_valid()
+
+            v = v and v_c
+
+        return v
 
     def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None, format_tf: bool = False) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
@@ -183,6 +200,9 @@ class FeatureNode(Node):
     def _get_depth(self, base_depth=0):
         return base_depth + 1
 
+    def is_valid(self):
+        return True
+        
     def render(self, data: Union[dict, pd.Series, None] = None, format_tf=False) -> str:
         """ This method render the string representation of this FeatureNode
 
@@ -224,7 +244,7 @@ class FeatureNode(Node):
         if self.is_constant:
             result = self.feature
 
-        elif data is not None and (isinstance(data, pd.Series) or isinstance (data, pd.DataFrame) or isinstance(data, dict)):
+        elif data is not None and (isinstance(data, pd.Series) or isinstance(data, pd.DataFrame) or isinstance(data, dict)):
             result = data[self.feature]
 
         else:
@@ -232,3 +252,19 @@ class FeatureNode(Node):
                 f'Non constants FeatureNodes need data to be evaluated')
 
         return result
+
+
+class InvalidNode(Node):
+    def __init__(self, father=None) -> None:
+        super().__init__(father=father)
+
+        self.is_constant = True
+
+    def is_valid(self):
+        return False
+
+    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> None:
+        return np.inf
+
+    def render(self, data: Union[dict, pd.Series, None] = None, format_tf=False) -> str:
+        return 'InvalidNode'
