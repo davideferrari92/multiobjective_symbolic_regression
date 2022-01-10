@@ -82,11 +82,9 @@ class Program:
         self.programs_dominates: list = []
         self.programs_dominated_by: list = []
         self.crowding_distance: float = 0
-        self._reset_operations_feature_usage()
 
         if program:
             self.program: Node = program
-            self._reset_operations_feature_usage()
 
         else:
             self.program: Node = InvalidNode()
@@ -109,6 +107,22 @@ class Program:
     @program_depth.getter
     def program_depth(self, base_depth=0):
         return self.program._get_depth(base_depth)
+
+    @property
+    def operations_used(self):
+        return self._operations_used
+
+    @operations_used.getter
+    def operations_used(self):
+        return self.program._get_operations(base_operations_used={})
+
+    @property
+    def features_used(self):
+        return self._features_used
+
+    @features_used.getter
+    def features_used(self):
+        return self.program._get_features(base_features={})
 
     @property
     def is_valid(self):
@@ -173,7 +187,6 @@ class Program:
         if self.program_depth == 0 or other.program_depth == 0:
             new = deepcopy(self)
             new.mutate(inplace=True)
-            new._reset_operations_feature_usage()
             return new
 
         if not isinstance(other, Program):
@@ -214,7 +227,6 @@ class Program:
         '''
         if inplace:
             self.program = offspring
-            self._reset_operations_feature_usage()
             return self
 
         new = Program(program=offspring, operations=self.operations,
@@ -225,8 +237,6 @@ class Program:
 
         new.parsimony = self.parsimony
         new.parsimony_decay = self.parsimony_decay
-
-        new._reset_operations_feature_usage()
 
         return new
 
@@ -373,8 +383,6 @@ class Program:
             father=None)
 
         logging.debug(f'Generated a program of depth {self.program_depth}')
-        logging.debug(f'Operation Used: {self.operations_used}')
-        logging.debug(f'Features Used: {self.features_used}')
         logging.debug(self.program)
 
     def __lt__(self, other):
@@ -426,7 +434,6 @@ class Program:
         if random.random() < parsimony:
 
             operation = random.choice(self.operations)
-            self.operations_used[operation['func']] += 1
 
             node = OperationNode(
                 operation=operation['func'],
@@ -531,7 +538,6 @@ class Program:
 
         if inplace:
             self.program = offspring
-            self._reset_operations_feature_usage()
             logging.debug(f'Now the program has depth {self.program_depth}')
             return self
 
@@ -544,16 +550,6 @@ class Program:
         new.parsimony_decay = self.parsimony_decay
 
         return new
-
-    def _reset_operations_feature_usage(self) -> None:
-        """ This method re-evaluate the usage of features and operations of the program
-        """
-        self.operations_used = {}
-
-        for op in self.operations:
-            self.operations_used[op['func']] = 0
-
-        self.features_used = {ft: 0 for ft in self.features}
 
     def _select_random_node(self,
                             root_node: Union[OperationNode, FeatureNode],

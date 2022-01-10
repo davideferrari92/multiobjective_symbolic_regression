@@ -86,6 +86,25 @@ class OperationNode(Node):
 
         return new_depth
 
+    def _get_features(self, base_features={}):
+        for op in self.operands:
+            if isinstance(op, FeatureNode):
+                base_features = op._get_features(base_features=base_features)
+
+        return base_features
+
+    def _get_operations_used(self, base_operations_used={}):
+        if not base_operations_used.get(self.operation):
+            base_operations_used[self.operation] = 0
+
+        base_operations_used[self.operation] += 1
+
+        for op in self.operands:
+            if isinstance(op, OperationNode):
+                base_operations_used = op._get_operations_used(base_operations_used=base_operations_used)
+
+        return base_operations_used
+
     def is_valid(self):
         
         v = True
@@ -200,6 +219,14 @@ class FeatureNode(Node):
     def _get_depth(self, base_depth=0):
         return base_depth + 1
 
+    def _get_features(self, base_features={}):
+        if not base_features.get(self.feature):
+            base_features[self.feature] = 0
+
+        base_features[self.feature] += 1
+
+        return base_features
+
     def is_valid(self):
         return True
         
@@ -259,6 +286,12 @@ class InvalidNode(Node):
         super().__init__(father=father)
 
         self.is_constant = True
+
+    def _get_features(self, base_features={}):
+        return base_features
+        
+    def _get_operations_used(self, base_operations_used={}):
+        return base_operations_used
 
     def is_valid(self):
         return False
