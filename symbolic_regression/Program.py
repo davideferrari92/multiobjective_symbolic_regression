@@ -2,14 +2,14 @@ import logging
 import random
 from copy import deepcopy
 from typing import Union
-
+import traceback
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Input
 
-from symbolic_regression.Node import FeatureNode, Node, OperationNode
+from symbolic_regression.Node import FeatureNode, InvalidNode, Node, OperationNode
 
 
 class Program:
@@ -64,15 +64,21 @@ class Program:
         self.operations = operations
         self.features = features
         self.const_range = const_range
+        self._constants = []
+        self.converged = False
+
         self.constants_optimization = constants_optimization
         self.constants_optimization_conf = constants_optimization_conf
-        self._constants = []
+        self.constants_optimization_details = {}
+
+        self._override_is_valid = True
+        self._is_duplicated = False
 
         self._program_depth: int = 0
         self._complexity: int = 0
 
         # Pareto Front Attributes
-        self.rank: int = None
+        self.rank: int = np.inf
         self.programs_dominates: list = []
         self.programs_dominated_by: list = []
         self.crowding_distance: float = 0
@@ -83,7 +89,7 @@ class Program:
             self._reset_operations_feature_usage()
 
         else:
-            self.program: Node = None
+            self.program: Node = InvalidNode()
             self.fitness = float(np.inf)
 
     @property
@@ -103,6 +109,10 @@ class Program:
     @program_depth.getter
     def program_depth(self, base_depth=0):
         return self.program._get_depth(base_depth)
+
+    @property
+    def is_valid(self):
+        return self.program.is_valid() and self._override_is_valid
 
     def get_constants(self):
         to_return = None
@@ -162,9 +172,7 @@ class Program:
         """
         if self.program_depth == 0 or other.program_depth == 0:
             new = deepcopy(self)
-
             new.mutate(inplace=True)
-
             new._reset_operations_feature_usage()
             return new
 
@@ -183,10 +191,14 @@ class Program:
         offspring = deepcopy(self.program)
         cross_over_point1 = self._select_random_node(root_node=offspring)
 
+        if not cross_over_point1:
+            return self
+
         cross_over_point2 = deepcopy(
             self._select_random_node(root_node=other.program))
 
-        cross_over_point1 = cross_over_point2
+        if cross_over_point2:
+            cross_over_point1 = cross_over_point2
 
         child_count_cop1 = len(cross_over_point1.operands)
 
@@ -207,6 +219,8 @@ class Program:
 
         new = Program(program=offspring, operations=self.operations,
                       features=self.features,
+                      constants_optimization=self.constants_optimization,
+                      constants_optimization_conf=self.constants_optimization_conf,
                       const_range=self.const_range)
 
         new.parsimony = self.parsimony
@@ -225,19 +239,22 @@ class Program:
         Args:
             data: the data on which to evaluate this program
         """
+        if not self.is_valid:
+            return None
+
         return self.program.evaluate(data=data)
 
     def evaluate_fitness(self, data, fitness, target, weights):
 
-        self.fitness = list()
+        self.fitness = dict()
 
-        features_used = self.get_features()
-        constants = self.get_constants()
+        if not self.is_valid:
+            return
 
-        n_features = len(features_used)
-        n_constants = len(constants)
+        n_features = len(self.get_features())
+        n_constants = len(self.get_constants())
 
-        if self.constants_optimization and n_constants > 0:
+        if not isinstance(self.program, FeatureNode) and self.constants_optimization and n_constants > 0:
             if self.const_range:
                 const_range_min = self.const_range[0]
                 const_range_max = self.const_range[1]
@@ -269,10 +286,11 @@ class Program:
                 weights_tensor = tf.ones_like(target_tensor)
 
             inputs = Input(shape=[len(self.features)], name="Input")
+
             model = Model(inputs=inputs, outputs=constants_optimizer(inputs))
             loss_mse = tf.keras.losses.MeanSquaredError()
-            opt = tf.keras.optimizers.Adam(learning_rate=1e-3)
-
+            opt = tf.keras.optimizers.Adam(
+                learning_rate=self.constants_optimization_conf['learning_rate'])
             model.compile(loss=loss_mse, optimizer=opt, run_eagerly=False)
 
             model.fit(
@@ -288,22 +306,45 @@ class Program:
 
             self.set_constants(new=final_parameters)
 
+            for old, new in zip(self.get_constants(), final_parameters):
+                self.constants_optimization_details[old] = new
+
         evaluated = fitness(program=self, data=data,
                             target=target, weights=weights)
+
+        _converged = []
 
         for ftn_label, ftn in evaluated.items():
 
             f = ftn['func']
 
-            if isinstance(f, float) or isinstance(f, int) or isinstance(f, np.float):
-                self.fitness.append(f)
-            elif isinstance(f, tuple):
-                for elem in f:
-                    self.fitness.append(elem)
-            else:
-                print(f'Fitness shape error: {f}')
+            threshold = ftn.get('threshold')
 
-        return self.fitness
+            if isinstance(f, float) or isinstance(f, int) or isinstance(f, np.float):
+                if pd.isna(f):
+                    f = np.inf
+                    self._override_is_valid = False
+
+                self.fitness[ftn_label] = f
+
+                if threshold and f <= threshold:
+                    _converged.append(True)
+                    logging.info(f'Converged {ftn_label}: {f} <= {threshold}')
+            elif isinstance(f, tuple):
+                for elem_index, elem in enumerate(f):
+                    if pd.isna(f):
+                        f = np.inf
+                        self._override_is_valid = False
+
+                    self.fitness[ftn_label + f'_{elem_index}'] = elem
+                    if threshold and f <= threshold[elem_index]:
+                        self._converged.append(True)
+                    else:
+                        self._converged.append(False)
+
+        # Use any or all to have at least one or all fitness converged when the threshold is provided
+        if len(_converged) > 0:
+            self.converged = all(_converged)
 
     def init_program(self,
                      parsimony: float = 0.95,
@@ -339,24 +380,30 @@ class Program:
     def __lt__(self, other):
         """ This ordering function allow to compare programs by their fitness value
 
-        The fitnes can be a single or a list of values depending on the number of
-        objective functions. If the objective is only one, the fitness will be a generic
-        numeric comparison, wherheas in case of multiple objective functions, the 
-        Pareto Front and the Crowding Distance methods are used in a multi-dimensional
-        evaluation of the fitness ordering.
+        TODO fix docstring with new fitness dictionaries
 
         Args:
             other: The program to which compare the current one
         """
-        if isinstance(self.fitness, float):
-            return self.fitness < other.fitness
 
-        elif isinstance(self.fitness, list):
+        if isinstance(self.fitness, dict):
             return self.rank <= other.rank and self.crowding_distance >= other.crowding_distance
 
         else:
             raise TypeError(
-                f'program.fitness is neither a float or a list: {type(self.fitness)}')
+                f'program.fitness is not a dict: {type(self.fitness)}')
+
+    def is_duplicate(self, other):
+        """ Determines whether two programs are equivalent based on equal fitnesses
+
+        If the fitness of two programs are identical, we assume they are equivalent to each other.
+        """
+        is_d = True
+        for a_fit, b_fit in zip(self.fitness.values(), other.fitness.values()):
+            if round(a_fit, 3) != round(b_fit, 3):  # One difference is enough for them not to be identical
+                is_d = False
+        
+        return is_d
 
     def _generate_tree(self,
                        parsimony: float,
@@ -459,9 +506,15 @@ class Program:
         offspring = deepcopy(self.program)
         mutate_point = self._select_random_node(root_node=offspring)
 
-        child_to_mutate = random.randrange(mutate_point.arity)
+        if not mutate_point:
+            mutate_point = offspring
 
-        to_mutate = mutate_point.operands[child_to_mutate]
+        try:
+            child_to_mutate = random.randrange(mutate_point.arity)
+            to_mutate = mutate_point.operands[child_to_mutate]
+        except ValueError:  # Case in which the tree has depth 0 with a FeatureNode as root
+            to_mutate = mutate_point
+
         logging.debug(f'Mutating {to_mutate}')
 
         ####################################################################
@@ -474,7 +527,7 @@ class Program:
 
         logging.debug(f'Mutated {to_mutate} in {mutated}')
 
-        mutate_point.operands[child_to_mutate] = mutated
+        to_mutate = mutated
 
         if inplace:
             self.program = offspring
@@ -483,6 +536,8 @@ class Program:
             return self
 
         new = Program(program=offspring, operations=self.operations,
+                      constants_optimization=self.constants_optimization,
+                      constants_optimization_conf=self.constants_optimization_conf,
                       features=self.features, const_range=self.const_range)
 
         new.parsimony = self.parsimony
@@ -502,7 +557,7 @@ class Program:
 
     def _select_random_node(self,
                             root_node: Union[OperationNode, FeatureNode],
-                            deepness: float = 0.75
+                            deepness: float = 0.15
                             ) -> Union[OperationNode, FeatureNode]:
         """ This method return a random node of a sub-tree starting from root_node.
 
