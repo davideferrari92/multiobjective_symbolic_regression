@@ -88,6 +88,7 @@ class SymbolicRegressor:
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
+        verbose: int = 0
     ):
         """This method support a KeyboardInterruption of the fit process
 
@@ -105,6 +106,7 @@ class SymbolicRegressor:
                 operations=operations,
                 n_jobs=n_jobs,
                 stop_at_convergence=stop_at_convergence,
+                verbose=verbose
             )
         except KeyboardInterrupt:
             stop = time.perf_counter()
@@ -125,6 +127,7 @@ class SymbolicRegressor:
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
+        verbose: int = 0
     ) -> list:
 
         if not self.population:
@@ -257,22 +260,24 @@ class SymbolicRegressor:
 
             self.average_complexity = np.mean([p.complexity for p in self.population])
 
-            print()
-            print(
-                f"Population of {len(self.population)} elements and average complexity of {self.average_complexity}"
-            )
-            print(
-                f"\tBest individual (complexity {self.population[0].complexity})\n\t{self.best_program.program}"
-            )
-            print()
-            print(f"\twith fitness\n1)\t{self.population[0].fitness}")
-            print()
-            print(f"Following best fitness")
-            print(f"2)\t{self.population[1].fitness}")
-            print(f"3)\t{self.population[2].fitness}")
-            print(f"4)\t{self.population[3].fitness}")
-            print(f"5)\t{self.population[4].fitness}")
-            print()
+            if verbose > 0:
+                print()
+                print(
+                    f"Population of {len(self.population)} elements and average complexity of {self.average_complexity}"
+                )
+                print(
+                    f"\tBest individual (complexity {self.population[0].complexity})\n\t{self.best_program.program}"
+                )
+                print()
+                print(f"\twith fitness\n1)\t{self.population[0].fitness}")
+                print()
+            if verbose > 1:
+                print(f"Following best fitness")
+                print(f"2)\t{self.population[1].fitness}")
+                print(f"3)\t{self.population[2].fitness}")
+                print(f"4)\t{self.population[3].fitness}")
+                print(f"5)\t{self.population[4].fitness}")
+                print()
 
             end_time_generation = time.perf_counter()
             logging.debug(
