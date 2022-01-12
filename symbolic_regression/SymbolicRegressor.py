@@ -23,7 +23,7 @@ class SymbolicRegressor:
         constants_optimization: bool,
         constants_optimization_conf: dict,
         objective_functions: callable,
-        cross_over_perc: float = 0.5,
+        genetic_operations_frequency: dict,
         parsimony=0.9,
         parsimony_decay=0.9,
         population_size: int = 100,
@@ -47,7 +47,7 @@ class SymbolicRegressor:
         self.constants_optimization = constants_optimization
         self.constants_optimization_conf = constants_optimization_conf
         self.const_range = const_range
-        self.cross_over_perc = cross_over_perc
+        self.genetic_operations_frequency = genetic_operations_frequency
         self.parsimony = parsimony
         self.parsimony_decay = parsimony_decay
 
@@ -175,7 +175,7 @@ class SymbolicRegressor:
                     self.objective_functions,
                     self.generation,
                     self.tournament_size,
-                    cross_over_perc=self.cross_over_perc,
+                    genetic_operations_frequency=self.genetic_operations_frequency,
                 )
                 for _ in range(self.population_size)
             )

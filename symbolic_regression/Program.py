@@ -1,8 +1,8 @@
 import logging
+import operator
 import random
-from copy import deepcopy
+from copy import copy, deepcopy
 from typing import Union
-import traceback
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -50,7 +50,9 @@ class Program:
                  const_range: tuple = None,
                  program: Node = None,
                  constants_optimization: bool = False,
-                 constants_optimization_conf: dict = {}
+                 constants_optimization_conf: dict = {},
+                 parsimony: float = .9,
+                 parsimony_decay: float = .9
                  ) -> None:
         """
 
@@ -82,6 +84,9 @@ class Program:
         self.programs_dominates: list = []
         self.programs_dominated_by: list = []
         self.crowding_distance: float = 0
+
+        self.parsimony = parsimony
+        self.parsimony_decay = parsimony_decay
 
         if program:
             self.program: Node = program
@@ -233,10 +238,7 @@ class Program:
                       features=self.features,
                       constants_optimization=self.constants_optimization,
                       constants_optimization_conf=self.constants_optimization_conf,
-                      const_range=self.const_range)
-
-        new.parsimony = self.parsimony
-        new.parsimony_decay = self.parsimony_decay
+                      const_range=self.const_range, parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
 
         return new
 
@@ -356,10 +358,7 @@ class Program:
         if len(_converged) > 0:
             self.converged = all(_converged)
 
-    def init_program(self,
-                     parsimony: float = 0.95,
-                     parsimony_decay: float = 0.95,
-                     ) -> None:
+    def init_program(self) -> None:
         """ This method initialize a new program calling the recursive generation function.
 
         The generation of a program follows a genetic algorithm in which the choice on how to
@@ -371,16 +370,11 @@ class Program:
             parsimony_decay: The ratio with which the parsimony decreases to prevent infinite programs
         """
 
-        self.parsimony = parsimony
-        self.parsimony_decay = parsimony_decay
-
         logging.debug(
-            f'Generating a tree with parsimony={parsimony} and parsimony_decay={parsimony_decay}')
+            f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}')
 
         # Father=None is used to identify the root node of the program
-        self.program = self._generate_tree(
-            parsimony=parsimony, parsimony_decay=parsimony_decay,
-            father=None)
+        self.program = self._generate_tree(father=None)
 
         logging.debug(f'Generated a program of depth {self.program_depth}')
         logging.debug(self.program)
@@ -408,14 +402,13 @@ class Program:
         """
         is_d = True
         for a_fit, b_fit in zip(self.fitness.values(), other.fitness.values()):
-            if round(a_fit, 3) != round(b_fit, 3):  # One difference is enough for them not to be identical
+            # One difference is enough for them not to be identical
+            if round(a_fit, 3) != round(b_fit, 3):
                 is_d = False
-        
+
         return is_d
 
     def _generate_tree(self,
-                       parsimony: float,
-                       parsimony_decay: float,
                        father: Union[Node, None] = None):
         """ This method run the recursive generation of a subtree.
 
@@ -431,7 +424,7 @@ class Program:
             father: The father to the next generated node (None for the root node)
         """
 
-        if random.random() < parsimony:
+        if random.random() < self.parsimony:
 
             operation = random.choice(self.operations)
 
@@ -447,8 +440,8 @@ class Program:
             for _ in range(node.arity):
                 node.add_operand(
                     self._generate_tree(
-                        parsimony=parsimony * parsimony_decay,
-                        parsimony_decay=parsimony_decay,
+                        parsimony=self.parsimony * self.parsimony_decay,
+                        parsimony_decay=self.parsimony_decay,
                         father=node
                     )
                 )
@@ -544,10 +537,8 @@ class Program:
         new = Program(program=offspring, operations=self.operations,
                       constants_optimization=self.constants_optimization,
                       constants_optimization_conf=self.constants_optimization_conf,
-                      features=self.features, const_range=self.const_range)
-
-        new.parsimony = self.parsimony
-        new.parsimony_decay = self.parsimony_decay
+                      features=self.features, const_range=self.const_range,
+                      parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
 
         return new
 

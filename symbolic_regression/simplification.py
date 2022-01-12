@@ -121,11 +121,10 @@ def simplify_program(program: Program) -> Program:
             const_range=program.const_range,
             program=extracted_program,
             constants_optimization=program.constants_optimization,
-            constants_optimization_conf=program.constants_optimization_conf
+            constants_optimization_conf=program.constants_optimization_conf,
+            parsimony=program.parsimony, parsimony_decay=program.parsimony_decay
         )
 
-        new_program.parsimony = program.parsimony
-        new_program.parsimony_decay = program.parsimony_decay
         new_program.fitness = program.fitness
 
         logging.debug(f'Simplified program {new_program}')

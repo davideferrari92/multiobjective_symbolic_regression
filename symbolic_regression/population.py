@@ -16,10 +16,12 @@ def generate_population(features,
     p = Program(
         features=features,
         operations=operations,
-        const_range=const_range
+        const_range=const_range,
+        parsimony=parsimony,
+        parsimony_decay=parsimony_decay
     )
 
-    p.init_program(parsimony=parsimony, parsimony_decay=parsimony_decay)
+    p.init_program()
 
     from symbolic_regression.multiobjective.training import eval_fitness
 
