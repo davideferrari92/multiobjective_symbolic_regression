@@ -83,7 +83,7 @@ class SymbolicRegressor:
         target: str,
         weights: str,
         generations: int,
-        genetic_operations_frequency: dict,
+        genetic_operators_frequency: dict,
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
@@ -102,7 +102,7 @@ class SymbolicRegressor:
                 target=target,
                 weights=weights,
                 generations=generations,
-                genetic_operations_frequency=genetic_operations_frequency,
+                genetic_operators_frequency=genetic_operators_frequency,
                 operations=operations,
                 n_jobs=n_jobs,
                 stop_at_convergence=stop_at_convergence,
@@ -124,7 +124,7 @@ class SymbolicRegressor:
         target: str,
         weights: str,
         generations: int,
-        genetic_operations_frequency: dict,
+        genetic_operators_frequency: dict,
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
@@ -176,7 +176,7 @@ class SymbolicRegressor:
                     self.objective_functions,
                     self.generation,
                     self.tournament_size,
-                    genetic_operations_frequency,
+                    genetic_operators_frequency,
                 )
                 for _ in range(self.population_size)
             )
