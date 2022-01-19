@@ -1,10 +1,8 @@
 from abc import ABC
 from typing import Union
-from numpy.lib.arraysetops import isin
 
 import pandas as pd
 import numpy as np
-from tensorflow.python.ops.gen_math_ops import Inv
 
 
 class Node(ABC):
@@ -64,72 +62,6 @@ class OperationNode(Node):
 
         self.operands.append(operand)
 
-    def _get_complexity(self, base_complexity=0):
-        """ This method recursively increment the complexity count of this program
-        """
-
-        base_complexity += 1  # Count for this operation contribution
-
-        for child in self.operands:
-            base_complexity = child._get_complexity(
-                base_complexity=base_complexity)
-
-        return base_complexity
-
-    def _get_depth(self, base_depth=0):
-
-        base_depth += 1
-
-        for child in self.operands:
-            new_depth = max(child._get_depth(base_depth=base_depth)
-                            for child in self.operands)
-
-        return new_depth
-
-    def _get_features(self, base_features={}):
-        for op in self.operands:
-            if isinstance(op, FeatureNode):
-                base_features = op._get_features(base_features=base_features)
-
-        return base_features
-
-    def _get_operations_used(self, base_operations_used={}):
-        if not base_operations_used.get(self.operation):
-            base_operations_used[self.operation] = 0
-
-        base_operations_used[self.operation] += 1
-
-        for op in self.operands:
-            if isinstance(op, OperationNode):
-                base_operations_used = op._get_operations_used(base_operations_used=base_operations_used)
-
-        return base_operations_used
-
-    def is_valid(self):
-        
-        v = True
-
-        for child in self.operands:
-            if not child or isinstance(child, InvalidNode):
-                v_c = False
-            elif isinstance(child, FeatureNode):
-                v_c = True
-            else:
-                v_c = child.is_valid()
-
-            v = v and v_c
-
-        return v
-
-    def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None, format_tf: bool = False) -> str:
-        """ This method render the string of the program according to the formatting rules of its operations
-
-        This call recursively itself untile the terminal nodes are reached.
-        """
-        if format_tf:
-            return self.format_tf.format(*[node.render(data=data, format_tf=True) for node in self.operands])
-        return self.format_str.format(*[node.render(data=data) for node in self.operands])
-
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
         """ This method recursively calls the operations callable to evaluate the result of the program on data
 
@@ -161,6 +93,18 @@ class OperationNode(Node):
 
         return result
 
+    def _get_complexity(self, base_complexity=0):
+        """ This method recursively increment the complexity count of this program
+        """
+
+        base_complexity += 1  # Count for this operation contribution
+
+        for child in self.operands:
+            base_complexity = child._get_complexity(
+                base_complexity=base_complexity)
+
+        return base_complexity
+
     def _get_constants(self, const_list: list):
         """
         """
@@ -171,6 +115,16 @@ class OperationNode(Node):
                 const_list += [child]
 
         return const_list
+
+    def _get_depth(self, base_depth=0):
+
+        base_depth += 1
+
+        for child in self.operands:
+            new_depth = max(child._get_depth(base_depth=base_depth)
+                            for child in self.operands)
+
+        return new_depth
 
     def _get_features(self, features_list: list):
         """
@@ -183,6 +137,44 @@ class OperationNode(Node):
                 features_list += [child.feature]
 
         return features_list
+
+    def _get_operations_used(self, base_operations_used={}):
+        if not base_operations_used.get(self.operation):
+            base_operations_used[self.operation] = 0
+
+        base_operations_used[self.operation] += 1
+
+        for op in self.operands:
+            if isinstance(op, OperationNode):
+                base_operations_used = op._get_operations_used(
+                    base_operations_used=base_operations_used)
+
+        return base_operations_used
+
+    def is_valid(self):
+
+        v = True
+
+        for child in self.operands:
+            if not child or isinstance(child, InvalidNode):
+                v_c = False
+            elif isinstance(child, FeatureNode):
+                v_c = True
+            else:
+                v_c = child.is_valid()
+
+            v = v and v_c
+
+        return v
+
+    def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None, format_tf: bool = False) -> str:
+        """ This method render the string of the program according to the formatting rules of its operations
+
+        This call recursively itself untile the terminal nodes are reached.
+        """
+        if format_tf:
+            return self.format_tf.format(*[node.render(data=data, format_tf=True) for node in self.operands])
+        return self.format_str.format(*[node.render(data=data) for node in self.operands])
 
 
 class FeatureNode(Node):
@@ -208,48 +200,6 @@ class FeatureNode(Node):
         """ To print the current node in a readable way
         """
         return f'FeatureNode({self.render()})'
-
-    def _get_complexity(self, base_complexity=0):
-        """ This method increase the complexity of the program by 1
-        It is usually called by an OperationNode _get_complexity which
-        accounts for the rest of the program.
-        """
-        return base_complexity + 1
-
-    def _get_depth(self, base_depth=0):
-        return base_depth + 1
-
-    def _get_features(self, base_features={}):
-        if not base_features.get(self.feature):
-            base_features[self.feature] = 0
-
-        base_features[self.feature] += 1
-
-        return base_features
-
-    def is_valid(self):
-        return True
-        
-    def render(self, data: Union[dict, pd.Series, None] = None, format_tf=False) -> str:
-        """ This method render the string representation of this FeatureNode
-
-        If data is provided, the rendering consist of the value of the datapoint of the feature of this
-        FeatureNode.
-        If data is not provided, the rendering will be the name of the feature.
-        If this node is a constant value (is_constant==True) then that numerical value is returned
-        """
-
-        if self.is_constant:
-            if format_tf:
-                return f'constants[{self.index}]'
-            return str(self.feature)
-
-        if data is not None:  # Case in which I render the value of the feature in the datapoint instead of its name
-            if format_tf:
-                return f'X[{list(data.index).index(self.feature)}]'
-            return self.evaluate(data=data)
-
-        return self.feature
 
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> Union[int, float]:
         """ This function evaluate the value of a FeatureNode, which is the datapoint passed as argument
@@ -280,6 +230,49 @@ class FeatureNode(Node):
 
         return result
 
+    def _get_complexity(self, base_complexity=0):
+        """ This method increase the complexity of the program by 1
+        It is usually called by an OperationNode _get_complexity which
+        accounts for the rest of the program.
+        """
+        return base_complexity + 1
+
+    def _get_depth(self, base_depth=0):
+        return base_depth + 1
+
+    def _get_features(self, base_features={}):
+        if not base_features.get(self.feature):
+            base_features[self.feature] = 0
+
+        base_features[self.feature] += 1
+
+        return base_features
+
+    def is_valid(self):
+        return True
+
+    def render(self, data: Union[dict, pd.Series, None] = None, format_tf=False) -> str:
+        """ This method render the string representation of this FeatureNode
+
+        If data is provided, the rendering consist of the value of the datapoint of the feature of this
+        FeatureNode.
+        If data is not provided, the rendering will be the name of the feature.
+        If this node is a constant value (is_constant==True) then that numerical value is returned
+        """
+
+        if self.is_constant:
+            if format_tf:
+                return f'constants[{self.index}]'
+            return str(self.feature)
+
+        if data is not None:  # Case in which I render the value of the feature in the datapoint instead of its name
+            if format_tf:
+                return f'X[{list(data.index).index(self.feature)}]'
+            return self.evaluate(data=data)
+
+        return self.feature
+
+    
 
 class InvalidNode(Node):
     def __init__(self, father=None) -> None:
@@ -289,7 +282,7 @@ class InvalidNode(Node):
 
     def _get_features(self, base_features={}):
         return base_features
-        
+
     def _get_operations_used(self, base_operations_used={}):
         return base_operations_used
 
