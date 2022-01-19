@@ -42,10 +42,11 @@ def generate_population(
         operations=operations,
         const_range=const_range,
         constants_optimization=constants_optimization,
-        constants_optimization_conf=constants_optimization_conf
+        constants_optimization_conf=constants_optimization_conf,
+        parsimony=parsimony, parsimony_decay=parsimony_decay
     )
 
-    p.init_program(parsimony=parsimony, parsimony_decay=parsimony_decay)
+    p.init_program()
 
     p.evaluate_fitness(fitness=fitness,
                        data=data, target=target, weights=weights)
@@ -67,7 +68,8 @@ def dominance(program1: Program, program2: Program) -> bool:
     if program1.program and program2.program:
         for this_fitness in program1.fitness.keys():
             try:
-                d = program1.fitness[this_fitness] - program2.fitness[this_fitness]
+                d = program1.fitness[this_fitness] - \
+                    program2.fitness[this_fitness]
             except KeyError:
                 return True
 
@@ -170,7 +172,15 @@ def crowding_distance(population: list):
 def tournament_selection(population: list,
                          tournament_size: int,
                          generation: int):
-    """
+    """ The tournament selection is used to choose the programs to which apply genetic operations
+
+    Firstly a random selection of k elements from the population is selected and 
+    the best program among them is chosen.
+
+    Args:
+        population: the population from which to select the program
+        tournament_size: the number of programs from which to choose the selcted one
+        generation: keeps track of the training generation
     """
 
     tournament_members = random.choices(population, k=tournament_size)
@@ -180,7 +190,7 @@ def tournament_selection(population: list,
     for member in tournament_members:
         if member is None or not member.is_valid:
             continue
-        
+
         if generation == 0:
             try:
                 if best_member > member:
@@ -207,20 +217,29 @@ def get_offspring(population: list,
                   fitness: list,
                   generations: int,
                   tournament_size: int,
-                  cross_over_perc: float = .5):
+                  genetic_operations_frequency: dict):
     """ This function generate an offspring of a program from the current population
 
-    The offspring is a mutation of a program from the current population by means of
-    cross-over or mutation. The choice of the two is random according to the genetic
-    nature of this algorithm. The prevalence of one over the other can be modulated
-    using the parameter `cross_over_perc` (the higher the likely the cross-over will
-    be chosen).
-    In case the cross-over is chosen, a second program is extracted from the population
-    and the operation is performed selecting a sub-tree from the program 2 and appending
-    in place of a random sub-tree of program 1.
-    In case the mutation is chosen, a random sub-tree of the program 1 is replaces by a 
-    newly generated subtree.
-    The generated mutated program will then be returned as a new object for the population.
+    The offspring is a program to which a genetic alteration has been applied.
+    The possible operations are as follow:
+        - crossover: a random subtree from another program replaces
+            a random subtree of the current program
+        - mutation: a random subtree of the current program is replaced by a newly
+            generated subtree
+        - randomization: it is a crossover with a portion of the same program instead of a portion
+            of another program
+        - deletion: a random subtree is deleted from the current program
+        - insertion: a newly generated subtree is inserted in a random spot of the current program
+        - operator mutation: a random operation is replaced by another with the same arity
+        - leaf mutation: a terminal node (feature or constant) is replaced by a different one
+        - do nothing: in this case no mutation is applied
+
+    The frequency of which those operation are applied is determined by the dictionary
+    genetic_operations_frequency in which the relative frequency of each of the desired operations
+    is expressed with integers. The higher the number the likelier the operation will be chosen.
+
+    The program to which apply the operation is chosen using the tournament_selection, a method
+    that identify the best program among a random selection of k programs from the population.
 
     Args:
         population: The population of programs from which to extract the program for the mutation
@@ -229,9 +248,16 @@ def get_offspring(population: list,
         weights: The label of the weights columns of a weighted WMSE in case of unbalanced datasets
         fitness: The list of fitness functions for this task
         tournament_size: The size of the pool of random programs from which to choose in for the mutations
-        cross_over_perc: The value that modulates the prevalence of cross-over over simple mutations
+        genetic_operations_frequency: The relative frequency with which to coose the genetic operation to apply
         generations: The number of training generations (used to appropriately behave in the first one)
     """
+
+    # This allow to randomly chose a genetic operation to
+    ops = list()
+    for op, freq in genetic_operations_frequency.items():
+        ops += [op]*freq
+    gen_op = random.choice(ops)
+
     program1 = tournament_selection(
         population=population, tournament_size=tournament_size, generation=generations
     )
@@ -239,7 +265,8 @@ def get_offspring(population: list,
     if program1 is None or not program1.is_valid:
         return program1
 
-    if random.random() < cross_over_perc:
+    if gen_op == 'crossover':
+        print(f'Executing crossover')
         program2 = tournament_selection(
             population=population, tournament_size=tournament_size, generation=generations
         )
@@ -247,8 +274,37 @@ def get_offspring(population: list,
             return program1
         p_ret = program1.cross_over(other=program2, inplace=False)
 
-    else:
+    elif gen_op == 'randomize':
+        print(f'Executing randomize')
+        p_ret = program1.cross_over(other=None, inplace=False)  # Will generate a new tree as other
+    
+    elif gen_op == 'mutation':
+        print(f'Executing mutation')
         p_ret = program1.mutate(inplace=False)
+
+    elif gen_op == 'delete_node':
+        print(f'Executing delete_node')
+        p_ret = program1.delete_node(inplace=False)
+
+    elif gen_op == 'insert_node':
+        print(f'Executing Insert node')
+        p_ret = program1.insert_node(inplace=False)
+
+    elif gen_op == 'mutate_operator':
+        print(f'Executing mutate_operator')
+        p_ret = program1.mutate_operator(inplace=False)
+
+    elif gen_op == 'mutate_leaf':
+        print(f'Executing mutate_leaf')
+        p_ret = program1.mutate_leaf(inplace=False)
+
+    elif gen_op == 'do_nothing':
+        print(f'Executing do_nothing')
+        p_ret = program1
+    else:
+        logging.warning(
+            f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, mutation and randomize')
+        p_ret = program1
 
     # Add the fitness to the object after the cross_over or mutation
     p_ret.evaluate_fitness(
