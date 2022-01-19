@@ -23,7 +23,6 @@ class SymbolicRegressor:
         constants_optimization: bool,
         constants_optimization_conf: dict,
         objective_functions: callable,
-        genetic_operations_frequency: dict,
         parsimony=0.9,
         parsimony_decay=0.9,
         population_size: int = 100,
@@ -47,7 +46,6 @@ class SymbolicRegressor:
         self.constants_optimization = constants_optimization
         self.constants_optimization_conf = constants_optimization_conf
         self.const_range = const_range
-        self.genetic_operations_frequency = genetic_operations_frequency
         self.parsimony = parsimony
         self.parsimony_decay = parsimony_decay
 
@@ -85,6 +83,7 @@ class SymbolicRegressor:
         target: str,
         weights: str,
         generations: int,
+        genetic_operations_frequency: dict,
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
@@ -103,6 +102,7 @@ class SymbolicRegressor:
                 target=target,
                 weights=weights,
                 generations=generations,
+                genetic_operations_frequency=genetic_operations_frequency,
                 operations=operations,
                 n_jobs=n_jobs,
                 stop_at_convergence=stop_at_convergence,
@@ -124,6 +124,7 @@ class SymbolicRegressor:
         target: str,
         weights: str,
         generations: int,
+        genetic_operations_frequency: dict,
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
@@ -175,7 +176,7 @@ class SymbolicRegressor:
                     self.objective_functions,
                     self.generation,
                     self.tournament_size,
-                    genetic_operations_frequency=self.genetic_operations_frequency,
+                    genetic_operations_frequency,
                 )
                 for _ in range(self.population_size)
             )
