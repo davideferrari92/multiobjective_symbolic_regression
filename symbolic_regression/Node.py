@@ -126,15 +126,21 @@ class OperationNode(Node):
 
         return new_depth
 
-    def _get_features(self, features_list: list):
+    def _get_features(self, features_list: list, return_objects: bool = False):
         """
         """
         for child in self.operands:
             if isinstance(child, OperationNode):
                 features_list = child._get_features(
-                    features_list=features_list)
+                    features_list=features_list, return_objects=return_objects)
             elif not child.is_constant:
-                features_list += [child.feature]
+                if return_objects:
+                    features_list += [child]
+                else:
+                    features_list += [child.feature]
+
+                    # If returning only the string with the names, we don't want duplicates
+                    features_list = list(set(features_list))
 
         return features_list
 
@@ -240,13 +246,8 @@ class FeatureNode(Node):
     def _get_depth(self, base_depth=0):
         return base_depth + 1
 
-    def _get_features(self, base_features={}):
-        if not base_features.get(self.feature):
-            base_features[self.feature] = 0
-
-        base_features[self.feature] += 1
-
-        return base_features
+    def _get_features(self, features_list=[]):
+        return features_list
 
     def is_valid(self):
         return True
@@ -280,8 +281,8 @@ class InvalidNode(Node):
 
         self.is_constant = True
 
-    def _get_features(self, base_features={}):
-        return base_features
+    def _get_features(self, features_list=[]):
+        return features_list
 
     def _get_operations_used(self, base_operations_used={}):
         return base_operations_used

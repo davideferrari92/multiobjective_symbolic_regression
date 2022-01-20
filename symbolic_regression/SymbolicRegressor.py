@@ -223,7 +223,7 @@ class SymbolicRegressor:
                 missing_elements = self.population_size - len(self.population)
 
                 logging.warning(
-                    f"Population of {len(self.population)} elements is less than population_size:{self.population_size}. Integrating with {missing_elements} new elements"
+                    f"Population of {len(self.population)} elements is less than population_size:{self.population_size*2}. Integrating with {missing_elements} new elements"
                 )
 
                 self.population += Parallel(
@@ -242,7 +242,7 @@ class SymbolicRegressor:
                         parsimony=self.parsimony,
                         parsimony_decay=self.parsimony_decay,
                     )
-                    for _ in range(missing_elements)
+                    for _ in range(missing_elements+self.population_size)
                 )
 
             logging.debug(f"Creating pareto front")
@@ -273,12 +273,15 @@ class SymbolicRegressor:
                 print(f"\twith fitness\n1)\t{self.population[0].fitness}")
                 print()
             if verbose > 1:
-                print(f"Following best fitness")
-                print(f"2)\t{self.population[1].fitness}")
-                print(f"3)\t{self.population[2].fitness}")
-                print(f"4)\t{self.population[3].fitness}")
-                print(f"5)\t{self.population[4].fitness}")
-                print()
+                try:
+                    print(f"Following best fitness")
+                    print(f"2)\t{self.population[1].fitness}")
+                    print(f"3)\t{self.population[2].fitness}")
+                    print(f"4)\t{self.population[3].fitness}")
+                    print(f"5)\t{self.population[4].fitness}")
+                    print()
+                except IndexError:
+                    pass  # Stops printing in very small populations
 
             end_time_generation = time.perf_counter()
             logging.debug(

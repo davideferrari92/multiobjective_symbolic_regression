@@ -1,4 +1,3 @@
-from joblib import Parallel, delayed
 from symbolic_regression.Program import Program
 
 
@@ -9,6 +8,8 @@ def generate_population(features,
                         target,
                         weights,
                         const_range,
+                        constants_optimization,
+                        constants_optimization_conf,
                         parsimony=0.90,
                         parsimony_decay=0.90):
     """
@@ -17,37 +18,15 @@ def generate_population(features,
         features=features,
         operations=operations,
         const_range=const_range,
+        constants_optimization=constants_optimization,
+        constants_optimization_conf=constants_optimization_conf,
         parsimony=parsimony,
         parsimony_decay=parsimony_decay
     )
 
     p.init_program()
 
-    from symbolic_regression.multiobjective.training import eval_fitness
-
-    p.fitness = eval_fitness(fitness=fitness, program=p,
-                             data=data, target=target, weights=weights)
+    p.eval_fitness(fitness=fitness, program=p,
+                   data=data, target=target, weights=weights)
 
     return p
-
-
-def generate_population_n(n,
-                          features,
-                          operations,
-                          fitness,
-                          data,
-                          target,
-                          weights,
-                          const_range,
-                          parsimony,
-                          parsimony_decay):
-    """
-    """
-
-    return Parallel(n_jobs=-1)(
-        delayed(generate_population)(
-            features, operations, fitness, data, target,
-            weights, const_range, parsimony=parsimony,
-            parsimony_decay=parsimony_decay
-        ) for _ in range(n)
-    )

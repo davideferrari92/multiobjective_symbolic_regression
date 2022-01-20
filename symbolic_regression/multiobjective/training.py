@@ -264,9 +264,12 @@ def get_offspring(population: list,
 
     if program1 is None or not program1.is_valid:
         return program1
+    
+    #print(f'\nBefore mutation')
+    #print(program1.program)
 
     if gen_op == 'crossover':
-        print(f'Executing crossover')
+        #print(f'Executing crossover')
         program2 = tournament_selection(
             population=population, tournament_size=tournament_size, generation=generations
         )
@@ -275,36 +278,39 @@ def get_offspring(population: list,
         p_ret = program1.cross_over(other=program2, inplace=False)
 
     elif gen_op == 'randomize':
-        print(f'Executing randomize')
+        #print(f'Executing randomize')
         p_ret = program1.cross_over(other=None, inplace=False)  # Will generate a new tree as other
     
     elif gen_op == 'mutation':
-        print(f'Executing mutation')
+        #print(f'Executing mutation')
         p_ret = program1.mutate(inplace=False)
 
     elif gen_op == 'delete_node':
-        print(f'Executing delete_node')
+        #print(f'Executing delete_node')
         p_ret = program1.delete_node(inplace=False)
 
     elif gen_op == 'insert_node':
-        print(f'Executing Insert node')
+        #print(f'Executing insert_node')
         p_ret = program1.insert_node(inplace=False)
 
     elif gen_op == 'mutate_operator':
-        print(f'Executing mutate_operator')
+        #print(f'Executing mutate_operator')
         p_ret = program1.mutate_operator(inplace=False)
 
     elif gen_op == 'mutate_leaf':
-        print(f'Executing mutate_leaf')
+        #print(f'Executing mutate_leaf')
         p_ret = program1.mutate_leaf(inplace=False)
 
     elif gen_op == 'do_nothing':
-        print(f'Executing do_nothing')
+        #print(f'Executing do_nothing')
         p_ret = program1
     else:
         logging.warning(
             f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, mutation and randomize')
-        p_ret = program1
+        return program1
+
+    #print(f'\nAfter mutation')
+    #print(p_ret.program)
 
     # Add the fitness to the object after the cross_over or mutation
     p_ret.evaluate_fitness(

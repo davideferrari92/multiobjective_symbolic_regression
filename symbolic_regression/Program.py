@@ -1,7 +1,6 @@
 import logging
-import operator
 import random
-from copy import copy, deepcopy
+from copy import deepcopy
 from typing import Union
 import numpy as np
 import pandas as pd
@@ -25,7 +24,7 @@ class Program:
     distribution. Based on how likely the next node will be an operation or a terminal
     node, the tree will become deeper and so the formula more complex.
     The choice of the terminal node is determined by a random distribution as well to
-    modulate how likely a random feature from the dataset will be chosen instead of a 
+    modulate how likely a random feature from the dataset will be chosen instead of a
     random numerical constant.
 
     The program can be evaluated and also printed.
@@ -52,7 +51,7 @@ class Program:
                  constants_optimization: bool = False,
                  constants_optimization_conf: dict = {},
                  parsimony: float = .9,
-                 parsimony_decay: float = .9
+                 parsimony_decay: float = .85
                  ) -> None:
         """
 
@@ -90,6 +89,7 @@ class Program:
         self.crowding_distance: float = 0
 
         self.parsimony = parsimony
+        self._parsimony_bkp = parsimony
         self.parsimony_decay = parsimony_decay
 
         if program:
@@ -142,7 +142,7 @@ class Program:
     def is_valid(self):
         """ The validity of a program represent its executability and absence of errors or inconsistencies
         """
-        return self.program.is_valid() and self._override_is_valid
+        return self.program.is_valid and self._override_is_valid
 
     def get_constants(self):
         """ This method allow to get all constants used in a tree.
@@ -167,11 +167,11 @@ class Program:
 
         return to_return
 
-    def get_features(self):
+    def get_features(self, return_objects: bool = False):
         """ This method recursively explore the tree and return a list of unique features used.
         """
         if isinstance(self.program, OperationNode):
-            return list(set(self.program._get_features(features_list=[])))
+            return self.program._get_features(features_list=[], return_objects=return_objects)
 
         # Only one non-constant FeatureNode
         elif not self.program.is_constant:
@@ -322,7 +322,13 @@ class Program:
             f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}')
 
         # Father=None is used to identify the root node of the program
-        self.program = self._generate_tree(father=None)
+        self.program = self._generate_tree(
+            father=None,
+            parsimony=self.parsimony,
+            parsimony_decay=self.parsimony_decay
+        )
+
+        self.parsimony = self._parsimony_bkp  # Restore parsimony for future operations
 
         logging.debug(f'Generated a program of depth {self.program_depth}')
         logging.debug(self.program)
@@ -358,6 +364,8 @@ class Program:
 
     def _generate_tree(self,
                        depth=-1,
+                       parsimony: float = .9,
+                       parsimony_decay: float = .85,
                        father: Union[Node, None] = None):
         """ This method run the recursive generation of a subtree.
 
@@ -387,17 +395,29 @@ class Program:
                 is_constant=is_constant
             )
 
-        if (random.random() < self.parsimony and depth == -1) or (depth > 0):
+        if not parsimony:
+            parsimony = self.parsimony
+        if not parsimony_decay:
+            parsimony_decay = self.parsimony_decay
+
+        if (random.random() < parsimony and depth == -1) or (depth > 0):
 
             operation = random.choice(self.operations)
             node = gen_operation(operation_conf=operation, father=father)
 
             # Recursive call to populate the operands of the new OperationNode
+            if depth == -1:
+                new_depth = -1
+            else:
+                new_depth = depth-1
+
             for _ in range(node.arity):
                 node.add_operand(
                     self._generate_tree(
-                        depth=depth-1,
-                        father=node
+                        depth=new_depth,
+                        father=node,
+                        parsimony=parsimony*parsimony_decay,
+                        parsimony_decay=parsimony_decay
                     )
                 )
 
@@ -431,13 +451,13 @@ class Program:
 
     def _select_random_node(self,
                             root_node: Union[OperationNode, FeatureNode, InvalidNode],
-                            deepness: float = 0.15
+                            deepness: float = 0.3
                             ) -> Union[OperationNode, FeatureNode]:
         """ This method return a random node of a sub-tree starting from root_node.
 
-        To modulate the deepness to which the returned node will likely be, we can use 
+        To modulate the deepness to which the returned node will likely be, we can use
         'deepness'. Should be between 0 and 1; the higher the value, the closest to the
-        root_node the returned node will be. 
+        root_node the returned node will be.
 
         Args:
             root_node: The node from which start the descent to select a random child node
@@ -510,7 +530,7 @@ class Program:
                 f'The two programs must have the same operations')
 
         offspring = deepcopy(self.program)
-        cross_over_point1 = self._select_random_node(root_node=offspring)
+        cross_over_point1 = self._select_random_node(root_node=offspring, deepness=.15)
 
         if not cross_over_point1:
             return self
@@ -518,16 +538,16 @@ class Program:
         cross_over_point2 = deepcopy(
             self._select_random_node(root_node=other.program))
 
-        if cross_over_point2:
-            cross_over_point1 = cross_over_point2
-
-        child_count_cop1 = len(cross_over_point1.operands)
-
-        child_to_replace = random.randrange(child_count_cop1)
         logging.debug(
-            f'Cross-over: {cross_over_point1.operands[child_to_replace]} replaced by {cross_over_point2}')
+            f'\nCP1\n\n{cross_over_point1}\n\nCP2\n\n{cross_over_point2}')
 
-        cross_over_point1.operands[child_to_replace] = cross_over_point2
+        cross_over_point2.father = cross_over_point1.father
+
+        if cross_over_point2.father:
+            cross_over_point2.father.operands[cross_over_point2.father.operands.index(
+                cross_over_point1)] = cross_over_point2
+        else:
+            offspring = cross_over_point2
 
         if inplace:
             self.program = offspring
@@ -558,57 +578,56 @@ class Program:
             # Case in which a one FeatureNode only program is passed.
             # A new tree is generated.
             new = Program(operations=self.operations,
-                          features=self.features, const_range=self.const_range)
+                          constants_optimization=self.constants_optimization,
+                          constants_optimization_conf=self.constants_optimization_conf,
+                          features=self.features,
+                          const_range=self.const_range,
+                          parsimony=self.parsimony,
+                          parsimony_decay=self.parsimony_decay)
 
-            new.init_program(
-                parsimony=self.parsimony,
-                parsimony_decay=self.parsimony_decay,
-            )
-
+            new.init_program()
             return new
 
         offspring = deepcopy(self.program)
-        mutate_point = self._select_random_node(root_node=offspring)
+
+        mutate_point = self._select_random_node(
+            root_node=offspring, deepness=.3)
 
         if not mutate_point:
             mutate_point = offspring
 
         try:
             child_to_mutate = random.randrange(mutate_point.arity)
-            to_mutate = mutate_point.operands[child_to_mutate]
+            mutated = self._generate_tree(
+                father=mutate_point,
+                depth=int(self.program_depth/2)
+            )
+            #logging.debug(f'\n\nMutating this\n\n{mutate_point.operands[child_to_mutate]}\n\nin this\n\n{mutated}\n\n')
+
+            mutate_point.operands[child_to_mutate] = mutated
         except ValueError:  # Case in which the tree has depth 0 with a FeatureNode as root
-            to_mutate = mutate_point
-
-        logging.debug(f'Mutating {to_mutate}')
-
-        ####################################################################
-        # TODO manage mutation behavior using parsimony and parsimony_decay
-        mutated = self._generate_tree(
-            parsimony=self.parsimony,
-            parsimony_decay=self.parsimony_decay,
-            father=mutate_point
-        )
-
-        logging.debug(f'Mutated {to_mutate} in {mutated}')
-
-        to_mutate = mutated
+            pass
+            #logging.debug(f'No child to mutate found in {mutate_point}')
 
         if inplace:
             self.program = offspring
             return self
 
-        new = Program(program=offspring, operations=self.operations,
+        new = Program(program=offspring,
+                      operations=self.operations,
                       constants_optimization=self.constants_optimization,
                       constants_optimization_conf=self.constants_optimization_conf,
-                      features=self.features, const_range=self.const_range,
-                      parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
+                      features=self.features,
+                      const_range=self.const_range,
+                      parsimony=self.parsimony,
+                      parsimony_decay=self.parsimony_decay)
 
         return new
 
     def insert_node(self, inplace: bool = False):
         """ This method allow to insert a FeatureNode in a random spot in the program
 
-        The insertion of a OperationNode must comply with the arity of the existing 
+        The insertion of a OperationNode must comply with the arity of the existing
         one and must link to the existing operands.
 
         Args:
@@ -616,37 +635,50 @@ class Program:
         """
         offspring = deepcopy(self.program)
         mutate_point = self._select_random_node(root_node=offspring)
-        
+
         if mutate_point:
             mutate_father = mutate_point.father
         else:  # When the mutate point is None, can happen when program is only a FeatureNode
-            return offspring
+            new = Program(operations=self.operations,
+                          constants_optimization=self.constants_optimization,
+                          constants_optimization_conf=self.constants_optimization_conf,
+                          features=self.features,
+                          const_range=self.const_range,
+                          parsimony=self.parsimony,
+                          parsimony_decay=self.parsimony_decay)
 
-        mutate_point_index = None
+            new.init_program()
+            return new
+
+        new_node = self._generate_tree(father=mutate_father, depth=1)
+
         if mutate_father:  # Can be None if it is the root
-            mutate_point_index = mutate_father.operands.index(mutate_point)
-
-        # Is a new tree of only one OperationNode
-        new_node = self._generate_tree(depth=1)
-
-        if mutate_point_index:
-            mutate_father.operands[mutate_point_index] = new_node
-            new_node.father = mutate_father
+            # Is a new tree of only one OperationNode
+            mutate_father.operands[mutate_father.operands.index(
+                mutate_point)] = new_node
 
         # Choose a random children to attach the previous mutate_point
-        random_child_index = random.randint(0, new_node.arity-1)
-        new_node.operands[random_child_index] = mutate_point
+        # The new_node is already a tree with depth = 1 so, in case of arity=2
+        # operations the other operator is already set.
+        new_node.operands[random.randint(0, new_node.arity-1)] = mutate_point
         mutate_point.father = new_node
+
+        # If the new_node is also the new root, offspring need to be updated.
+        if not mutate_father:
+            offspring = new_node
 
         if inplace:
             self.program = offspring
             return self
 
-        new = Program(program=offspring, operations=self.operations,
+        new = Program(program=offspring,
+                      operations=self.operations,
                       constants_optimization=self.constants_optimization,
                       constants_optimization_conf=self.constants_optimization_conf,
-                      features=self.features, const_range=self.const_range,
-                      parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
+                      features=self.features,
+                      const_range=self.const_range,
+                      parsimony=self.parsimony,
+                      parsimony_decay=self.parsimony_decay)
 
         return new
 
@@ -665,19 +697,21 @@ class Program:
         if mutate_point:
             mutate_father = mutate_point.father
         else:  # When the mutate point is None, can happen when program is only a FeatureNode
-            return offspring
+            return self
 
         if len(mutate_point.operands) == 0:  # Case in which there is only a FeatureNode as root
-            return offspring
+            return self
 
         mutate_child = random.choice(mutate_point.operands)
 
         mutate_child.father = mutate_father
 
-        mutate_point_index = None
+        logging.debug(
+            f'\\nMutate Father\n{mutate_father}\n\nMutate Child\n{mutate_child}')
+
         if mutate_father:  # Can be None if it is the root
-            mutate_point_index = mutate_father.operands.index(mutate_point)
-            mutate_father.operands[mutate_point_index] = mutate_child
+            mutate_father.operands[mutate_father.operands.index(
+                mutate_point)] = mutate_child
         else:
             offspring = mutate_child
 
@@ -685,11 +719,14 @@ class Program:
             self.program = offspring
             return self
 
-        new = Program(program=offspring, operations=self.operations,
+        new = Program(program=offspring,
+                      operations=self.operations,
                       constants_optimization=self.constants_optimization,
                       constants_optimization_conf=self.constants_optimization_conf,
-                      features=self.features, const_range=self.const_range,
-                      parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
+                      features=self.features,
+                      const_range=self.const_range,
+                      parsimony=self.parsimony,
+                      parsimony_decay=self.parsimony_decay)
 
         return new
 
@@ -703,27 +740,32 @@ class Program:
         """
         offspring = deepcopy(self)
 
-        mutate_point = random.choice(offspring.get_features())
+        feats = offspring.get_features(return_objects=True)
 
-        if mutate_point:
-            mutate_father = mutate_point.father
-        else:  # When the mutate point is None, can happen when program is only a FeatureNode
-            return offspring
+        mutate_father = None
+        if feats:
+            mutate_point = random.choice(feats)
 
-        new_feature = offspring._generate_tree(depth=0, father=mutate_father)
+            if isinstance(mutate_point, FeatureNode):
+                mutate_father = mutate_point.father
+            else:  # When the program is only a FeatureNode mutate_point is a Program
+                mutate_father = mutate_point.program.father
 
-        mutate_point_index = None
-        if mutate_father:  # Can be None if it is the root
-            mutate_point_index = mutate_father.operands.index(mutate_point)
-            mutate_father.operands[mutate_point_index] = new_feature
+        ''' To force the mutation in case, by chance, the same'''
+        new_feature = offspring._generate_tree(
+            depth=0, father=mutate_father)
 
-        mutate_point = new_feature
+        if mutate_father:
+            mutate_father.operands[mutate_father.operands.index(
+                mutate_point)] = new_feature
+        else:
+            offspring.program = new_feature
 
         if inplace:
             self.program = offspring.program
             return self
 
-        new = Program(program=offspring, operations=self.operations,
+        new = Program(program=offspring.program, operations=self.operations,
                       constants_optimization=self.constants_optimization,
                       constants_optimization_conf=self.constants_optimization_conf,
                       features=self.features, const_range=self.const_range,
@@ -735,23 +777,21 @@ class Program:
         offspring = deepcopy(self.program)
 
         mutate_point = self._select_random_node(root_node=offspring)
-            
-        if not mutate_point:  # Case in which the program is only a FeatureNode. Operator mutation not possible
-            new = Program(
-                operations=self.operations,
-                constants_optimization=self.constants_optimization,
-                constants_optimization_conf=self.constants_optimization_conf,
-                features=self.features, const_range=self.const_range,
-                parsimony=self.parsimony, parsimony_decay=self.parsimony_decay
-            )
-            new.init_program()  # evaluate_fitness is already in the generate_offspring
+
+        if not mutate_point:  # Only a FeatureNode without any OperationNode
+            new = Program(program=offspring, operations=self.operations,
+                          constants_optimization=self.constants_optimization,
+                          constants_optimization_conf=self.constants_optimization_conf,
+                          features=self.features, const_range=self.const_range,
+                          parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
+
             return new
 
         new_operation = random.choice(self.operations)
-        while new_operation.arity != mutate_point.arity:
+        while new_operation['arity'] != mutate_point.arity:
             new_operation = random.choice(self.operations)
 
-        mutate_point.operation = new_operation['operation']
+        mutate_point.operation = new_operation['func']
         mutate_point.format_str = new_operation['format_str']
         mutate_point.format_tf = new_operation['format_tf']
 
