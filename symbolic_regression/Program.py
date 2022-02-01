@@ -2,13 +2,16 @@ import logging
 import random
 from copy import deepcopy
 from typing import Union
+
 import numpy as np
 import pandas as pd
+import sympy
 import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Input
 
-from symbolic_regression.Node import FeatureNode, InvalidNode, Node, OperationNode
+from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
+                                      OperationNode)
 
 
 class Program:
@@ -129,6 +132,17 @@ class Program:
         return self.program._get_operations(base_operations_used={})
 
     @property
+    def all_operations(self):
+        """ This allow to get a list of all the operations used in a program
+        """
+        return self._all_operations
+
+    @all_operations.getter
+    def all_operations(self):
+        return self.program._get_all_operations(all_operations=[])
+        
+
+    @property
     def features_used(self):
         """ This allow to get all the unique features used in the tree
         """
@@ -209,7 +223,7 @@ class Program:
         self.fitness = dict()
 
         if not self.is_valid:
-            return
+            return None
 
         n_features = len(self.get_features())
         n_constants = len(self.get_constants())
@@ -224,6 +238,7 @@ class Program:
 
             from symbolic_regression.multiobjective.optimization import \
                 NNOptimizer
+
             constants_optimizer = NNOptimizer(
                 units=1,
                 n_features=len(self.features),
@@ -247,6 +262,7 @@ class Program:
 
             inputs = Input(shape=[len(self.features)], name="Input")
 
+            tf.keras.backend.clear_session()
             model = Model(inputs=inputs, outputs=constants_optimizer(inputs))
             loss_mse = tf.keras.losses.MeanSquaredError()
             opt = tf.keras.optimizers.Adam(
@@ -298,9 +314,9 @@ class Program:
 
                     self.fitness[ftn_label + f'_{elem_index}'] = elem
                     if threshold and f <= threshold[elem_index]:
-                        self._converged.append(True)
+                        _converged.append(True)
                     else:
-                        self._converged.append(False)
+                        _converged.append(False)
 
         # Use any or all to have at least one or all fitness converged when the threshold is provided
         if len(_converged) > 0:
@@ -354,13 +370,12 @@ class Program:
 
         If the fitness of two programs are identical, we assume they are equivalent to each other.
         """
-        is_d = True
         for a_fit, b_fit in zip(self.fitness.values(), other.fitness.values()):
             # One difference is enough for them not to be identical
             if round(a_fit, 3) != round(b_fit, 3):
-                is_d = False
+                return False
 
-        return is_d
+        return True
 
     def _generate_tree(self,
                        depth=-1,
@@ -451,19 +466,16 @@ class Program:
 
     def _select_random_node(self,
                             root_node: Union[OperationNode, FeatureNode, InvalidNode],
-                            deepness: float = 0.3
+                            deepness: float = 0.15
                             ) -> Union[OperationNode, FeatureNode]:
         """ This method return a random node of a sub-tree starting from root_node.
-
-        To modulate the deepness to which the returned node will likely be, we can use
-        'deepness'. Should be between 0 and 1; the higher the value, the closest to the
-        root_node the returned node will be.
-
-        Args:
-            root_node: The node from which start the descent to select a random child node
-            deepness: This modulates how deep the returned node will be. The smaller the deeper.
         """
 
+        try:
+            return random.choice(self.all_operations)
+        except IndexError:  # When the root is also a FeatureNode or an InvalidNode
+            return None
+            
         to_return = None
 
         if random.random() < deepness:
@@ -479,6 +491,49 @@ class Program:
             to_return = root_node.father
 
         return to_return
+
+    def simplify(self, inplace: bool = False):
+        """ This method allow to simplify the structure of a program using a SymPy backend
+
+        Args:
+            inplace: set to True to overwrite the current program with the simplified one
+        """
+        from symbolic_regression.simplification import extract_operation
+
+        def simplify_program(program: Program) -> Program:
+            """ This function simplify a program using a SymPy backend
+
+            try: the root node of the program, not the Program object
+
+            """
+            try:
+                logging.debug(f'Simplifying program {program}')
+                simplified = sympy.simplify(
+                    program.program, rational=True, inverse=True)
+
+                logging.debug(
+                    f'Extracting the program tree from the simplified')
+
+                new_program = extract_operation(
+                    element=simplified, father=None)
+
+                logging.debug(f'Simplified program {new_program}')
+
+                return new_program
+
+            except UnboundLocalError:
+                return program.program
+            except sympy.core.sympify.SympifyError:
+                return program.program
+
+        if inplace:
+            self.program = simplify_program(self)
+            return self
+
+        simp = deepcopy(self)
+        simp.program = simplify_program(self)
+
+        return simp
 
     # GENETIC OPERATIONS
     def cross_over(self, other=None, inplace: bool = False) -> None:
@@ -512,7 +567,7 @@ class Program:
             )
             other.init_program()
 
-        if self.program_depth == 0 or other.program_depth == 0:
+        if self.complexity == 1 or other.complexity == 1:
             new = deepcopy(self)
             new.mutate(inplace=True)
             return new
@@ -530,16 +585,14 @@ class Program:
                 f'The two programs must have the same operations')
 
         offspring = deepcopy(self.program)
-        cross_over_point1 = self._select_random_node(root_node=offspring, deepness=.15)
+
+        cross_over_point1 = self._select_random_node(root_node=offspring)
 
         if not cross_over_point1:
             return self
 
         cross_over_point2 = deepcopy(
             self._select_random_node(root_node=other.program))
-
-        logging.debug(
-            f'\nCP1\n\n{cross_over_point1}\n\nCP2\n\n{cross_over_point2}')
 
         cross_over_point2.father = cross_over_point1.father
 
@@ -699,7 +752,8 @@ class Program:
         else:  # When the mutate point is None, can happen when program is only a FeatureNode
             return self
 
-        if len(mutate_point.operands) == 0:  # Case in which there is only a FeatureNode as root
+        # Case in which there is only a FeatureNode as root
+        if not isinstance(mutate_point, OperationNode):
             return self
 
         mutate_child = random.choice(mutate_point.operands)

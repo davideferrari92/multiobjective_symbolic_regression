@@ -13,16 +13,15 @@ from symbolic_regression.multiobjective.training import (
     generate_population,
     get_offspring,
 )
-from symbolic_regression.simplification import simplify_population
+
 
 
 class SymbolicRegressor:
     def __init__(
         self,
-        const_range: tuple,
-        constants_optimization: bool,
-        constants_optimization_conf: dict,
-        objective_functions: callable,
+        const_range: tuple=None,
+        constants_optimization: bool=None,
+        constants_optimization_conf: dict=None,
         parsimony=0.9,
         parsimony_decay=0.9,
         population_size: int = 100,
@@ -30,28 +29,51 @@ class SymbolicRegressor:
         tournament_size: int = 10,
     ) -> None:
 
-        self.population_size = population_size
-        self.population = None
+        """ This class implements the basic features for training a Symbolic Regression algorithm
+
+        Args:
+            - const_range: this is the range of values from which to generate constants in the program
+            - constants_optimization: this enable the optimization of constants within a program
+            - constants_optimization_conf: configures the neuron-based constants optimization algorithm
+            - fitness_functions: the functions to use for evaluating programs' performance
+            - parsimony: the ratio to which a new operation is chosen instead of a terminal node in program generations
+            - parsimony_decay: a modulation parameter to decrease the parsimony and limit program generation depth
+            - simplification_frequency: how often in the training are the program simplified
+            - tournament_size: this modulate the tournament selection and set the dimension of the selection
+        """
+
+        # Model characteristics
+        self.best_fitness_history = []
         self.best_program = None
         self.best_programs_history = []
-        self.fitness_history = {}
         self.converged_generation = None
+        self.fitness_history = {}
         self.generation = None
-        self.training_duration = None
+        self.population = None
+        self.population_size = population_size
         self.status = "Uninitialized"
+        self.training_duration = None
 
-        self.tournament_size = tournament_size
-        self.simplification_frequency = simplification_frequency
-        self.objective_functions = objective_functions
+        # Training configurations
         self.constants_optimization = constants_optimization
         self.constants_optimization_conf = constants_optimization_conf
         self.const_range = const_range
         self.parsimony = parsimony
         self.parsimony_decay = parsimony_decay
+        self.simplification_frequency = simplification_frequency
+        self.tournament_size = tournament_size
 
+        # Population characteristics
         self.average_complexity = None
 
     def drop_duplicates(self, inplace: bool = False) -> list:
+        """ This method removes duplicated programs
+
+        Programs are considered duplicated if they have the same performance
+
+        Args:
+            - inplace: allow to overwrite the current population or duplicate the object
+        """
 
         for index, p in enumerate(self.population):
             if p.is_valid and not p._is_duplicated:
@@ -68,6 +90,14 @@ class SymbolicRegressor:
         return list(filter(lambda p: p._is_duplicated == False, self.population))
 
     def drop_invalids(self, inplace: bool = False) -> list:
+        """ This program removes invalid programs from the population
+
+        A program can be invalid when mathematical operation are not possible
+        or if the siplification generated operation which are not supported.
+
+        Args:
+            - inplace: allow to overwrite the current population or duplicate the object
+        """
         if inplace:
             self.population = list(
                 filter(lambda p: p.is_valid == True, self.population)
@@ -82,6 +112,7 @@ class SymbolicRegressor:
         features: list,
         target: str,
         weights: str,
+        fitness_functions: dict,
         generations: int,
         genetic_operators_frequency: dict,
         operations: list,
@@ -101,6 +132,7 @@ class SymbolicRegressor:
                 features=features,
                 target=target,
                 weights=weights,
+                fitness_functions=fitness_functions,
                 generations=generations,
                 genetic_operators_frequency=genetic_operators_frequency,
                 operations=operations,
@@ -123,6 +155,7 @@ class SymbolicRegressor:
         features: list,
         target: str,
         weights: str,
+        fitness_functions: dict,
         generations: int,
         genetic_operators_frequency: dict,
         operations: list,
@@ -142,7 +175,7 @@ class SymbolicRegressor:
                     weights=weights,
                     const_range=self.const_range,
                     operations=operations,
-                    fitness=self.objective_functions,
+                    fitness=fitness_functions,
                     constants_optimization=self.constants_optimization,
                     constants_optimization_conf=self.constants_optimization_conf,
                     parsimony=self.parsimony,
@@ -156,14 +189,22 @@ class SymbolicRegressor:
         if not self.generation:
             self.generation = 0
 
+        start_time = time.perf_counter()
         while True:
             self.generation += 1
 
             start_time_generation = time.perf_counter()
+            converged_time = None
 
-            print("##############################################")
-            print("##############################################")
-            logging.info(f"Generation {self.generation}/{generations}")
+            print("#################################################################")
+            print("#################################################################")
+            seconds = round(time.perf_counter()-start_time)
+            
+            if self.generation > 1:
+                seconds_iter = round(seconds/(self.generation-1), 1)
+                logging.info(f"Generation {self.generation}/{generations} ({seconds} sec, {seconds_iter} sec/generation)")
+            else:
+                logging.info(f"Generation {self.generation}/{generations} ({seconds} sec)")
 
             logging.debug(f"Generating offspring")
             self.status = "Generating offspring"
@@ -173,7 +214,7 @@ class SymbolicRegressor:
                     data,
                     target,
                     weights,
-                    self.objective_functions,
+                    fitness_functions,
                     self.generation,
                     self.tournament_size,
                     genetic_operators_frequency,
@@ -182,22 +223,25 @@ class SymbolicRegressor:
             )
 
             self.population += offsprings
-
+            '''
             if (
                 self.simplification_frequency > 0
                 and self.generation % self.simplification_frequency == 0
             ):
-                logging.info(f"Simplifying population")
+                from symbolic_regression.simplification import simplify_population
+                logging.info(f"Simplifying first 10 elements of population")
                 self.status = "Simplifying population"
-                self.population = simplify_population(
-                    population=self.population,
-                    fitness=self.objective_functions,
+                p = simplify_population(
+                    population=self.population[:10],
+                    fitness=fitness_functions,
                     data=data,
                     target=target,
                     weights=weights,
-                    n_jobs=n_jobs,
+                    n_jobs=1,
                 )
 
+                self.population[:10] = p
+            '''
             # Removes all non valid programs in the population
             logging.debug(f"Removing duplicates")
             before_cleaning = len(self.population)
@@ -236,7 +280,7 @@ class SymbolicRegressor:
                         weights=weights,
                         const_range=self.const_range,
                         operations=operations,
-                        fitness=self.objective_functions,
+                        fitness=fitness_functions,
                         constants_optimization=self.constants_optimization,
                         constants_optimization_conf=self.constants_optimization_conf,
                         parsimony=self.parsimony,
@@ -258,13 +302,14 @@ class SymbolicRegressor:
 
             self.best_program = self.population[0]
             self.best_programs_history.append(self.best_program)
+            self.best_fitness_history.append(self.best_program.fitness)
 
             self.average_complexity = np.mean([p.complexity for p in self.population])
 
             if verbose > 0:
                 print()
                 print(
-                    f"Population of {len(self.population)} elements and average complexity of {self.average_complexity}"
+                    f"Population of {len(self.population)} elements and average complexity of {self.average_complexity}\n"
                 )
                 print(
                     f"\tBest individual (complexity {self.population[0].complexity})\n\t{self.best_program.program}"
@@ -279,7 +324,8 @@ class SymbolicRegressor:
                     print(f"3)\t{self.population[2].fitness}")
                     print(f"4)\t{self.population[3].fitness}")
                     print(f"5)\t{self.population[4].fitness}")
-                    print()
+                    print('...\t...\n')
+                    
                 except IndexError:
                     pass  # Stops printing in very small populations
 
@@ -288,16 +334,12 @@ class SymbolicRegressor:
                 f"Generation {self.generation} completed in {round(end_time_generation-start_time_generation, 1)} seconds"
             )
 
-            for fitness, value in self.best_program.fitness.items():
-                if not self.fitness_history.get(fitness):
-                    self.fitness_history[fitness] = list()
-                self.fitness_history[fitness].append(value)
-
             if self.best_program.converged:
+                converged_time = time.perf_counter()
                 if not self.converged_generation:
                     self.converged_generation = self.generation
                 logging.info(
-                    f"Training converged after {self.converged_generation} generations."
+                    f"Training converged after {self.converged_generation} generations. ({round(converged_time-start_time)} seconds)"
                 )
                 if stop_at_convergence:
                     self.status = "Terminated: converged"
@@ -320,3 +362,19 @@ class SymbolicRegressor:
 
         with open(file, "rb") as f:
             return pickle.load(f)
+
+    @property
+    def summary(self):
+        istances = []
+
+        for index, p in enumerate(self.population):
+            row = {}
+            row['rank'] = index + 1
+            row['program'] = p.program
+
+            for f_k, f_v in p.fitness:
+                row[f_k] = f_v
+
+            istances.append(row)
+
+        return pd.DataFrame(istances)

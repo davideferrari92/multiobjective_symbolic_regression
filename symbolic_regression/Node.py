@@ -93,6 +93,15 @@ class OperationNode(Node):
 
         return result
 
+    def _get_all_operations(self, all_operations=list):
+        all_operations.append(self)
+
+        for child in self.operands:
+            if isinstance(child, OperationNode):
+                all_operations = child._get_all_operations(all_operations=all_operations)
+
+        return all_operations
+
     def _get_complexity(self, base_complexity=0):
         """ This method recursively increment the complexity count of this program
         """
@@ -135,9 +144,9 @@ class OperationNode(Node):
                     features_list=features_list, return_objects=return_objects)
             elif not child.is_constant:
                 if return_objects:
-                    features_list += [child]
+                    features_list.append(child)
                 else:
-                    features_list += [child.feature]
+                    features_list.append(child.feature)
 
                     # If returning only the string with the names, we don't want duplicates
                     features_list = list(set(features_list))
@@ -236,6 +245,9 @@ class FeatureNode(Node):
 
         return result
 
+    def _get_all_operations(self, all_operations=list):
+        return all_operations
+
     def _get_complexity(self, base_complexity=0):
         """ This method increase the complexity of the program by 1
         It is usually called by an OperationNode _get_complexity which
@@ -280,11 +292,14 @@ class InvalidNode(Node):
         super().__init__(father=father)
 
         self.is_constant = True
+    
+    def _get_all_operations(self, all_operations=list):
+        return all_operations
 
-    def _get_features(self, features_list=[]):
+    def _get_features(self, features_list=list):
         return features_list
 
-    def _get_operations_used(self, base_operations_used={}):
+    def _get_operations_used(self, base_operations_used=dict):
         return base_operations_used
 
     def is_valid(self):
