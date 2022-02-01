@@ -48,7 +48,7 @@ def _protected_pow(x1, x2):
 def _sigmoid(x1):
     """Special case of logistic function to transform to probabilities."""
     with np.errstate(over='ignore', under='ignore'):
-        return 1 / (1 + np.exp(-x1))
+        return 1. / (1. + np.exp(-x1))
 
 
 OPERATOR_ADD = {
@@ -139,4 +139,11 @@ OPERATOR_MIN = {
     "format_tf": 'tf.minimum({}, {})',
     "arity": 2,
     "format_str": "min({}, {})"
+}
+
+OPERATOR_SIGMOID = {
+    "func": _sigmoid,
+    "format_tf": 'tf.sigmoid({})',
+    "arity": 1,
+    "format_str": "sigmoid({})"
 }

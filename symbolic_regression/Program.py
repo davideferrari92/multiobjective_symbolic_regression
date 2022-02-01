@@ -6,12 +6,11 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import sympy
-import tensorflow as tf
-from tensorflow.keras import Model
-from tensorflow.keras.layers import Input
+from tensorboard import program
 
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
+from symbolic_regression.multiobjective.optimization import optimize
 
 
 class Program:
@@ -51,8 +50,6 @@ class Program:
                  features: list,
                  const_range: tuple = None,
                  program: Node = None,
-                 constants_optimization: bool = False,
-                 constants_optimization_conf: dict = {},
                  parsimony: float = .9,
                  parsimony_decay: float = .85
                  ) -> None:
@@ -63,8 +60,6 @@ class Program:
             features: The list of possible features to use as terminal nodes
             const_range: The range of possible values for constant terminals in the program
             program: An existing program from which to initialize this object
-            constants_optimization: Whether to execute the neuronal-based constants optimization
-            constants_optimization_conf: Attributes for the neuronal-based constants optimization
             parsimony: the modulator that determine how deep the tree generation will go
             parsimony_decay: the modulator that decays the parsimony to prevent infinite trees
         """
@@ -74,10 +69,6 @@ class Program:
         self.const_range = const_range
         self._constants = []
         self.converged = False
-
-        self.constants_optimization = constants_optimization
-        self.constants_optimization_conf = constants_optimization_conf
-        self.constants_optimization_details = {}
 
         # Operational attributes
         self._override_is_valid = True
@@ -218,75 +209,15 @@ class Program:
 
         return self.program.evaluate(data=data)
 
-    def evaluate_fitness(self, data, fitness, target, weights):
-
+    def evaluate_fitness(self, data, fitness):
+        """
+        """
         self.fitness = dict()
 
         if not self.is_valid:
             return None
 
-        n_features = len(self.get_features())
-        n_constants = len(self.get_constants())
-
-        if not isinstance(self.program, FeatureNode) and self.constants_optimization and n_constants > 0:
-            if self.const_range:
-                const_range_min = self.const_range[0]
-                const_range_max = self.const_range[1]
-            else:
-                const_range_min = -1
-                const_range_max = 1
-
-            from symbolic_regression.multiobjective.optimization import \
-                NNOptimizer
-
-            constants_optimizer = NNOptimizer(
-                units=1,
-                n_features=len(self.features),
-                n_constants=n_constants,
-                const_range_min=const_range_min,
-                const_range_max=const_range_max,
-                exec_string=self.program.render(
-                    data=data.iloc[0, :], format_tf=True)
-            )
-
-            data_tensor = tf.constant(
-                data[self.features].to_numpy(), dtype=tf.float32)
-
-            target_tensor = tf.constant(
-                data[target].to_numpy(), dtype=tf.float32)
-            if weights:
-                weights_tensor = tf.constant(
-                    data[weights].to_numpy(), dtype=tf.float32)
-            else:
-                weights_tensor = tf.ones_like(target_tensor)
-
-            inputs = Input(shape=[len(self.features)], name="Input")
-
-            tf.keras.backend.clear_session()
-            model = Model(inputs=inputs, outputs=constants_optimizer(inputs))
-            loss_mse = tf.keras.losses.MeanSquaredError()
-            opt = tf.keras.optimizers.Adam(
-                learning_rate=self.constants_optimization_conf['learning_rate'])
-            model.compile(loss=loss_mse, optimizer=opt, run_eagerly=False)
-
-            model.fit(
-                data_tensor,
-                target_tensor,
-                sample_weight=weights_tensor,
-                batch_size=self.constants_optimization_conf['batch_size'],
-                epochs=self.constants_optimization_conf['epochs'],
-                verbose=self.constants_optimization_conf['verbose']
-            )
-
-            final_parameters = list(model.get_weights()[0][0])
-
-            self.set_constants(new=final_parameters)
-
-            for old, new in zip(self.get_constants(), final_parameters):
-                self.constants_optimization_details[old] = new
-
-        evaluated = fitness(program=self, data=data,
-                            target=target, weights=weights)
+        evaluated = fitness(program=self, data=data)
 
         _converged = []
 
@@ -475,7 +406,7 @@ class Program:
             return random.choice(self.all_operations)
         except IndexError:  # When the root is also a FeatureNode or an InvalidNode
             return None
-            
+
         to_return = None
 
         if random.random() < deepness:
@@ -560,8 +491,6 @@ class Program:
                 features=self.features,
                 const_range=self.const_range,
                 program=self.program,
-                constants_optimization=self.constants_optimization,
-                constants_optimization_conf=self.constants_optimization_conf,
                 parsimony=self.parsimony,
                 parsimony_decay=self.parsimony_decay
             )
@@ -609,8 +538,6 @@ class Program:
         new = Program(program=offspring,
                       operations=self.operations,
                       features=self.features,
-                      constants_optimization=self.constants_optimization,
-                      constants_optimization_conf=self.constants_optimization_conf,
                       const_range=self.const_range,
                       parsimony=self.parsimony,
                       parsimony_decay=self.parsimony_decay)
@@ -631,8 +558,6 @@ class Program:
             # Case in which a one FeatureNode only program is passed.
             # A new tree is generated.
             new = Program(operations=self.operations,
-                          constants_optimization=self.constants_optimization,
-                          constants_optimization_conf=self.constants_optimization_conf,
                           features=self.features,
                           const_range=self.const_range,
                           parsimony=self.parsimony,
@@ -668,8 +593,6 @@ class Program:
 
         new = Program(program=offspring,
                       operations=self.operations,
-                      constants_optimization=self.constants_optimization,
-                      constants_optimization_conf=self.constants_optimization_conf,
                       features=self.features,
                       const_range=self.const_range,
                       parsimony=self.parsimony,
@@ -693,8 +616,6 @@ class Program:
             mutate_father = mutate_point.father
         else:  # When the mutate point is None, can happen when program is only a FeatureNode
             new = Program(operations=self.operations,
-                          constants_optimization=self.constants_optimization,
-                          constants_optimization_conf=self.constants_optimization_conf,
                           features=self.features,
                           const_range=self.const_range,
                           parsimony=self.parsimony,
@@ -726,8 +647,6 @@ class Program:
 
         new = Program(program=offspring,
                       operations=self.operations,
-                      constants_optimization=self.constants_optimization,
-                      constants_optimization_conf=self.constants_optimization_conf,
                       features=self.features,
                       const_range=self.const_range,
                       parsimony=self.parsimony,
@@ -775,8 +694,6 @@ class Program:
 
         new = Program(program=offspring,
                       operations=self.operations,
-                      constants_optimization=self.constants_optimization,
-                      constants_optimization_conf=self.constants_optimization_conf,
                       features=self.features,
                       const_range=self.const_range,
                       parsimony=self.parsimony,
@@ -820,8 +737,6 @@ class Program:
             return self
 
         new = Program(program=offspring.program, operations=self.operations,
-                      constants_optimization=self.constants_optimization,
-                      constants_optimization_conf=self.constants_optimization_conf,
                       features=self.features, const_range=self.const_range,
                       parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
 
@@ -834,8 +749,6 @@ class Program:
 
         if not mutate_point:  # Only a FeatureNode without any OperationNode
             new = Program(program=offspring, operations=self.operations,
-                          constants_optimization=self.constants_optimization,
-                          constants_optimization_conf=self.constants_optimization_conf,
                           features=self.features, const_range=self.const_range,
                           parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
 
@@ -854,8 +767,6 @@ class Program:
             return self
 
         new = Program(program=offspring, operations=self.operations,
-                      constants_optimization=self.constants_optimization,
-                      constants_optimization_conf=self.constants_optimization_conf,
                       features=self.features, const_range=self.const_range,
                       parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
 

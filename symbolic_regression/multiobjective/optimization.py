@@ -1,6 +1,68 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Layer
+from symbolic_regression.Node import FeatureNode
+from tensorflow.keras import Model
+from tensorflow.keras.layers import Input, Layer
 
+
+def optimize(program, data, target, weights, constants_optimization_conf):
+    """
+    """
+    n_constants = len(program.get_constants())
+        
+    if not isinstance(program.program, FeatureNode) and n_constants > 0:
+        if program.const_range:
+            const_range_min = program.const_range[0]
+            const_range_max = program.const_range[1]
+        else:
+            const_range_min = -1
+            const_range_max = 1
+
+        from symbolic_regression.multiobjective.optimization import NNOptimizer
+
+        constants_optimizer = NNOptimizer(
+            units=1,
+            n_features=len(program.features),
+            n_constants=n_constants,
+            const_range_min=const_range_min,
+            const_range_max=const_range_max,
+            exec_string=program.program.render(
+                data=data.iloc[0, :], format_tf=True)
+        )
+
+        data_tensor = tf.constant(
+            data[program.features].to_numpy(), dtype=tf.float32)
+
+        target_tensor = tf.constant(
+            data[target].to_numpy(), dtype=tf.float32)
+        if weights:
+            weights_tensor = tf.constant(
+                data[weights].to_numpy(), dtype=tf.float32)
+        else:
+            weights_tensor = tf.ones_like(target_tensor)
+
+        inputs = Input(shape=[len(program.features)], name="Input")
+
+        tf.keras.backend.clear_session()
+        model = Model(inputs=inputs, outputs=constants_optimizer(inputs))
+        loss_mse = tf.keras.losses.MeanSquaredError()
+        opt = tf.keras.optimizers.Adam(
+            learning_rate=constants_optimization_conf['learning_rate'])
+        model.compile(loss=loss_mse, optimizer=opt, run_eagerly=False)
+
+        model.fit(
+            data_tensor,
+            target_tensor,
+            sample_weight=weights_tensor,
+            batch_size=constants_optimization_conf['batch_size'],
+            epochs=constants_optimization_conf['epochs'],
+            verbose=constants_optimization_conf['verbose']
+        )
+
+        final_parameters = list(model.get_weights()[0][0])
+
+        program.set_constants(new=final_parameters)
+
+    return program.program
 
 class NNOptimizer(Layer):
     ''' 

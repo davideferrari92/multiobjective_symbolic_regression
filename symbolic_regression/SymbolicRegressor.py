@@ -20,8 +20,6 @@ class SymbolicRegressor:
     def __init__(
         self,
         const_range: tuple=None,
-        constants_optimization: bool=None,
-        constants_optimization_conf: dict=None,
         parsimony=0.9,
         parsimony_decay=0.9,
         population_size: int = 100,
@@ -33,8 +31,6 @@ class SymbolicRegressor:
 
         Args:
             - const_range: this is the range of values from which to generate constants in the program
-            - constants_optimization: this enable the optimization of constants within a program
-            - constants_optimization_conf: configures the neuron-based constants optimization algorithm
             - fitness_functions: the functions to use for evaluating programs' performance
             - parsimony: the ratio to which a new operation is chosen instead of a terminal node in program generations
             - parsimony_decay: a modulation parameter to decrease the parsimony and limit program generation depth
@@ -55,8 +51,6 @@ class SymbolicRegressor:
         self.training_duration = None
 
         # Training configurations
-        self.constants_optimization = constants_optimization
-        self.constants_optimization_conf = constants_optimization_conf
         self.const_range = const_range
         self.parsimony = parsimony
         self.parsimony_decay = parsimony_decay
@@ -171,13 +165,9 @@ class SymbolicRegressor:
                 delayed(generate_population)(
                     data=data,
                     features=features,
-                    target=target,
-                    weights=weights,
                     const_range=self.const_range,
                     operations=operations,
                     fitness=fitness_functions,
-                    constants_optimization=self.constants_optimization,
-                    constants_optimization_conf=self.constants_optimization_conf,
                     parsimony=self.parsimony,
                     parsimony_decay=self.parsimony_decay,
                 )
@@ -212,8 +202,6 @@ class SymbolicRegressor:
                 delayed(get_offspring)(
                     self.population,
                     data,
-                    target,
-                    weights,
                     fitness_functions,
                     self.generation,
                     self.tournament_size,
@@ -223,25 +211,7 @@ class SymbolicRegressor:
             )
 
             self.population += offsprings
-            '''
-            if (
-                self.simplification_frequency > 0
-                and self.generation % self.simplification_frequency == 0
-            ):
-                from symbolic_regression.simplification import simplify_population
-                logging.info(f"Simplifying first 10 elements of population")
-                self.status = "Simplifying population"
-                p = simplify_population(
-                    population=self.population[:10],
-                    fitness=fitness_functions,
-                    data=data,
-                    target=target,
-                    weights=weights,
-                    n_jobs=1,
-                )
-
-                self.population[:10] = p
-            '''
+            
             # Removes all non valid programs in the population
             logging.debug(f"Removing duplicates")
             before_cleaning = len(self.population)
@@ -281,8 +251,6 @@ class SymbolicRegressor:
                         const_range=self.const_range,
                         operations=operations,
                         fitness=fitness_functions,
-                        constants_optimization=self.constants_optimization,
-                        constants_optimization_conf=self.constants_optimization_conf,
                         parsimony=self.parsimony,
                         parsimony_decay=self.parsimony_decay,
                     )

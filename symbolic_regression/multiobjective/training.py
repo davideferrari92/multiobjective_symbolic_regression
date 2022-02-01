@@ -9,15 +9,11 @@ from symbolic_regression.Program import Program
 def generate_population(
     data: Union[dict, pd.Series, pd.DataFrame],
     features: list,
-    target: str,
-    weights: str,
     operations: list,
     parsimony: float,
     parsimony_decay: float,
-    fitness: list,
+    fitness: dict,
     const_range: tuple,
-    constants_optimization: bool = False,
-    constants_optimization_conf: dict = {}
 ):
     """ This method generate a new program and evaluate its fitness
 
@@ -32,24 +28,19 @@ def generate_population(
         parsimony: The parsimony that modulate the depth of the program
         parsimony_decay: The decay ration to which the parsimony is decreased as the program depth increases
         const_range: The numeric range between it is accepted to generate the constants in the program
-        fitness: The list of the fitness functions
+        fitness: The dict with the fitness functions
         data: The data on to which evaluate the fitness
-        target: The label of the target column for supervised tasks
-        weights: The label of the weights columns of a weighted WMSE in case of unbalanced datasets
     """
     p = Program(
         features=features,
         operations=operations,
         const_range=const_range,
-        constants_optimization=constants_optimization,
-        constants_optimization_conf=constants_optimization_conf,
         parsimony=parsimony, parsimony_decay=parsimony_decay
     )
 
     p.init_program()
 
-    p.evaluate_fitness(fitness=fitness,
-                       data=data, target=target, weights=weights)
+    p.evaluate_fitness(fitness=fitness,data=data)
 
     return p
 
@@ -68,8 +59,8 @@ def dominance(program1: Program, program2: Program) -> bool:
     if program1.program and program2.program:
         for this_fitness in program1.fitness.keys():
             try:
-                d = program1.fitness[this_fitness] - \
-                    program2.fitness[this_fitness]
+                d = abs(program1.fitness[this_fitness]) - \
+                    abs(program2.fitness[this_fitness])
             except KeyError:
                 return True
 
@@ -212,8 +203,6 @@ def tournament_selection(population: list,
 
 def get_offspring(population: list,
                   data: pd.DataFrame,
-                  target: str,
-                  weights: str,
                   fitness: list,
                   generations: int,
                   tournament_size: int,
@@ -244,8 +233,6 @@ def get_offspring(population: list,
     Args:
         population: The population of programs from which to extract the program for the mutation
         data: The data on which to evaluate the fitness of the mutated program
-        target: The label of the target variable in the training dataset for supervised tasks
-        weights: The label of the weights columns of a weighted WMSE in case of unbalanced datasets
         fitness: The list of fitness functions for this task
         tournament_size: The size of the pool of random programs from which to choose in for the mutations
         genetic_operations_frequency: The relative frequency with which to coose the genetic operation to apply
@@ -264,12 +251,8 @@ def get_offspring(population: list,
 
     if program1 is None or not program1.is_valid:
         return program1
-    
-    #print(f'\nBefore mutation')
-    #print(program1.program)
 
     if gen_op == 'crossover':
-        #print(f'Executing crossover')
         program2 = tournament_selection(
             population=population, tournament_size=tournament_size, generation=generations
         )
@@ -278,42 +261,32 @@ def get_offspring(population: list,
         p_ret = program1.cross_over(other=program2, inplace=False)
 
     elif gen_op == 'randomize':
-        #print(f'Executing randomize')
-        p_ret = program1.cross_over(other=None, inplace=False)  # Will generate a new tree as other
-    
+        # Will generate a new tree as other
+        p_ret = program1.cross_over(other=None, inplace=False)
+
     elif gen_op == 'mutation':
-        #print(f'Executing mutation')
         p_ret = program1.mutate(inplace=False)
 
     elif gen_op == 'delete_node':
-        #print(f'Executing delete_node')
         p_ret = program1.delete_node(inplace=False)
 
     elif gen_op == 'insert_node':
-        #print(f'Executing insert_node')
         p_ret = program1.insert_node(inplace=False)
 
     elif gen_op == 'mutate_operator':
-        #print(f'Executing mutate_operator')
         p_ret = program1.mutate_operator(inplace=False)
 
     elif gen_op == 'mutate_leaf':
-        #print(f'Executing mutate_leaf')
         p_ret = program1.mutate_leaf(inplace=False)
 
     elif gen_op == 'do_nothing':
-        #print(f'Executing do_nothing')
         p_ret = program1
     else:
         logging.warning(
             f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, mutation and randomize')
         return program1
 
-    #print(f'\nAfter mutation')
-    #print(p_ret.program)
-
     # Add the fitness to the object after the cross_over or mutation
-    p_ret.evaluate_fitness(
-        fitness=fitness, data=data, target=target, weights=weights)
+    p_ret.evaluate_fitness(fitness=fitness, data=data)
 
     return p_ret
