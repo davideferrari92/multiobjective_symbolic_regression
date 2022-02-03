@@ -23,7 +23,6 @@ class SymbolicRegressor:
         parsimony=0.9,
         parsimony_decay=0.9,
         population_size: int = 100,
-        simplification_frequency: int = 0,
         tournament_size: int = 10,
     ) -> None:
 
@@ -34,7 +33,6 @@ class SymbolicRegressor:
             - fitness_functions: the functions to use for evaluating programs' performance
             - parsimony: the ratio to which a new operation is chosen instead of a terminal node in program generations
             - parsimony_decay: a modulation parameter to decrease the parsimony and limit program generation depth
-            - simplification_frequency: how often in the training are the program simplified
             - tournament_size: this modulate the tournament selection and set the dimension of the selection
         """
 
@@ -54,7 +52,6 @@ class SymbolicRegressor:
         self.const_range = const_range
         self.parsimony = parsimony
         self.parsimony_decay = parsimony_decay
-        self.simplification_frequency = simplification_frequency
         self.tournament_size = tournament_size
 
         # Population characteristics
