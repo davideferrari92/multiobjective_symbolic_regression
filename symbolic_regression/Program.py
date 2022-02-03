@@ -161,7 +161,7 @@ class Program:
 
         # Only one constant FeatureNode
         elif self.program.is_constant:
-            to_return = [self]
+            to_return = [self.program]
 
         else:
             # Only one non-constant FeatureNode
@@ -180,9 +180,10 @@ class Program:
 
         # Only one non-constant FeatureNode
         elif not self.program.is_constant:
-            return [self]
+            return [self.program]
 
         # Only one constant FeatureNode
+        # Use get_constants() to have a list of all constant FeatureNode objects
         return []
 
     def set_constants(self, new):
@@ -711,7 +712,7 @@ class Program:
     def mutate_leaf(self, inplace: bool = False):
         """ This method select a random FeatureNode and change the associated feature
 
-        The new FeatureNode is randomly generated among all features and also constants.
+        The new FeatureNode will replace one random leaf among features and constants.
 
         Args:
             inplace: to replace the program in the current object or to return a new one
@@ -720,13 +721,11 @@ class Program:
         leaves = offspring.get_features(return_objects=True) + offspring.get_constants()
 
         mutate_point = random.choice(leaves)
-        mutate_father = None
-            
-        if isinstance(mutate_point, FeatureNode):
-            mutate_father = mutate_point.father
-        else:  # When the program is only a FeatureNode mutate_point is a Program
-            mutate_father = mutate_point.program.father
+        print(leaves)
+        print(mutate_point)
+        mutate_father = mutate_point.father
 
+        # depth=0 generate a tree of only one FeatureNode
         new_feature = offspring._generate_tree(
             depth=0, father=mutate_father)
 
