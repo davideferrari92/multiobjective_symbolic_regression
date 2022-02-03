@@ -721,8 +721,6 @@ class Program:
         leaves = offspring.get_features(return_objects=True) + offspring.get_constants()
 
         mutate_point = random.choice(leaves)
-        print(leaves)
-        print(mutate_point)
         mutate_father = mutate_point.father
 
         # depth=0 generate a tree of only one FeatureNode

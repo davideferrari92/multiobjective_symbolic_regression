@@ -332,10 +332,11 @@ class SymbolicRegressor:
 
         for index, p in enumerate(self.population):
             row = {}
-            row['rank'] = index + 1
+            row['index'] = index + 1
             row['program'] = p.program
+            row['complexity'] = p.complexity
 
-            for f_k, f_v in p.fitness:
+            for f_k, f_v in p.fitness.items():
                 row[f_k] = f_v
 
             istances.append(row)
