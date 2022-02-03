@@ -717,19 +717,16 @@ class Program:
             inplace: to replace the program in the current object or to return a new one
         """
         offspring = deepcopy(self)
+        leaves = offspring.get_features(return_objects=True) + offspring.get_constants()
 
-        feats = offspring.get_features(return_objects=True)
-
+        mutate_point = random.choice(leaves)
         mutate_father = None
-        if feats:
-            mutate_point = random.choice(feats)
             
-            if isinstance(mutate_point, FeatureNode):
-                mutate_father = mutate_point.father
-            else:  # When the program is only a FeatureNode mutate_point is a Program
-                mutate_father = mutate_point.program.father
+        if isinstance(mutate_point, FeatureNode):
+            mutate_father = mutate_point.father
+        else:  # When the program is only a FeatureNode mutate_point is a Program
+            mutate_father = mutate_point.program.father
 
-        ''' To force the mutation in case, by chance, the same'''
         new_feature = offspring._generate_tree(
             depth=0, father=mutate_father)
 
@@ -743,11 +740,7 @@ class Program:
             self.program = offspring.program
             return self
 
-        new = Program(program=offspring.program, operations=self.operations,
-                      features=self.features, const_range=self.const_range,
-                      parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
-
-        return new
+        return offspring
 
     def mutate_operator(self, inplace: bool = False):
         offspring = deepcopy(self.program)

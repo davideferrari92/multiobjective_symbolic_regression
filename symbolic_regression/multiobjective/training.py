@@ -226,6 +226,7 @@ def get_offspring(population: list,
         - insertion: a newly generated subtree is inserted in a random spot of the current program
         - operator mutation: a random operation is replaced by another with the same arity
         - leaf mutation: a terminal node (feature or constant) is replaced by a different one
+        - simplify: uses a sympy backend to simplify the program ad reduce its complexity
         - do nothing: in this case no mutation is applied
 
     The frequency of which those operation are applied is determined by the dictionary
@@ -283,6 +284,9 @@ def get_offspring(population: list,
 
     elif gen_op == 'mutate_leaf':
         p_ret = program1.mutate_leaf(inplace=False)
+
+    elif gen_op == 'simplify':
+        p_ret = program1.simplify(inplace=False)
 
     elif gen_op == 'do_nothing':
         p_ret = program1
