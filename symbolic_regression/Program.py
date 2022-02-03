@@ -679,22 +679,21 @@ class Program:
         else:  # When the mutate point is None, can happen when program is only a FeatureNode
             return self
 
-        # Case in which there is only a FeatureNode as root
-        if not isinstance(mutate_point, OperationNode):
-            return self
-
         mutate_child = random.choice(mutate_point.operands)
-
         mutate_child.father = mutate_father
 
-        logging.debug(
-            f'\\nMutate Father\n{mutate_father}\n\nMutate Child\n{mutate_child}')
-
-        if mutate_father:  # Can be None if it is the root
-            mutate_father.operands[mutate_father.operands.index(
-                mutate_point)] = mutate_child
-        else:
-            offspring = mutate_child
+        try:
+            if mutate_father:  # Can be None if it is the root
+                mutate_father.operands[mutate_father.operands.index(
+                    mutate_point)] = mutate_child
+            else:
+                offspring = mutate_child
+        except AttributeError:
+            print(offspring)
+            print(mutate_point)
+            print(mutate_father)
+            print(mutate_child)
+            print()
 
         if inplace:
             self.program = offspring
