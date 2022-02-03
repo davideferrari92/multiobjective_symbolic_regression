@@ -1,4 +1,26 @@
+from copy import deepcopy
 import numpy as np
+
+from symbolic_regression.Node import OperationNode
+
+def to_logistic(program):
+    """
+    """
+    from symbolic_regression.operators import OPERATOR_SIGMOID
+    logistic_node = OperationNode(
+        operation=OPERATOR_SIGMOID['func'],
+        arity=OPERATOR_SIGMOID['arity'],
+        format_str=OPERATOR_SIGMOID['format_str'],
+        format_tf=OPERATOR_SIGMOID.get('format_tf'),
+        father=None
+    )
+    # So the upward pointer of the father is not permanent
+    copied = deepcopy(program)
+    logistic_node.operands.append(copied.program)
+    copied.program.father = logistic_node
+    copied.program = logistic_node
+    return copied
+
 
 #BORROWED FROM: https://www.geeksforgeeks.org/counting-inversions/
 # Python 3 program to count inversions in an array

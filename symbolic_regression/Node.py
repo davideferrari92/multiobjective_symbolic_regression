@@ -171,14 +171,7 @@ class OperationNode(Node):
         v = True
 
         for child in self.operands:
-            if not child or isinstance(child, InvalidNode):
-                v_c = False
-            elif isinstance(child, FeatureNode):
-                v_c = True
-            else:
-                v_c = child.is_valid()
-
-            v = v and v_c
+            v = v and child.is_valid()
 
         return v
 
@@ -262,6 +255,8 @@ class FeatureNode(Node):
         return features_list
 
     def is_valid(self):
+        if pd.isna(self.feature):
+            return False
         return True
 
     def render(self, data: Union[dict, pd.Series, None] = None, format_tf=False) -> str:

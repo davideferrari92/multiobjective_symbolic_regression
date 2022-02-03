@@ -1,11 +1,12 @@
-from copy import deepcopy
 from typing import Union
 
 import numpy as np
 import pandas as pd
-from symbolic_regression.Node import OperationNode
-from symbolic_regression.Program import Program
+import tensorflow as tf
+from sklearn.metrics import accuracy_score, log_loss
 from symbolic_regression.multiobjective.optimization import optimize
+from symbolic_regression.multiobjective.utils import to_logistic
+from symbolic_regression.Program import Program
 
 
 def binary_cross_entropy(program: Program,
@@ -16,32 +17,50 @@ def binary_cross_entropy(program: Program,
                          constants_optimization_conf: dict = {}):
 
     if logistic:
-        from symbolic_regression.operators import OPERATOR_SIGMOID
-        logistic_node = OperationNode(
-            operation=OPERATOR_SIGMOID['func'],
-            arity=OPERATOR_SIGMOID['arity'],
-            format_str=OPERATOR_SIGMOID['format_str'],
-            format_tf=OPERATOR_SIGMOID.get('format_tf'),
-            father=None
-        )
-        # So the upward pointer of the father is not permanent
-        copied = deepcopy(program)
-        logistic_node.operands.append(copied.program)
-        copied.program.father = logistic_node
-        copied.program = logistic_node
-        prog = copied
+        prog = to_logistic(program=program)
     else:
         prog = program
 
     if constants_optimization:
-        program.program = optimize(program=prog,
-                                   data=data,
-                                   target=target,
-                                   weights=None,
-                                   constants_optimization_conf=constants_optimization_conf)
+        optimized = optimize(program=prog,
+                             data=data,
+                             target=target,
+                             weights=None,
+                             constants_optimization_conf=constants_optimization_conf,
+                             task='binary:logistic')
+        prog = optimized
+        program.program = prog.program.operands[0]
+
+    pred = np.array(prog.evaluate(data=data))
+    ground_truth = data[target]
+
+    try:
+        bce = log_loss(ground_truth, pred)
+        return bce
+    except ValueError:
+        return np.inf
+
+
+def accuracy_bce(program: Program,
+                 data: Union[pd.DataFrame, pd.Series],
+                 target: str,
+                 logistic: bool = True,
+                 threshold: float = .5
+                 ):
+    if logistic:
+        prog = to_logistic(program=program)
+    else:
+        prog = program
+
+    try:
+        pred = np.array(prog.evaluate(data=data))
+        classified = (pred > threshold).astype('int')
+    except TypeError:
+        return np.nan
     
-    # B C E here
-    pass
+    ground_truth = data[target].astype('int')
+
+    return accuracy_score(ground_truth, classified, normalize=True)
 
 
 def complexity(program: Program):
@@ -60,31 +79,19 @@ def wmse(program: Program,
     """
 
     if logistic:
-        from symbolic_regression.operators import OPERATOR_SIGMOID
-        logistic_node = OperationNode(
-            operation=OPERATOR_SIGMOID['func'],
-            arity=OPERATOR_SIGMOID['arity'],
-            format_str=OPERATOR_SIGMOID['format_str'],
-            format_tf=OPERATOR_SIGMOID.get('format_tf'),
-            father=None
-        )
-        # So the upward pointer of the father is not permanent
-        copied = deepcopy(program)
-        logistic_node.operands.append(copied.program)
-        copied.program.father = logistic_node
-        copied.program = logistic_node
-        prog = copied
+        prog = to_logistic(program=program)
     else:
         prog = program
 
     if constants_optimization:
-        program.program = optimize(program=program,
-                                   data=data,
-                                   target=target,
-                                   weights=weights,
-                                   constants_optimization_conf=constants_optimization_conf
-                                   )
-            
+        prog = optimize(program=prog,
+                           data=data,
+                           target=target,
+                           weights=weights,
+                           constants_optimization_conf=constants_optimization_conf,
+                           task='regression:wmse'
+                           )
+
     pred = prog.evaluate(data=data)
 
     if weights:
@@ -110,7 +117,10 @@ def not_constant(program: Program,
 
     result = program.evaluate(data=data)
 
-    std_dev = np.std(result)
+    try:
+        std_dev = np.std(result)
+    except AttributeError:
+        return np.nan
 
     return np.max([0, epsilon - std_dev])
 

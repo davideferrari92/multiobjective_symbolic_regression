@@ -14,7 +14,7 @@ from symbolic_regression.multiobjective.training import (
     get_offspring,
 )
 
-
+backend_parallel = 'multiprocessing'
 
 class SymbolicRegressor:
     def __init__(
@@ -161,7 +161,7 @@ class SymbolicRegressor:
         if not self.population:
             logging.info(f"Initializing population")
             self.status = "Generating population"
-            self.population = Parallel(n_jobs=n_jobs)(
+            self.population = Parallel(n_jobs=n_jobs, backend=backend_parallel)(
                 delayed(generate_population)(
                     data=data,
                     features=features,
@@ -192,13 +192,13 @@ class SymbolicRegressor:
             
             if self.generation > 1:
                 seconds_iter = round(seconds/(self.generation-1), 1)
-                logging.info(f"Generation {self.generation}/{generations} ({seconds} sec, {seconds_iter} sec/generation)")
+                print(f"Generation {self.generation}/{generations} ({seconds} sec, {seconds_iter} sec/generation)")
             else:
-                logging.info(f"Generation {self.generation}/{generations} ({seconds} sec)")
+                print(f"Generation {self.generation}/{generations} ({seconds} sec)")
 
             logging.debug(f"Generating offspring")
             self.status = "Generating offspring"
-            offsprings = Parallel(n_jobs=n_jobs, prefer="processes")(
+            offsprings = Parallel(n_jobs=n_jobs, backend=backend_parallel)(
                 delayed(get_offspring)(
                     self.population,
                     data,
@@ -232,29 +232,27 @@ class SymbolicRegressor:
                 )
 
             # Integrate population in case of too many invalid programs
-            if len(self.population) < self.population_size:
+            if len(self.population) < self.population_size*2:
                 self.status = "Refilling population"
-                missing_elements = self.population_size - len(self.population)
+                missing_elements = 2*self.population_size - len(self.population)
 
                 logging.warning(
-                    f"Population of {len(self.population)} elements is less than population_size:{self.population_size*2}. Integrating with {missing_elements} new elements"
+                    f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements"
                 )
 
                 self.population += Parallel(
-                    n_jobs=-1, prefer="processes", batch_size=28
+                    n_jobs=-1, batch_size=28, backend=backend_parallel
                 )(
                     delayed(generate_population)(
                         data=data,
                         features=features,
-                        target=target,
-                        weights=weights,
                         const_range=self.const_range,
                         operations=operations,
                         fitness=fitness_functions,
                         parsimony=self.parsimony,
                         parsimony_decay=self.parsimony_decay,
                     )
-                    for _ in range(missing_elements+self.population_size)
+                    for _ in range(missing_elements)
                 )
 
             logging.debug(f"Creating pareto front")

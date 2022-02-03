@@ -147,7 +147,7 @@ class Program:
     def is_valid(self):
         """ The validity of a program represent its executability and absence of errors or inconsistencies
         """
-        return self.program.is_valid and self._override_is_valid
+        return self.program.is_valid() and self._override_is_valid
 
     def get_constants(self):
         """ This method allow to get all constants used in a tree.
@@ -213,6 +213,7 @@ class Program:
         """
         """
         self.fitness = dict()
+        self.is_fitness_to_minimize = dict()
 
         if not self.is_valid:
             return None
@@ -225,7 +226,11 @@ class Program:
 
             f = ftn['func']
 
-            threshold = ftn.get('threshold')
+            minimize = True
+            if ftn.get('minimize') == False:  # Exclude non minimizing fitnesses from convergence
+                minimize = False
+
+            convergence_threshold = ftn.get('convergence_threshold')
 
             if isinstance(f, float) or isinstance(f, int) or isinstance(f, np.float):
                 if pd.isna(f):
@@ -233,10 +238,11 @@ class Program:
                     self._override_is_valid = False
 
                 self.fitness[ftn_label] = f
+                self.is_fitness_to_minimize[ftn_label] = minimize
 
-                if threshold and f <= threshold:
+                if convergence_threshold and f <= convergence_threshold:
                     _converged.append(True)
-                    logging.debug(f'Converged {ftn_label}: {f} <= {threshold}')
+                    logging.debug(f'Converged {ftn_label}: {f} <= {convergence_threshold}')
             elif isinstance(f, tuple):
                 for elem_index, elem in enumerate(f):
                     if pd.isna(f):
@@ -244,12 +250,12 @@ class Program:
                         self._override_is_valid = False
 
                     self.fitness[ftn_label + f'_{elem_index}'] = elem
-                    if threshold and f <= threshold[elem_index]:
+                    if convergence_threshold and f <= convergence_threshold[elem_index]:
                         _converged.append(True)
                     else:
                         _converged.append(False)
 
-        # Use any or all to have at least one or all fitness converged when the threshold is provided
+        # Use any or all to have at least one or all fitness converged when the convergence_threshold is provided
         if len(_converged) > 0:
             self.converged = all(_converged)
 
@@ -301,9 +307,10 @@ class Program:
 
         If the fitness of two programs are identical, we assume they are equivalent to each other.
         """
-        for a_fit, b_fit in zip(self.fitness.values(), other.fitness.values()):
+        for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(), other.fitness.items()):
             # One difference is enough for them not to be identical
-            if round(a_fit, 3) != round(b_fit, 3):
+            
+            if round(a_fit, 2) != round(b_fit, 2):
                 return False
 
         return True
@@ -716,7 +723,7 @@ class Program:
         mutate_father = None
         if feats:
             mutate_point = random.choice(feats)
-
+            
             if isinstance(mutate_point, FeatureNode):
                 mutate_father = mutate_point.father
             else:  # When the program is only a FeatureNode mutate_point is a Program

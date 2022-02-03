@@ -58,12 +58,13 @@ def dominance(program1: Program, program2: Program) -> bool:
 
     if program1.program and program2.program:
         for this_fitness in program1.fitness.keys():
-            try:
-                d = abs(program1.fitness[this_fitness]) - \
-                    abs(program2.fitness[this_fitness])
-            except KeyError:
-                return True
-
+            # Ignore the fitness which are not to be optimized
+            if program1.is_fitness_to_minimize[this_fitness] == False:
+                continue
+            
+            d = abs(program1.fitness[this_fitness]) - \
+                abs(program2.fitness[this_fitness])
+            
             if d < 0:
                 at_least_one_less_than_zero = True
             if d > 0:
@@ -117,7 +118,7 @@ def create_pareto_front(population: list):
                     next_pareto_front.append(p2)
 
         i += 1
-        #logging.debug(f'Pareto Front: entering rank {i}')
+
         pareto_front = next_pareto_front
 
 
@@ -140,6 +141,10 @@ def crowding_distance(population: list):
 
     while pareto_front:  # Exits when extract_pareto_front return an empty list
         for obj in objectives:
+            # This exclude the fitness functions which are set not to be minimized
+            if population[0].is_fitness_to_minimize[obj] == False:
+                continue
+            
             # Highest fitness first for each objective
             pareto_front.sort(key=lambda p: p.fitness[obj], reverse=True)
 

@@ -8,7 +8,7 @@ from joblib import Parallel, delayed
 
 from symbolic_regression.Node import FeatureNode, InvalidNode, OperationNode
 from symbolic_regression.operators import *
-from symbolic_regression.Program import Program
+
 
 
 def extract_operation(element, father=None):
@@ -101,7 +101,8 @@ def extract_operation(element, father=None):
 
     return new_operation 
 
-
+'''
+from symbolic_regression.Program import Program
 def simplify_program(program: Program) -> Program:
     """
 
@@ -186,3 +187,4 @@ def simplify_population(population: list,
     logging.info(f'Simplified in {round(end_time-start_time, 2)} seconds')
 
     return population
+'''

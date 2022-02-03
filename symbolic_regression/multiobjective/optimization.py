@@ -3,12 +3,25 @@ from symbolic_regression.Node import FeatureNode
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Input, Layer
 
+from silence_tensorflow import silence_tensorflow
+silence_tensorflow()
 
-def optimize(program, data, target, weights, constants_optimization_conf):
+
+def optimize(
+        program,
+        data,
+        target,
+        weights,
+        constants_optimization_conf,
+        task):
     """
     """
+    if task not in ['regression:wmse', 'binary:logistic']:
+        raise AttributeError(
+            f'Task supported are regression:wmse or binary:logistic')
+
     n_constants = len(program.get_constants())
-        
+
     if not isinstance(program.program, FeatureNode) and n_constants > 0:
         if program.const_range:
             const_range_min = program.const_range[0]
@@ -44,10 +57,18 @@ def optimize(program, data, target, weights, constants_optimization_conf):
 
         tf.keras.backend.clear_session()
         model = Model(inputs=inputs, outputs=constants_optimizer(inputs))
-        loss_mse = tf.keras.losses.MeanSquaredError()
+
+        # https://keras.io/api/losses/
+        if task == 'regression:wmse':
+            # https://keras.io/api/losses/regression_losses/#meansquarederror-class
+            loss = tf.keras.losses.MeanSquaredError()
+        elif task == 'binary:logistic':
+            # https://keras.io/api/losses/probabilistic_losses/#binarycrossentropy-class
+            loss = tf.keras.losses.BinaryCrossentropy()
+
         opt = tf.keras.optimizers.Adam(
             learning_rate=constants_optimization_conf['learning_rate'])
-        model.compile(loss=loss_mse, optimizer=opt, run_eagerly=False)
+        model.compile(loss=loss, optimizer=opt, run_eagerly=False, metrics=['accuracy'])
 
         model.fit(
             data_tensor,
@@ -62,7 +83,8 @@ def optimize(program, data, target, weights, constants_optimization_conf):
 
         program.set_constants(new=final_parameters)
 
-    return program.program
+    return program
+
 
 class NNOptimizer(Layer):
     ''' 
