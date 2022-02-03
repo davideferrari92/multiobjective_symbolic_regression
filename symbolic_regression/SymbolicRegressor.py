@@ -1,4 +1,3 @@
-import copy
 import logging
 import time
 from typing import Union
@@ -14,7 +13,7 @@ from symbolic_regression.multiobjective.training import (
     get_offspring,
 )
 
-backend_parallel = 'multiprocessing'
+backend_parallel = 'loky'
 
 class SymbolicRegressor:
     def __init__(
@@ -37,11 +36,8 @@ class SymbolicRegressor:
         """
 
         # Model characteristics
-        self.best_fitness_history = []
-        self.best_program = None
         self.best_programs_history = []
         self.converged_generation = None
-        self.fitness_history = {}
         self.generation = None
         self.population = None
         self.population_size = population_size
@@ -263,10 +259,8 @@ class SymbolicRegressor:
             self.population.sort(reverse=False)
             self.population = self.population[: self.population_size]
 
-            self.best_program = self.population[0]
             self.best_programs_history.append(self.best_program)
-            self.best_fitness_history.append(self.best_program.fitness)
-
+                        
             self.average_complexity = np.mean([p.complexity for p in self.population])
 
             if verbose > 0:
@@ -341,4 +335,21 @@ class SymbolicRegressor:
 
             istances.append(row)
 
+        return pd.DataFrame(istances)
+
+    @property
+    def best_history(self):
+        istances = []
+
+        for index, p in enumerate(self.best_programs_history):
+            row = {}
+            row['generation'] = index + 1
+            row['program'] = p.program
+            row['complexity'] = p.complexity
+
+            for f_k, f_v in p.fitness.items():
+                row[f_k] = f_v
+
+            istances.append(row)
+        istances.reverse()
         return pd.DataFrame(istances)
