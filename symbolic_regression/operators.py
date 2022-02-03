@@ -38,7 +38,7 @@ def _protected_pow(x1, x2):
     """Closure of pow for zero arguments."""
     with np.errstate(divide='ignore', invalid='ignore'):
         try:
-            return math.pow(abs(x1), x2)
+            return math.pow(np.abs(x1), x2)
         except OverflowError:
             return 0.
         except ValueError:  # The math domain error
@@ -94,7 +94,7 @@ OPERATOR_NEG = {
 }
 
 OPERATOR_ABS = {
-    "func": operator.abs,
+    "func": np.abs,
     "format_tf": 'tf.abs({})',
     "arity": 1,
     "format_str": "abs({})"

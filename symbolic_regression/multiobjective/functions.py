@@ -1,9 +1,9 @@
+import math
 from typing import Union
 
 import numpy as np
 import pandas as pd
-import tensorflow as tf
-from sklearn.metrics import accuracy_score, log_loss
+from sklearn.metrics import accuracy_score, log_loss, roc_auc_score, roc_curve
 from symbolic_regression.multiobjective.optimization import optimize
 from symbolic_regression.multiobjective.utils import to_logistic
 from symbolic_regression.Program import Program
@@ -30,6 +30,7 @@ def binary_cross_entropy(program: Program,
                              task='binary:logistic')
         prog = optimized
         program.program = prog.program.operands[0]
+        program.program.father = None
 
     pred = np.array(prog.evaluate(data=data))
     ground_truth = data[target]
@@ -54,14 +55,71 @@ def accuracy_bce(program: Program,
 
     try:
         pred = np.array(prog.evaluate(data=data))
-        classified = (pred > threshold).astype('int')
+        pred = (pred > threshold).astype('int')
     except TypeError:
         return np.nan
-    
+
     ground_truth = data[target].astype('int')
 
-    return accuracy_score(ground_truth, classified, normalize=True)
+    return accuracy_score(ground_truth, pred, normalize=True)
 
+
+def auroc_bce(program: Program,
+              data: Union[pd.DataFrame, pd.Series],
+              target: str,
+              logistic: bool = True):
+    """
+    We compute ROC curve at different threshold values.
+    The function returns the AUC and the performance at the optimal
+    threshold expressed by means of G-mean value.
+    """
+    if logistic:
+        prog = to_logistic(program=program)
+    else:
+        prog = program
+
+    try:
+        pred = np.array(prog.evaluate(data=data))
+        ground_truth = data[target].astype('int')
+        # 1- is because the Pareto optimality minimizes the fitness function
+        # instead the AUC should be maximized
+        return 1-roc_auc_score(ground_truth, pred)
+
+    except TypeError:
+        return np.inf
+    except ValueError:
+        return np.inf
+
+
+def gmeans(program: Program,
+           data: Union[pd.DataFrame, pd.Series],
+           target: str,
+           logistic: bool = True):
+    """
+    Best performance at the threshold variation.
+    Interpret this as the accuracy with the best threshold
+    """
+    if logistic:
+        prog = to_logistic(program=program)
+    else:
+        prog = program
+
+    try:
+        pred = np.array(prog.evaluate(data=data))
+        if len(pred) == 0:
+            return np.inf
+    except TypeError:
+        return np.inf
+
+    ground_truth = data[target]
+    fpr, tpr, thresholds = roc_curve(ground_truth, pred)
+    gmeans = np.sqrt(tpr * (1-fpr))
+    best_gmean = gmeans[np.argmax(gmeans)]
+
+    # 1- is because the Pareto optimality minimizes the fitness function
+    # instead the G-mean should be maximized
+    return 1 - best_gmean
+    
 
 def complexity(program: Program):
     return program.complexity
@@ -71,28 +129,23 @@ def wmse(program: Program,
          data: Union[pd.DataFrame, pd.Series],
          target: str,
          weights: str = None,
-         logistic: bool = False,
          constants_optimization: bool = False,
          constants_optimization_conf: dict = {}
          ) -> float:
     """ Evaluates the weighted mean squared error
     """
 
-    if logistic:
-        prog = to_logistic(program=program)
-    else:
-        prog = program
-
     if constants_optimization:
-        prog = optimize(program=prog,
-                           data=data,
-                           target=target,
-                           weights=weights,
-                           constants_optimization_conf=constants_optimization_conf,
-                           task='regression:wmse'
-                           )
+        optimized = optimize(program=program,
+                             data=data,
+                             target=target,
+                             weights=weights,
+                             constants_optimization_conf=constants_optimization_conf,
+                             task='regression:wmse'
+                             )
+        program.program = optimized.program
 
-    pred = prog.evaluate(data=data)
+    pred = optimized.evaluate(data=data)
 
     if weights:
         wmse = (((pred - data[target]) ** 2) * data[weights]).mean()
