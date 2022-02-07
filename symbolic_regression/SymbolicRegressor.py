@@ -18,6 +18,8 @@ backend_parallel = 'loky'
 class SymbolicRegressor:
     def __init__(
         self,
+        checkpoint_file: str = None,
+        checkpoint_frequency: int = -1,
         const_range: tuple=None,
         parsimony=0.9,
         parsimony_decay=0.9,
@@ -46,6 +48,8 @@ class SymbolicRegressor:
         self.training_duration = None
 
         # Training configurations
+        self.checkpoint_file = checkpoint_file
+        self.checkpoint_frequency = checkpoint_frequency
         self.const_range = const_range
         self.parsimony = parsimony
         self.parsimony_decay = parsimony_decay
@@ -303,6 +307,12 @@ class SymbolicRegressor:
                 if stop_at_convergence:
                     self.status = "Terminated: converged"
                     return
+
+            if self.checkpoint_file and self.checkpoint_frequency > 0 and self.checkpoint_frequency == self.generation:
+                try:
+                    self.save_model(file=self.checkpoint_file)
+                except FileNotFoundError:
+                    logging.warning(f'FileNotFoundError raised in checkpoint saving')
 
             # Use generations = -1 to rely only on convergence (risk of infinite loop)
             if generations > 0 and self.generation == generations:
