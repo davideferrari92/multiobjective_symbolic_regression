@@ -186,13 +186,8 @@ class SymbolicRegressor:
 
             print("#################################################################")
             print("#################################################################")
-            seconds = round(time.perf_counter()-start_time)
             
-            if self.generation > 1:
-                seconds_iter = round(seconds/(self.generation-1), 1)
-                print(f"Generation {self.generation}/{generations} ({seconds} sec, {seconds_iter} sec/generation)")
-            else:
-                print(f"Generation {self.generation}/{generations} ({seconds} sec)")
+            print(f"Generation {self.generation}/{generations}")
 
             logging.debug(f"Generating offspring")
             self.status = "Generating offspring"
@@ -293,10 +288,7 @@ class SymbolicRegressor:
                     pass  # Stops printing in very small populations
 
             end_time_generation = time.perf_counter()
-            logging.debug(
-                f"Generation {self.generation} completed in {round(end_time_generation-start_time_generation, 1)} seconds"
-            )
-
+            
             if self.best_program.converged:
                 converged_time = time.perf_counter()
                 if not self.converged_generation:
@@ -319,6 +311,13 @@ class SymbolicRegressor:
                 logging.info(f"Training terminated after {self.generation} generations")
                 self.status = "Terminated: generations completed"
                 return
+
+            seconds = round(time.perf_counter()-start_time)
+            if self.generation > 1:
+                seconds_iter = round(seconds/(self.generation-1), 1)
+                print(f"{seconds} sec, {seconds_iter} sec/generation")
+            else:
+                print(f"{seconds} sec")
 
     def save_model(self, file: str):
         import pickle
