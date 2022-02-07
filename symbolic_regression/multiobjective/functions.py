@@ -105,7 +105,7 @@ def recall_bce(program: Program,
 
     ground_truth = data[target].astype('int')
 
-    return recall_score(ground_truth, pred, normalize=True)
+    return recall_score(ground_truth, pred)
 
 
 def f1_bce(program: Program,
