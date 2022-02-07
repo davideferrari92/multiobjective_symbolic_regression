@@ -6,11 +6,9 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import sympy
-from tensorboard import program
 
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
-from symbolic_regression.multiobjective.optimization import optimize
 
 
 class Program:
@@ -233,28 +231,16 @@ class Program:
 
             convergence_threshold = ftn.get('convergence_threshold')
 
-            if isinstance(f, float) or isinstance(f, int) or isinstance(f, np.float):
-                if pd.isna(f):
-                    f = np.inf
-                    self._override_is_valid = False
+            if pd.isna(f):
+                f = np.inf
+                self._override_is_valid = False
 
-                self.fitness[ftn_label] = f
-                self.is_fitness_to_minimize[ftn_label] = minimize
+            self.fitness[ftn_label] = f
+            self.is_fitness_to_minimize[ftn_label] = minimize
 
-                if convergence_threshold and f <= convergence_threshold:
-                    _converged.append(True)
-                    logging.debug(f'Converged {ftn_label}: {f} <= {convergence_threshold}')
-            elif isinstance(f, tuple):
-                for elem_index, elem in enumerate(f):
-                    if pd.isna(f):
-                        f = np.inf
-                        self._override_is_valid = False
-
-                    self.fitness[ftn_label + f'_{elem_index}'] = elem
-                    if convergence_threshold and f <= convergence_threshold[elem_index]:
-                        _converged.append(True)
-                    else:
-                        _converged.append(False)
+            if convergence_threshold and f <= convergence_threshold:
+                _converged.append(True)
+                logging.debug(f'Converged {ftn_label}: {f} <= {convergence_threshold}')
 
         # Use any or all to have at least one or all fitness converged when the convergence_threshold is provided
         if len(_converged) > 0:
