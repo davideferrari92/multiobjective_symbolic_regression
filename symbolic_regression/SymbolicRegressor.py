@@ -133,6 +133,7 @@ class SymbolicRegressor:
                 verbose=verbose
             )
         except KeyboardInterrupt:
+            self.generation -= 1  # The increment is applied even if the generation is interrupted
             stop = time.perf_counter()
             self.training_duration = stop - start
             self.status = "Interrupted by KeyboardInterrupt"
