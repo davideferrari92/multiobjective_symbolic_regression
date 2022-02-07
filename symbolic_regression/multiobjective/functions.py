@@ -3,7 +3,7 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, log_loss, roc_auc_score, roc_curve
+from sklearn.metrics import accuracy_score, f1_score, log_loss, precision_score, recall_score, roc_auc_score, roc_curve
 from symbolic_regression.multiobjective.optimization import optimize
 from symbolic_regression.multiobjective.utils import to_logistic
 from symbolic_regression.Program import Program
@@ -61,7 +61,73 @@ def accuracy_bce(program: Program,
 
     ground_truth = data[target].astype('int')
 
-    return accuracy_score(ground_truth, pred, normalize=True)
+    return accuracy_score(ground_truth, pred)
+
+
+def precision_bce(program: Program,
+                  data: Union[pd.DataFrame, pd.Series],
+                  target: str,
+                  logistic: bool = True,
+                  threshold: float = .5
+                  ):
+    if logistic:
+        prog = to_logistic(program=program)
+    else:
+        prog = program
+
+    try:
+        pred = np.array(prog.evaluate(data=data))
+        pred = (pred > threshold).astype('int')
+    except TypeError:
+        return np.nan
+
+    ground_truth = data[target].astype('int')
+
+    return precision_score(ground_truth, pred)
+
+
+def recall_bce(program: Program,
+               data: Union[pd.DataFrame, pd.Series],
+               target: str,
+               logistic: bool = True,
+               threshold: float = .5
+               ):
+    if logistic:
+        prog = to_logistic(program=program)
+    else:
+        prog = program
+
+    try:
+        pred = np.array(prog.evaluate(data=data))
+        pred = (pred > threshold).astype('int')
+    except TypeError:
+        return np.nan
+
+    ground_truth = data[target].astype('int')
+
+    return recall_score(ground_truth, pred, normalize=True)
+
+
+def f1_bce(program: Program,
+           data: Union[pd.DataFrame, pd.Series],
+           target: str,
+           logistic: bool = True,
+           threshold: float = .5
+           ):
+    if logistic:
+        prog = to_logistic(program=program)
+    else:
+        prog = program
+
+    try:
+        pred = np.array(prog.evaluate(data=data))
+        pred = (pred > threshold).astype('int')
+    except TypeError:
+        return np.nan
+
+    ground_truth = data[target].astype('int')
+
+    return f1_score(ground_truth, pred)
 
 
 def auroc_bce(program: Program,
@@ -119,7 +185,7 @@ def gmeans(program: Program,
     # 1- is because the Pareto optimality minimizes the fitness function
     # instead the G-mean should be maximized
     return 1 - best_gmean
-    
+
 
 def complexity(program: Program):
     return program.complexity
