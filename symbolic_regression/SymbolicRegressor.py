@@ -36,6 +36,7 @@ class SymbolicRegressor:
         """
 
         # Model characteristics
+        self.best_program = None
         self.best_programs_history = []
         self.converged_generation = None
         self.generation = None
@@ -259,6 +260,7 @@ class SymbolicRegressor:
             self.population.sort(reverse=False)
             self.population = self.population[: self.population_size]
 
+            self.best_program = self.population[0]
             self.best_programs_history.append(self.best_program)
                         
             self.average_complexity = np.mean([p.complexity for p in self.population])
