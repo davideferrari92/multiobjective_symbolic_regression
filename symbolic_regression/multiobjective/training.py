@@ -83,9 +83,9 @@ def create_pareto_front(population: list):
 
     # Loop over the entire matrix, can be optimised to do only the triangular matrix
     for p1 in population:
-        if not p1:
-            continue
 
+        if not p1.is_valid:
+            continue
         p1.programs_dominates = []
         p1.programs_dominated_by = []
 
@@ -110,7 +110,11 @@ def create_pareto_front(population: list):
         next_pareto_front = []
 
         for p1 in pareto_front:
+            if not p1.is_valid:
+                continue
             for p2 in p1.programs_dominates:
+                if not p2.is_valid:
+                    continue
                 p2.programs_dominated_by.remove(p1)
 
                 if len(p2.programs_dominated_by) == 0:
