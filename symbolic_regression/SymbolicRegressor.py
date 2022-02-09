@@ -110,6 +110,7 @@ class SymbolicRegressor:
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
+        timeout_offspring: float = None,
         verbose: int = 0
     ):
         """This method support a KeyboardInterruption of the fit process
@@ -130,6 +131,7 @@ class SymbolicRegressor:
                 operations=operations,
                 n_jobs=n_jobs,
                 stop_at_convergence=stop_at_convergence,
+                timeout_offspring=timeout_offspring,
                 verbose=verbose
             )
         except KeyboardInterrupt:
@@ -154,6 +156,7 @@ class SymbolicRegressor:
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
+        timeout_offspring: float = None,
         verbose: int = 0
     ) -> list:
 
@@ -192,18 +195,26 @@ class SymbolicRegressor:
 
             logging.debug(f"Generating offspring")
             self.status = "Generating offspring"
-            offsprings = Parallel(n_jobs=n_jobs, backend=backend_parallel)(
-                delayed(get_offspring)(
-                    self.population,
-                    data,
-                    fitness_functions,
-                    self.generation,
-                    self.tournament_size,
-                    genetic_operators_frequency,
-                )
-                for _ in range(self.population_size)
-            )
+            
+            offsprings = []
 
+            import concurrent.futures
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                for _ in range(self.population_size):
+                    offsprings.append(
+                        executor.submit(
+                            get_offspring,
+                            self.population,
+                            data,
+                            fitness_functions,
+                            self.generation,
+                            self.tournament_size,
+                            genetic_operators_frequency
+                        )
+                    )
+                    
+            offsprings = [o.result() for o in offsprings]
+            
             self.population += offsprings
             
             # Removes all non valid programs in the population
