@@ -1,32 +1,31 @@
 import logging
+import os
 import time
 from typing import Union
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from joblib.parallel import Parallel, delayed
 
-from symbolic_regression.multiobjective.training import (
-    create_pareto_front,
-    crowding_distance,
-    generate_population,
-    get_offspring,
-)
+from symbolic_regression.multiobjective.training import (create_pareto_front,
+                                                         crowding_distance,
+                                                         generate_population,
+                                                         get_offspring)
 
 backend_parallel = 'loky'
+
 
 class SymbolicRegressor:
     def __init__(
         self,
         checkpoint_file: str = None,
         checkpoint_frequency: int = -1,
-        const_range: tuple=None,
+        const_range: tuple = None,
         parsimony=0.9,
         parsimony_decay=0.9,
         population_size: int = 100,
         tournament_size: int = 10,
     ) -> None:
-
         """ This class implements the basic features for training a Symbolic Regression algorithm
 
         Args:
@@ -69,7 +68,7 @@ class SymbolicRegressor:
 
         for index, p in enumerate(self.population):
             if p.is_valid and not p._is_duplicated:
-                for p_confront in self.population[index + 1 :]:
+                for p_confront in self.population[index + 1:]:
                     if p.is_duplicate(p_confront):
                         p_confront._is_duplicated = True  # Makes p.is_valid = False
 
@@ -190,16 +189,21 @@ class SymbolicRegressor:
 
             print("#################################################################")
             print("#################################################################")
-            
+
             print(f"Generation {self.generation}/{generations}")
 
             logging.debug(f"Generating offspring")
             self.status = "Generating offspring"
-            
+
             offsprings = []
 
+            if n_jobs > 0:
+                m_workers = n_jobs
+            else:
+                m_workers = os.cpu_count()
+
             import concurrent.futures
-            with concurrent.futures.ProcessPoolExecutor() as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=m_workers) as executor:
                 for _ in range(self.population_size):
                     offsprings.append(
                         executor.submit(
@@ -212,11 +216,11 @@ class SymbolicRegressor:
                             genetic_operators_frequency
                         )
                     )
-                    
+
             offsprings = [o.result() for o in offsprings]
-            
+
             self.population += offsprings
-            
+
             # Removes all non valid programs in the population
             logging.debug(f"Removing duplicates")
             before_cleaning = len(self.population)
@@ -239,7 +243,8 @@ class SymbolicRegressor:
             # Integrate population in case of too many invalid programs
             if len(self.population) < self.population_size*2:
                 self.status = "Refilling population"
-                missing_elements = 2*self.population_size - len(self.population)
+                missing_elements = 2*self.population_size - \
+                    len(self.population)
 
                 logging.warning(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements"
@@ -273,8 +278,9 @@ class SymbolicRegressor:
 
             self.best_program = self.population[0]
             self.best_programs_history.append(self.best_program)
-                        
-            self.average_complexity = np.mean([p.complexity for p in self.population])
+
+            self.average_complexity = np.mean(
+                [p.complexity for p in self.population])
 
             if verbose > 0:
                 print()
@@ -295,12 +301,12 @@ class SymbolicRegressor:
                     print(f"4)\t{self.population[3].fitness}")
                     print(f"5)\t{self.population[4].fitness}")
                     print('...\t...\n')
-                    
+
                 except IndexError:
                     pass  # Stops printing in very small populations
 
             end_time_generation = time.perf_counter()
-            
+
             if self.best_program.converged:
                 converged_time = time.perf_counter()
                 if not self.converged_generation:
@@ -316,11 +322,13 @@ class SymbolicRegressor:
                 try:
                     self.save_model(file=self.checkpoint_file)
                 except FileNotFoundError:
-                    logging.warning(f'FileNotFoundError raised in checkpoint saving')
+                    logging.warning(
+                        f'FileNotFoundError raised in checkpoint saving')
 
             # Use generations = -1 to rely only on convergence (risk of infinite loop)
             if generations > 0 and self.generation == generations:
-                logging.info(f"Training terminated after {self.generation} generations")
+                logging.info(
+                    f"Training terminated after {self.generation} generations")
                 self.status = "Terminated: generations completed"
                 return
 
