@@ -90,6 +90,23 @@ class Program:
             self.program: Node = InvalidNode()
             self.fitness = float(np.inf)
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        try:
+            cls = self.__class__
+            result = cls.__new__(cls)
+            memo[id(self)] = result
+            for k, v in self.__dict__.items():
+                setattr(result, k, deepcopy(v, memo))
+            return result
+        except RecursionError:
+            logging.warning(f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}')
+
     @property
     def complexity(self):
         """ The complexity of a program is the number of nodes (OperationNodes or FeatureNodes)
@@ -139,7 +156,7 @@ class Program:
 
     @features_used.getter
     def features_used(self):
-        return self.get_features(features_list=[])
+        return self.program._get_features(features_list=[])
 
     @property
     def is_valid(self):
@@ -401,21 +418,6 @@ class Program:
         except IndexError:  # When the root is also a FeatureNode or an InvalidNode
             return None
 
-        to_return = None
-
-        if random.random() < deepness:
-            to_return = root_node
-
-            if not isinstance(to_return, OperationNode):
-                to_return = root_node.father
-
-        elif isinstance(root_node, OperationNode):
-            to_return = self._select_random_node(
-                root_node=random.choice(root_node.operands), deepness=deepness)
-        else:  # The root_node is a FeatureNode or an InvalidNode. Returning its father.
-            to_return = root_node.father
-
-        return to_return
 
     def simplify(self, inplace: bool = False):
         """ This method allow to simplify the structure of a program using a SymPy backend
@@ -432,10 +434,15 @@ class Program:
 
             """
             try:
+                if isinstance(program.program, FeatureNode):
+                    return program.program
+
                 logging.debug(f'Simplifying program {program}')
+                                    
                 simplified = sympy.simplify(
                     program.program, rational=True, inverse=True)
 
+                
                 logging.debug(
                     f'Extracting the program tree from the simplified')
 
@@ -448,8 +455,6 @@ class Program:
 
             except UnboundLocalError:
                 return program.program
-            except sympy.core.sympify.SympifyError:
-                return program.program
 
         if inplace:
             self.program = simplify_program(self)
@@ -457,7 +462,7 @@ class Program:
 
         simp = deepcopy(self)
         simp.program = simplify_program(self)
-
+        
         return simp
 
     # GENETIC OPERATIONS
@@ -702,7 +707,11 @@ class Program:
         Args:
             inplace: to replace the program in the current object or to return a new one
         """
-        offspring = deepcopy(self)
+        try:
+            offspring = deepcopy(self)
+        except RecursionError:
+            return self
+            
         leaves = offspring.get_features(return_objects=True) + offspring.get_constants()
 
         mutate_point = random.choice(leaves)
