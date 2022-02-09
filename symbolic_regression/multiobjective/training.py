@@ -285,14 +285,14 @@ def get_offspring(population: list,
     elif gen_op == 'mutate_leaf':
         p_ret = program1.mutate_leaf(inplace=False)
 
-    elif gen_op == 'simplify':
+    elif gen_op == 'simplification':
         p_ret = program1.simplify(inplace=False)
 
     elif gen_op == 'do_nothing':
         p_ret = program1
     else:
         logging.warning(
-            f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, mutation and randomize')
+            f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize')
         return program1
 
     # Add the fitness to the object after the cross_over or mutation
