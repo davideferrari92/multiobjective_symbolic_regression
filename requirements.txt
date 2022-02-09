@@ -1,3 +1,5 @@
 numpy
 pandas
 sympy
+tensorflow
+silence_tensorflow

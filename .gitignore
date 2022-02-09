@@ -1,3 +1,6 @@
+datasets/
+tmp/
+
 # Jupyter files
 .ipynb_checkpoints
 mlruns
