@@ -25,7 +25,7 @@ def _protected_sqrt(x1):
 def _protected_log(x1):
     """Closure of log for zero arguments."""
     with np.errstate(divide='ignore', invalid='ignore'):
-        return np.where(np.abs(x1) > 0.001, np.log(np.abs(x1)), 0.)
+        return np.where(x1 > 0.001, np.log(x1), 0.)
 
 
 def _protected_inverse(x1):
@@ -38,7 +38,7 @@ def _protected_pow(x1, x2):
     """Closure of pow for zero arguments."""
     with np.errstate(divide='ignore', invalid='ignore'):
         try:
-            return math.pow(np.abs(x1), x2)
+            return math.pow(x1, x2)
         except OverflowError:
             return 0.
         except ValueError:  # The math domain error
@@ -104,7 +104,7 @@ OPERATOR_LOG = {
     "func": _protected_log,
     "format_tf": 'tf.math.log({})',
     "arity": 1,
-    "format_str": "log(abs({}))"
+    "format_str": "log({})"
 }
 
 OPERATOR_EXP = {
