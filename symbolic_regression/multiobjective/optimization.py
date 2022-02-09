@@ -21,8 +21,20 @@ def optimize(
             f'Task supported are regression:wmse or binary:logistic')
 
     n_constants = len(program.get_constants())
+    n_features = len(program.features)
+    n_features_used = len(program.features_used)
 
-    if not isinstance(program.program, FeatureNode) and n_constants > 0:
+    '''
+    not isinstance(program.program, FeatureNode)
+        programs with only a FeatureNode are not acceptable anyway
+
+    n_constants > 0
+        as the optimization algorithm optimize only constants
+
+    n_features_used > 0
+        as it is a constant program anyway and the optimized won't work with this configuration
+    '''
+    if not isinstance(program.program, FeatureNode) and n_constants > 0 and n_features_used > 0:
         if program.const_range:
             const_range_min = program.const_range[0]
             const_range_max = program.const_range[1]
@@ -34,7 +46,7 @@ def optimize(
 
         constants_optimizer = NNOptimizer(
             units=1,
-            n_features=len(program.features),
+            n_features=n_features,
             n_constants=n_constants,
             const_range_min=const_range_min,
             const_range_max=const_range_max,
