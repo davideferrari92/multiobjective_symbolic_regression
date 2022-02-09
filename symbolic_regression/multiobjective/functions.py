@@ -12,6 +12,7 @@ from symbolic_regression.Program import Program
 def binary_cross_entropy(program: Program,
                          data: Union[pd.DataFrame, pd.Series],
                          target: str,
+                         weights: str = None,
                          logistic: bool = True,
                          constants_optimization: bool = False,
                          constants_optimization_conf: dict = {}):
@@ -25,7 +26,7 @@ def binary_cross_entropy(program: Program,
         optimized = optimize(program=prog,
                              data=data,
                              target=target,
-                             weights=None,
+                             weights=weights,
                              constants_optimization_conf=constants_optimization_conf,
                              task='binary:logistic')
         prog = optimized
@@ -35,8 +36,13 @@ def binary_cross_entropy(program: Program,
     pred = np.array(prog.evaluate(data=data))
     ground_truth = data[target]
 
+    if weights:
+        sample_weights = data[weights]
+    else:
+        sample_weights = None
+
     try:
-        bce = log_loss(ground_truth, pred)
+        bce = log_loss(y_true=ground_truth, y_pred=pred, sample_weight=sample_weights)
         return bce
     except ValueError:
         return np.inf
@@ -46,7 +52,8 @@ def accuracy_bce(program: Program,
                  data: Union[pd.DataFrame, pd.Series],
                  target: str,
                  logistic: bool = True,
-                 threshold: float = .5
+                 threshold: float = .5,
+                 one_minus: bool = False
                  ):
     if logistic:
         prog = to_logistic(program=program)
@@ -61,6 +68,8 @@ def accuracy_bce(program: Program,
 
     ground_truth = data[target].astype('int')
 
+    if one_minus:
+        return 1-accuracy_score(ground_truth, pred)
     return accuracy_score(ground_truth, pred)
 
 
@@ -68,7 +77,8 @@ def precision_bce(program: Program,
                   data: Union[pd.DataFrame, pd.Series],
                   target: str,
                   logistic: bool = True,
-                  threshold: float = .5
+                  threshold: float = .5,
+                  one_minus: bool = False
                   ):
     if logistic:
         prog = to_logistic(program=program)
@@ -83,6 +93,8 @@ def precision_bce(program: Program,
 
     ground_truth = data[target].astype('int')
 
+    if one_minus:
+        return 1-precision_score(ground_truth, pred)
     return precision_score(ground_truth, pred)
 
 
@@ -90,7 +102,8 @@ def recall_bce(program: Program,
                data: Union[pd.DataFrame, pd.Series],
                target: str,
                logistic: bool = True,
-               threshold: float = .5
+               threshold: float = .5,
+               one_minus: bool = False
                ):
     if logistic:
         prog = to_logistic(program=program)
@@ -105,6 +118,8 @@ def recall_bce(program: Program,
 
     ground_truth = data[target].astype('int')
 
+    if one_minus:
+        return 1-recall_score(ground_truth, pred)
     return recall_score(ground_truth, pred)
 
 
@@ -112,7 +127,8 @@ def f1_bce(program: Program,
            data: Union[pd.DataFrame, pd.Series],
            target: str,
            logistic: bool = True,
-           threshold: float = .5
+           threshold: float = .5,
+           one_minus: bool = False
            ):
     if logistic:
         prog = to_logistic(program=program)
@@ -127,13 +143,17 @@ def f1_bce(program: Program,
 
     ground_truth = data[target].astype('int')
 
+    if one_minus:
+        return 1-f1_score(ground_truth, pred)
     return f1_score(ground_truth, pred)
 
 
 def auroc_bce(program: Program,
               data: Union[pd.DataFrame, pd.Series],
               target: str,
-              logistic: bool = True):
+              logistic: bool = True,
+              one_minus: bool = False
+              ):
     """
     We compute ROC curve at different threshold values.
     The function returns the AUC and the performance at the optimal
@@ -149,7 +169,9 @@ def auroc_bce(program: Program,
         ground_truth = data[target].astype('int')
         # 1- is because the Pareto optimality minimizes the fitness function
         # instead the AUC should be maximized
-        return 1-roc_auc_score(ground_truth, pred)
+        if one_minus:
+            return 1-roc_auc_score(ground_truth, pred)
+        return roc_auc_score(ground_truth, pred)
 
     except TypeError:
         return np.inf
@@ -160,7 +182,9 @@ def auroc_bce(program: Program,
 def gmeans(program: Program,
            data: Union[pd.DataFrame, pd.Series],
            target: str,
-           logistic: bool = True):
+           logistic: bool = True,
+           one_minus: bool = False
+           ):
     """
     Best performance at the threshold variation.
     Interpret this as the accuracy with the best threshold
@@ -184,7 +208,9 @@ def gmeans(program: Program,
 
     # 1- is because the Pareto optimality minimizes the fitness function
     # instead the G-mean should be maximized
-    return 1 - best_gmean
+    if one_minus:
+        return 1 - best_gmean
+    return best_gmean
 
 
 def complexity(program: Program):
