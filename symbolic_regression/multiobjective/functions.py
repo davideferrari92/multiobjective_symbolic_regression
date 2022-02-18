@@ -198,19 +198,20 @@ def gmeans(program: Program,
         pred = np.array(prog.evaluate(data=data))
         if len(pred) == 0:
             return np.inf
+        ground_truth = data[target]
+        fpr, tpr, thresholds = roc_curve(ground_truth, pred)
+        gmeans = np.sqrt(tpr * (1-fpr))
+        best_gmean = gmeans[np.argmax(gmeans)]
+
+        # 1- is because the Pareto optimality minimizes the fitness function
+        # instead the G-mean should be maximized
+        if one_minus:
+            return 1 - best_gmean
+        return best_gmean
     except TypeError:
         return np.inf
-
-    ground_truth = data[target]
-    fpr, tpr, thresholds = roc_curve(ground_truth, pred)
-    gmeans = np.sqrt(tpr * (1-fpr))
-    best_gmean = gmeans[np.argmax(gmeans)]
-
-    # 1- is because the Pareto optimality minimizes the fitness function
-    # instead the G-mean should be maximized
-    if one_minus:
-        return 1 - best_gmean
-    return best_gmean
+    except ValueError:
+        return np.inf
 
 
 def complexity(program: Program):
