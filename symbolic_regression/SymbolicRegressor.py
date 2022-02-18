@@ -109,7 +109,6 @@ class SymbolicRegressor:
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
-        timeout_offspring: float = None,
         verbose: int = 0
     ):
         """This method support a KeyboardInterruption of the fit process
@@ -130,7 +129,6 @@ class SymbolicRegressor:
                 operations=operations,
                 n_jobs=n_jobs,
                 stop_at_convergence=stop_at_convergence,
-                timeout_offspring=timeout_offspring,
                 verbose=verbose
             )
         except KeyboardInterrupt:
@@ -155,7 +153,6 @@ class SymbolicRegressor:
         operations: list,
         n_jobs: int = -1,
         stop_at_convergence: bool = True,
-        timeout_offspring: float = None,
         verbose: int = 0
     ) -> list:
 
