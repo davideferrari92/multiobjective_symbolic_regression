@@ -180,7 +180,7 @@ class SymbolicRegressor:
         if not self.generation:
             self.generation = 0
 
-        start_time = time.perf_counter()
+        elapsed_time = 0
         while True:
             self.generation += 1
 
@@ -205,21 +205,25 @@ class SymbolicRegressor:
             import concurrent.futures
             with concurrent.futures.ProcessPoolExecutor(max_workers=m_workers) as executor:
                 for _ in range(self.population_size):
-                    offsprings.append(
-                        executor.submit(
-                            get_offspring,
-                            self.population,
-                            data,
-                            fitness_functions,
-                            self.generation,
-                            self.tournament_size,
-                            genetic_operators_frequency
-                        )
-                    )
+                    offsprings.append(executor)
 
-            offsprings = [o.result() for o in offsprings]
-
-            self.population += offsprings
+                offsprings = [
+                    o.submit(
+                        get_offspring,
+                        self.population,
+                        data,
+                        fitness_functions,
+                        self.generation,
+                        self.tournament_size,
+                        genetic_operators_frequency
+                    ) for o in offsprings
+                ]
+                                
+                for index, o in enumerate(offsprings):
+                    if isinstance(o, concurrent.futures._base.Future):
+                        offsprings[index] = o.result()
+                
+                self.population += offsprings
 
             # Removes all non valid programs in the population
             logging.debug(f"Removing duplicates")
@@ -312,7 +316,7 @@ class SymbolicRegressor:
                 if not self.converged_generation:
                     self.converged_generation = self.generation
                 logging.info(
-                    f"Training converged after {self.converged_generation} generations. ({round(converged_time-start_time)} seconds)"
+                    f"Training converged after {self.converged_generation} generations."
                 )
                 if stop_at_convergence:
                     self.status = "Terminated: converged"
@@ -332,12 +336,13 @@ class SymbolicRegressor:
                 self.status = "Terminated: generations completed"
                 return
 
-            seconds = round(time.perf_counter()-start_time)
+            elapsed_time += end_time_generation-start_time_generation
+
             if self.generation > 1:
-                seconds_iter = round(seconds/(self.generation-1), 1)
-                print(f"{seconds} sec, {seconds_iter} sec/generation")
+                seconds_iter = round(elapsed_time/(self.generation), 1)
+                print(f"{elapsed_time} sec, {seconds_iter} sec/generation")
             else:
-                print(f"{seconds} sec")
+                print(f"{elapsed_time} sec")
 
     def save_model(self, file: str):
         import pickle
