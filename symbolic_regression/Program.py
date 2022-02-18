@@ -707,10 +707,7 @@ class Program:
         Args:
             inplace: to replace the program in the current object or to return a new one
         """
-        try:
-            offspring = deepcopy(self)
-        except RecursionError:
-            return self
+        offspring = deepcopy(self)
             
         leaves = offspring.get_features(return_objects=True) + offspring.get_constants()
 
