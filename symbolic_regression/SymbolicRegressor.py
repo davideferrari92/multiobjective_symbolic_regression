@@ -247,12 +247,12 @@ class SymbolicRegressor:
                 missing_elements = 2*self.population_size - \
                     len(self.population)
 
-                logging.warning(
+                logging.info(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements"
                 )
 
                 self.population += Parallel(
-                    n_jobs=-1, batch_size=28, backend=backend_parallel
+                    n_jobs=n_jobs, batch_size=28, backend=backend_parallel
                 )(
                     delayed(generate_population)(
                         data=data,
@@ -274,7 +274,8 @@ class SymbolicRegressor:
             self.status = "Creating crowding distance"
             crowding_distance(self.population)
 
-            self.population.sort(reverse=False)
+            self.population.sort(key=lambda p: p.crowding_distance, reverse=True)
+            self.population.sort(key=lambda p: p.rank, reverse=False)
             self.population = self.population[: self.population_size]
 
             self.best_program = self.population[0]
