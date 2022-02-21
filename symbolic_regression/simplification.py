@@ -29,6 +29,12 @@ def extract_operation(element, father=None):
     elif str(element.func) == 'abs':
         current_operation = OPERATOR_ABS
 
+    elif str(element.func) == 'min':
+        current_operation = OPERATOR_MIN
+
+    elif str(element.func) == 'max':
+        current_operation = OPERATOR_MAX
+    
     if current_operation:
 
         new_operation = OperationNode(
