@@ -83,7 +83,8 @@ def create_pareto_front(population: list):
 
     # Loop over the entire matrix, can be optimised to do only the triangular matrix
     for p1 in population:
-
+        p1.rank = float('inf')
+        
         if not p1.is_valid:
             continue
         p1.programs_dominates = []
