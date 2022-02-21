@@ -419,7 +419,7 @@ class Program:
             return None
 
 
-    def simplify(self, inplace: bool = False):
+    def simplify(self, inplace: bool = False, inject: Union[str, None] = None):
         """ This method allow to simplify the structure of a program using a SymPy backend
 
         Args:
@@ -427,21 +427,24 @@ class Program:
         """
         from symbolic_regression.simplification import extract_operation
 
-        def simplify_program(program: Program) -> Program:
+        def simplify_program(program: Union[Program, str]) -> Program:
             """ This function simplify a program using a SymPy backend
 
             try: the root node of the program, not the Program object
 
             """
             try:
-                if isinstance(program.program, FeatureNode):
+                if isinstance(program, Program) and isinstance(program.program, FeatureNode):
                     return program.program
 
                 logging.debug(f'Simplifying program {program}')
-                                    
-                simplified = sympy.simplify(
-                    program.program, rational=True, inverse=True)
 
+                if isinstance(program, Program):
+                    simplified = sympy.simplify(
+                        program.program, rational=True, inverse=True)
+                else:
+                    simplified = sympy.simplify(
+                        program, rational=True, inverse=True)
                 
                 logging.debug(
                     f'Extracting the program tree from the simplified')
@@ -455,8 +458,10 @@ class Program:
 
             except UnboundLocalError:
                 return program.program
-
+        
         if inplace:
+            if inject:
+                self.program = simplify_program(inject)
             self.program = simplify_program(self)
             return self
 
