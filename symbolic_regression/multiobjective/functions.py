@@ -3,7 +3,9 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, f1_score, log_loss, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.metrics import (accuracy_score, average_precision_score, f1_score,
+                             log_loss, precision_score, recall_score,
+                             roc_auc_score, roc_curve)
 from symbolic_regression.multiobjective.optimization import optimize
 from symbolic_regression.multiobjective.utils import to_logistic
 from symbolic_regression.Program import Program
@@ -42,7 +44,8 @@ def binary_cross_entropy(program: Program,
         sample_weights = None
 
     try:
-        bce = log_loss(y_true=ground_truth, y_pred=pred, sample_weight=sample_weights)
+        bce = log_loss(y_true=ground_truth, y_pred=pred,
+                       sample_weight=sample_weights)
         return bce
     except ValueError:
         return np.inf
@@ -96,6 +99,33 @@ def precision_bce(program: Program,
     if one_minus:
         return 1-precision_score(ground_truth, pred)
     return precision_score(ground_truth, pred)
+
+
+def average_precision_score_bce(program: Program,
+                                data: Union[pd.DataFrame, pd.Series],
+                                target: str,
+                                logistic: bool = True,
+                                one_minus: bool = False):
+    if logistic:
+        prog = to_logistic(program=program)
+    else:
+        prog = program
+
+    try:
+        pred = np.array(prog.evaluate(data=data))
+    except TypeError:
+        return np.nan
+
+    ground_truth = data[target].astype('float')
+
+    try:
+        avg_p_score = average_precision_score(ground_truth, pred)
+    except TypeError:
+        return np.inf
+
+    if one_minus:
+        return 1-avg_p_score
+    return avg_p_score
 
 
 def recall_bce(program: Program,
