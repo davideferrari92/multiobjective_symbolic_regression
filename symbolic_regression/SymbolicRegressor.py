@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import os
 import time
@@ -101,8 +102,6 @@ class SymbolicRegressor:
         self,
         data: Union[dict, pd.Series, pd.DataFrame],
         features: list,
-        target: str,
-        weights: str,
         fitness_functions: dict,
         generations: int,
         genetic_operators_frequency: dict,
@@ -121,8 +120,6 @@ class SymbolicRegressor:
             self._fit(
                 data=data,
                 features=features,
-                target=target,
-                weights=weights,
                 fitness_functions=fitness_functions,
                 generations=generations,
                 genetic_operators_frequency=genetic_operators_frequency,
@@ -145,8 +142,6 @@ class SymbolicRegressor:
         self,
         data: Union[dict, pd.Series, pd.DataFrame],
         features: list,
-        target: str,
-        weights: str,
         fitness_functions: dict,
         generations: int,
         genetic_operators_frequency: dict,
@@ -199,27 +194,25 @@ class SymbolicRegressor:
             else:
                 m_workers = os.cpu_count()
 
-            import concurrent.futures
+            executor = concurrent.futures.ThreadPoolExecutor()  # Or ProcessPoolExecutor
+            futures = []
             with concurrent.futures.ProcessPoolExecutor(max_workers=m_workers) as executor:
                 for _ in range(self.population_size):
-                    offsprings.append(executor)
+                    futures.append(
+                        executor.submit(
+                            get_offspring,
+                            self.population,
+                            data,
+                            fitness_functions,
+                            self.generation,
+                            self.tournament_size,
+                            genetic_operators_frequency
+                        )
+                    )
 
-                offsprings = [
-                    o.submit(
-                        get_offspring,
-                        self.population,
-                        data,
-                        fitness_functions,
-                        self.generation,
-                        self.tournament_size,
-                        genetic_operators_frequency
-                    ) for o in offsprings
-                ]
-                                
-                for index, o in enumerate(offsprings):
-                    if isinstance(o, concurrent.futures._base.Future):
-                        offsprings[index] = o.result()
-                
+                result = concurrent.futures.wait(futures, timeout=120)
+                offsprings = [r.result(timeout=120) for r in result.done]
+
                 self.population += offsprings
 
             # Removes all non valid programs in the population
@@ -274,7 +267,8 @@ class SymbolicRegressor:
             self.status = "Creating crowding distance"
             crowding_distance(self.population)
 
-            self.population.sort(key=lambda p: p.crowding_distance, reverse=True)
+            self.population.sort(
+                key=lambda p: p.crowding_distance, reverse=True)
             self.population.sort(key=lambda p: p.rank, reverse=False)
             self.population = self.population[: self.population_size]
 
