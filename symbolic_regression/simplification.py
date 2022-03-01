@@ -36,6 +36,19 @@ def extract_operation(element, father=None):
         current_operation = OPERATOR_MAX
     
     if current_operation:
+        args = list(element.args)
+
+        # 1/x is treated as pow(x, -1) which is more unstable.
+        # We convert it to an actual 1/x
+        if element.is_Pow and len(args) == 2 and isinstance(args[1], sympy.core.numbers.NegativeOne):
+            current_operation = OPERATOR_DIV
+            args[0], args[1] = sympy.parse_expr('1'), args[0]
+
+        # sqrt(x) is treated as pow(x, .5) which is more unstable.
+        # We convert it to an actual sqrt(x)
+        if element.is_Pow and len(args) == 2 and args[1] == sympy.parse_expr('1/2'):            
+            current_operation = OPERATOR_SQRT
+            args = [args[0]]
 
         new_operation = OperationNode(
             operation=current_operation['func'],
@@ -44,10 +57,8 @@ def extract_operation(element, father=None):
             format_tf=current_operation['format_tf'],
             father=father
         )
-
-        args = list(element.args)
+        
         n_args = len(args)
-
         if n_args > current_operation['arity']:
 
             ''' Case in which commutative operation are presented with more than arity operators

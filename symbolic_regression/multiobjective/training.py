@@ -31,16 +31,15 @@ def generate_population(
         fitness: The dict with the fitness functions
         data: The data on to which evaluate the fitness
     """
-    p = Program(
-        features=features,
-        operations=operations,
-        const_range=const_range,
-        parsimony=parsimony, parsimony_decay=parsimony_decay
-    )
+    p = Program(features=features,
+                operations=operations,
+                const_range=const_range,
+                parsimony=parsimony,
+                parsimony_decay=parsimony_decay)
 
     p.init_program()
 
-    p.evaluate_fitness(fitness=fitness,data=data)
+    p.evaluate_fitness(fitness=fitness, data=data)
 
     return p
 
@@ -61,10 +60,10 @@ def dominance(program1: Program, program2: Program) -> bool:
             # Ignore the fitness which are not to be optimized
             if program1.is_fitness_to_minimize[this_fitness] == False:
                 continue
-            
+
             d = abs(program1.fitness[this_fitness]) - \
                 abs(program2.fitness[this_fitness])
-            
+
             if d < 0:
                 at_least_one_less_than_zero = True
             if d > 0:
@@ -84,7 +83,7 @@ def create_pareto_front(population: list):
     # Loop over the entire matrix, can be optimised to do only the triangular matrix
     for p1 in population:
         p1.rank = float('inf')
-        
+
         if not p1.is_valid:
             continue
         p1.programs_dominates = []
@@ -141,15 +140,14 @@ def crowding_distance(population: list):
     objectives = population[0].fitness.keys()
 
     rank_iter = 1
-    pareto_front = extract_pareto_front(
-        population=population, rank=rank_iter)
+    pareto_front = extract_pareto_front(population=population, rank=rank_iter)
 
     while pareto_front:  # Exits when extract_pareto_front return an empty list
         for obj in objectives:
             # This exclude the fitness functions which are set not to be minimized
             if population[0].is_fitness_to_minimize[obj] == False:
                 continue
-            
+
             # Highest fitness first for each objective
             pareto_front.sort(key=lambda p: p.fitness[obj], reverse=True)
 
@@ -166,12 +164,11 @@ def crowding_distance(population: list):
                     program.crowding_distance = delta / norm
 
         rank_iter += 1
-        pareto_front = extract_pareto_front(
-            population=population, rank=rank_iter)
+        pareto_front = extract_pareto_front(population=population,
+                                            rank=rank_iter)
 
 
-def tournament_selection(population: list,
-                         tournament_size: int,
+def tournament_selection(population: list, tournament_size: int,
                          generation: int):
     """ The tournament selection is used to choose the programs to which apply genetic operations
 
@@ -211,11 +208,8 @@ def tournament_selection(population: list,
     return best_member
 
 
-def get_offspring(population: list,
-                  data: pd.DataFrame,
-                  fitness: list,
-                  generations: int,
-                  tournament_size: int,
+def get_offspring(population: list, data: pd.DataFrame, fitness: list,
+                  generations: int, tournament_size: int,
                   genetic_operations_frequency: dict):
     """ This function generate an offspring of a program from the current population
 
@@ -253,20 +247,20 @@ def get_offspring(population: list,
     # This allow to randomly chose a genetic operation to
     ops = list()
     for op, freq in genetic_operations_frequency.items():
-        ops += [op]*freq
+        ops += [op] * freq
     gen_op = random.choice(ops)
 
-    program1 = tournament_selection(
-        population=population, tournament_size=tournament_size, generation=generations
-    )
+    program1 = tournament_selection(population=population,
+                                    tournament_size=tournament_size,
+                                    generation=generations)
 
     if program1 is None or not program1.is_valid:
         return program1
 
     if gen_op == 'crossover':
-        program2 = tournament_selection(
-            population=population, tournament_size=tournament_size, generation=generations
-        )
+        program2 = tournament_selection(population=population,
+                                        tournament_size=tournament_size,
+                                        generation=generations)
         if program2 is None or not program2.is_valid:
             return program1
         p_ret = program1.cross_over(other=program2, inplace=False)
@@ -297,7 +291,8 @@ def get_offspring(population: list,
         p_ret = program1
     else:
         logging.warning(
-            f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize')
+            f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize'
+        )
         return program1
 
     # Add the fitness to the object after the cross_over or mutation

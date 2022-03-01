@@ -8,7 +8,6 @@ import numpy as np
 class Node(ABC):
     """ A node can represent an operation or a feature in a binary tree
     """
-
     def __init__(self, father=None) -> None:
         self.father = father
 
@@ -22,8 +21,8 @@ class OperationNode(Node):
     The operands can be OperationNode, if the formula continues deeply, or FeatureNode if
     the formula terminate and a feature is chosen.
     """
-
-    def __init__(self, operation: callable, format_tf: str, arity: int, format_str: str, father) -> None:
+    def __init__(self, operation: callable, format_tf: str, arity: int,
+                 format_str: str, father) -> None:
         """ To initialize an OperationNode
 
         Args:
@@ -58,11 +57,14 @@ class OperationNode(Node):
         """
         if len(self.operands) > self.arity + 1:
             raise AttributeError(
-                f'This operation support only {self.arity} operands: {self.arity} given.')
+                f'This operation support only {self.arity} operands: {self.arity} given.'
+            )
 
         self.operands.append(operand)
 
-    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+    def evaluate(
+            self, data: Union[dict, pd.Series,
+                              pd.DataFrame]) -> Union[int, float]:
         """ This method recursively calls the operations callable to evaluate the result of the program on data
 
         Each OperationNode has an operation callable function that receive operands as arguments.
@@ -84,12 +86,14 @@ class OperationNode(Node):
         elif isinstance(data, pd.DataFrame):
             result = list()
             for _, row in data.iterrows():
-                result.append(self.operation(
-                    *[node.evaluate(data=row) for node in self.operands]))
+                result.append(
+                    self.operation(
+                        *[node.evaluate(data=row) for node in self.operands]))
 
         else:
             raise TypeError(
-                f'Evaluation supports only data as dict, pd.Series or pd.DataFrame objects')
+                f'Evaluation supports only data as dict, pd.Series or pd.DataFrame objects'
+            )
 
         return result
 
@@ -98,7 +102,8 @@ class OperationNode(Node):
 
         for child in self.operands:
             if isinstance(child, OperationNode):
-                all_operations = child._get_all_operations(all_operations=all_operations)
+                all_operations = child._get_all_operations(
+                    all_operations=all_operations)
 
         return all_operations
 
@@ -130,8 +135,9 @@ class OperationNode(Node):
         base_depth += 1
 
         for child in self.operands:
-            new_depth = max(child._get_depth(base_depth=base_depth)
-                            for child in self.operands)
+            new_depth = max(
+                child._get_depth(base_depth=base_depth)
+                for child in self.operands)
 
         return new_depth
 
@@ -175,21 +181,33 @@ class OperationNode(Node):
 
         return v
 
-    def render(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None, format_tf: bool = False) -> str:
+    def render(self,
+               data: Union[dict, pd.Series, pd.DataFrame, None] = None,
+               format_tf: bool = False,
+               format_diff: bool = False) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
 
         This call recursively itself untile the terminal nodes are reached.
         """
         if format_tf:
-            return self.format_tf.format(*[node.render(data=data, format_tf=True) for node in self.operands])
-        return self.format_str.format(*[node.render(data=data) for node in self.operands])
+            return self.format_tf.format(*[
+                node.render(data=data, format_tf=True)
+                for node in self.operands
+            ])
+
+        return self.format_str.format(*[
+            node.render(data=data, format_diff=format_diff)
+            for node in self.operands
+        ])
 
 
 class FeatureNode(Node):
     """ A FeatureNode represent a terminal node of the binary tree of the program and is always a feature or a constant
     """
-
-    def __init__(self, feature: Union[str, float], father: Union[OperationNode, None] = None, is_constant: bool = False) -> None:
+    def __init__(self,
+                 feature: Union[str, float],
+                 father: Union[OperationNode, None] = None,
+                 is_constant: bool = False) -> None:
         """ To initalize this FeatureNode
 
         Args:
@@ -209,7 +227,10 @@ class FeatureNode(Node):
         """
         return f'FeatureNode({self.render()})'
 
-    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> Union[int, float]:
+    def evaluate(
+        self,
+        data: Union[dict, pd.Series, pd.DataFrame, None] = None
+    ) -> Union[int, float]:
         """ This function evaluate the value of a FeatureNode, which is the datapoint passed as argument
 
         The data argument needs to be accessible by the name of the feature of this node.
@@ -229,7 +250,8 @@ class FeatureNode(Node):
         if self.is_constant:
             result = self.feature
 
-        elif data is not None and (isinstance(data, pd.Series) or isinstance(data, pd.DataFrame) or isinstance(data, dict)):
+        elif data is not None and (isinstance(data, pd.Series) or isinstance(
+                data, pd.DataFrame) or isinstance(data, dict)):
             result = data[self.feature]
 
         else:
@@ -259,7 +281,10 @@ class FeatureNode(Node):
             return False
         return True
 
-    def render(self, data: Union[dict, pd.Series, None] = None, format_tf=False) -> str:
+    def render(self,
+               data: Union[dict, pd.Series, None] = None,
+               format_tf: bool = False,
+               format_diff: bool = False) -> str:
         """ This method render the string representation of this FeatureNode
 
         If data is provided, the rendering consist of the value of the datapoint of the feature of this
@@ -271,6 +296,8 @@ class FeatureNode(Node):
         if self.is_constant:
             if format_tf:
                 return f'constants[{self.index}]'
+            elif format_diff:
+                return f'c{self.index}'
             return str(self.feature)
 
         if data is not None:  # Case in which I render the value of the feature in the datapoint instead of its name
@@ -280,14 +307,13 @@ class FeatureNode(Node):
 
         return self.feature
 
-    
 
 class InvalidNode(Node):
     def __init__(self, father=None) -> None:
         super().__init__(father=father)
 
         self.is_constant = True
-    
+
     def _get_all_operations(self, all_operations=list):
         return all_operations
 
@@ -300,8 +326,13 @@ class InvalidNode(Node):
     def is_valid(self):
         return False
 
-    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> None:
+    def evaluate(
+            self,
+            data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> None:
         return np.inf
 
-    def render(self, data: Union[dict, pd.Series, None] = None, format_tf=False) -> str:
+    def render(self,
+               data: Union[dict, pd.Series, None] = None,
+               format_tf: bool = False,
+               format_diff: bool = False) -> str:
         return 'InvalidNode'

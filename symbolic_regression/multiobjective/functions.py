@@ -17,23 +17,21 @@ def binary_cross_entropy(program: Program,
                          weights: str = None,
                          logistic: bool = True,
                          constants_optimization: bool = False,
+                         constants_optimization_method: str = 'ADAM',
                          constants_optimization_conf: dict = {}):
 
-    if logistic:
-        prog = to_logistic(program=program)
-    else:
-        prog = program
-
     if constants_optimization:
-        optimized = optimize(program=prog,
-                             data=data,
-                             target=target,
-                             weights=weights,
-                             constants_optimization_conf=constants_optimization_conf,
-                             task='binary:logistic')
-        prog = optimized
-        program.program = prog.program.operands[0]
-        program.program.father = None
+        prog = optimize(
+            program=program,
+            data=data,
+            target=target,
+            weights=weights,
+            constants_optimization_method=constants_optimization_method,
+            constants_optimization_conf=constants_optimization_conf,
+            task='binary:logistic')
+
+    if logistic and constants_optimization_method == 'NN':
+        prog = to_logistic(program=prog)
 
     pred = np.array(prog.evaluate(data=data))
     ground_truth = data[target]
@@ -44,11 +42,14 @@ def binary_cross_entropy(program: Program,
         sample_weights = None
 
     try:
-        bce = log_loss(y_true=ground_truth, y_pred=pred,
+        bce = log_loss(y_true=ground_truth,
+                       y_pred=pred,
                        sample_weight=sample_weights)
         return bce
     except ValueError:
         return np.inf
+    except TypeError:
+        print(pred.shape)
 
 
 def accuracy_bce(program: Program,
@@ -56,8 +57,7 @@ def accuracy_bce(program: Program,
                  target: str,
                  logistic: bool = True,
                  threshold: float = .5,
-                 one_minus: bool = False
-                 ):
+                 one_minus: bool = False):
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -72,7 +72,7 @@ def accuracy_bce(program: Program,
     ground_truth = data[target].astype('int')
 
     if one_minus:
-        return 1-accuracy_score(ground_truth, pred)
+        return 1 - accuracy_score(ground_truth, pred)
     return accuracy_score(ground_truth, pred)
 
 
@@ -81,8 +81,7 @@ def precision_bce(program: Program,
                   target: str,
                   logistic: bool = True,
                   threshold: float = .5,
-                  one_minus: bool = False
-                  ):
+                  one_minus: bool = False):
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -97,7 +96,7 @@ def precision_bce(program: Program,
     ground_truth = data[target].astype('int')
 
     if one_minus:
-        return 1-precision_score(ground_truth, pred)
+        return 1 - precision_score(ground_truth, pred)
     return precision_score(ground_truth, pred)
 
 
@@ -122,9 +121,11 @@ def average_precision_score_bce(program: Program,
         avg_p_score = average_precision_score(ground_truth, pred)
     except TypeError:
         return np.inf
+    except ValueError:
+        return np.inf
 
     if one_minus:
-        return 1-avg_p_score
+        return 1 - avg_p_score
     return avg_p_score
 
 
@@ -133,8 +134,7 @@ def recall_bce(program: Program,
                target: str,
                logistic: bool = True,
                threshold: float = .5,
-               one_minus: bool = False
-               ):
+               one_minus: bool = False):
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -149,7 +149,7 @@ def recall_bce(program: Program,
     ground_truth = data[target].astype('int')
 
     if one_minus:
-        return 1-recall_score(ground_truth, pred)
+        return 1 - recall_score(ground_truth, pred)
     return recall_score(ground_truth, pred)
 
 
@@ -158,8 +158,7 @@ def f1_bce(program: Program,
            target: str,
            logistic: bool = True,
            threshold: float = .5,
-           one_minus: bool = False
-           ):
+           one_minus: bool = False):
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -174,7 +173,7 @@ def f1_bce(program: Program,
     ground_truth = data[target].astype('int')
 
     if one_minus:
-        return 1-f1_score(ground_truth, pred)
+        return 1 - f1_score(ground_truth, pred)
     return f1_score(ground_truth, pred)
 
 
@@ -182,8 +181,7 @@ def auroc_bce(program: Program,
               data: Union[pd.DataFrame, pd.Series],
               target: str,
               logistic: bool = True,
-              one_minus: bool = False
-              ):
+              one_minus: bool = False):
     """
     We compute ROC curve at different threshold values.
     The function returns the AUC and the performance at the optimal
@@ -200,7 +198,7 @@ def auroc_bce(program: Program,
         # 1- is because the Pareto optimality minimizes the fitness function
         # instead the AUC should be maximized
         if one_minus:
-            return 1-roc_auc_score(ground_truth, pred)
+            return 1 - roc_auc_score(ground_truth, pred)
         return roc_auc_score(ground_truth, pred)
 
     except TypeError:
@@ -213,8 +211,7 @@ def gmeans(program: Program,
            data: Union[pd.DataFrame, pd.Series],
            target: str,
            logistic: bool = True,
-           one_minus: bool = False
-           ):
+           one_minus: bool = False):
     """
     Best performance at the threshold variation.
     Interpret this as the accuracy with the best threshold
@@ -230,7 +227,7 @@ def gmeans(program: Program,
             return np.inf
         ground_truth = data[target]
         fpr, tpr, thresholds = roc_curve(ground_truth, pred)
-        gmeans = np.sqrt(tpr * (1-fpr))
+        gmeans = np.sqrt(tpr * (1 - fpr))
         best_gmean = gmeans[np.argmax(gmeans)]
 
         # 1- is because the Pareto optimality minimizes the fitness function
@@ -253,27 +250,26 @@ def wmse(program: Program,
          target: str,
          weights: str = None,
          constants_optimization: bool = False,
-         constants_optimization_conf: dict = {}
-         ) -> float:
+         constants_optimization_conf: dict = {}) -> float:
     """ Evaluates the weighted mean squared error
     """
 
     if constants_optimization:
-        optimized = optimize(program=program,
-                             data=data,
-                             target=target,
-                             weights=weights,
-                             constants_optimization_conf=constants_optimization_conf,
-                             task='regression:wmse'
-                             )
+        optimized = optimize(
+            program=program,
+            data=data,
+            target=target,
+            weights=weights,
+            constants_optimization_conf=constants_optimization_conf,
+            task='regression:wmse')
         program.program = optimized.program
 
     pred = optimized.evaluate(data=data)
 
     if weights:
-        wmse = (((pred - data[target]) ** 2) * data[weights]).mean()
+        wmse = (((pred - data[target])**2) * data[weights]).mean()
     else:
-        wmse = (((pred - data[target]) ** 2)).mean()
+        wmse = (((pred - data[target])**2)).mean()
     return wmse
 
 
@@ -301,10 +297,8 @@ def not_constant(program: Program,
     return np.max([0, epsilon - std_dev])
 
 
-def value_range(program: Program,
-                data: Union[dict, pd.DataFrame],
-                lower_bound: float,
-                upper_bound: float) -> float:
+def value_range(program: Program, data: Union[dict, pd.DataFrame],
+                lower_bound: float, upper_bound: float) -> float:
     """
     f(x) - upper_bound <= 0
     lower_bound - f(x) <= 0
@@ -312,10 +306,13 @@ def value_range(program: Program,
 
     result = program.evaluate(data=data)
 
-    upper_bound_constraint = np.mean(np.where(
-        np.array(result) - upper_bound >= 0, np.array(result) - upper_bound, 0))
-    lower_bound_constraint = np.mean(np.where(
-        lower_bound - np.array(result) >= 0, lower_bound - np.array(result), 0))
+    upper_bound_constraint = np.mean(
+        np.where(
+            np.array(result) - upper_bound >= 0,
+            np.array(result) - upper_bound, 0))
+    lower_bound_constraint = np.mean(
+        np.where(lower_bound - np.array(result) >= 0,
+                 lower_bound - np.array(result), 0))
 
     return upper_bound_constraint + lower_bound_constraint
 
@@ -323,8 +320,7 @@ def value_range(program: Program,
 def ordering(program: Program,
              data: pd.DataFrame,
              target: str,
-             method: str = 'error'
-             ) -> float:
+             method: str = 'error') -> float:
 
     if method not in ['inversions', 'error']:
         print(f'Only support inversions or error. Default is error')
@@ -338,8 +334,9 @@ def ordering(program: Program,
     error = 0
     inversions = 0
     for index, row in data_ord.iterrows():
-        mask = (row['pred'] - data_ord.loc[(data_ord.index > index)
-                & (data_ord[target] < row[target]), 'pred'])
+        mask = (row['pred'] -
+                data_ord.loc[(data_ord.index > index)
+                             & (data_ord[target] < row[target]), 'pred'])
         inversions += len(mask)
         error += (mask).sum()
 
@@ -353,8 +350,7 @@ def ordering(program: Program,
 def ordering_preserving(program: Program,
                         data: pd.DataFrame,
                         target: str,
-                        method: str = 'abs_val'
-                        ) -> float:
+                        method: str = 'abs_val') -> float:
     """
     1) sort original index
     2) get position of each sample
@@ -364,18 +360,19 @@ def ordering_preserving(program: Program,
     6) error = error + difference ????
     """
 
-    if method not in ['abs_val', 'inversions', 'inversions_and_error', 'error']:
+    if method not in [
+            'abs_val', 'inversions', 'inversions_and_error', 'error'
+    ]:
         print(
-            f'Only support abs_val, inversions, inversions_and_error, or error. Default is inversions')
+            f'Only support abs_val, inversions, inversions_and_error, or error. Default is inversions'
+        )
 
         method == 'inversion'
 
     data_ord = data.copy(deep=True)
-
     ''' Index ordered by baseline target '''
     data_ord.sort_values(by=target, ascending=False, inplace=True)
     data_ord['ordering_target'] = data_ord.reset_index(inplace=False).index
-
     ''' Index ordered by program prediction '''
     data_ord['pred'] = program.evaluate(data=data_ord)
 
@@ -385,8 +382,8 @@ def ordering_preserving(program: Program,
     if method in ['inversions', 'inversions_and_error', 'error']:
         from symbolic_regression.multiobjective.utils import \
             merge_sort_inversions
-        inversions, err = merge_sort_inversions(
-            arr=argsort_pred, data_ord_pred=data_ord['pred'])
+        inversions, err = merge_sort_inversions(arr=argsort_pred,
+                                                data_ord_pred=data_ord['pred'])
 
         # Maximum number of inversions
         inv = len(argsort_pred) * (len(argsort_pred) - 1) * 0.5

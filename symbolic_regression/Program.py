@@ -9,6 +9,7 @@ import sympy
 
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
+from symbolic_regression.operators import OPERATOR_POW
 
 
 class Program:
@@ -49,8 +50,7 @@ class Program:
                  const_range: tuple = None,
                  program: Node = None,
                  parsimony: float = .9,
-                 parsimony_decay: float = .85
-                 ) -> None:
+                 parsimony_decay: float = .85) -> None:
         """
 
         Args:
@@ -105,7 +105,9 @@ class Program:
                 setattr(result, k, deepcopy(v, memo))
             return result
         except RecursionError:
-            logging.warning(f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}')
+            logging.warning(
+                f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}'
+            )
 
     @property
     def complexity(self):
@@ -146,7 +148,6 @@ class Program:
     @all_operations.getter
     def all_operations(self):
         return self.program._get_all_operations(all_operations=[])
-        
 
     @property
     def features_used(self):
@@ -191,7 +192,8 @@ class Program:
         """ This method recursively explore the tree and return a list of unique features used.
         """
         if isinstance(self.program, OperationNode):
-            return self.program._get_features(features_list=[], return_objects=return_objects)
+            return self.program._get_features(features_list=[],
+                                              return_objects=return_objects)
 
         # Only one non-constant FeatureNode
         elif not self.program.is_constant:
@@ -211,7 +213,9 @@ class Program:
     def _set_constants_index(constant, index):
         constant.index = index
 
-    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+    def evaluate(
+            self, data: Union[dict, pd.Series,
+                              pd.DataFrame]) -> Union[int, float]:
         """ This call evaluate the program on some given data calling the function
         of the evaluation of the root node of the program.
         This will recursively call the evaluation on all the children returning the
@@ -243,7 +247,9 @@ class Program:
             f = ftn['func']
 
             minimize = True
-            if ftn.get('minimize') == False:  # Exclude non minimizing fitnesses from convergence
+            if ftn.get('minimize') == False or not ftn.get(
+                    'minimize'
+            ):  # Exclude non minimizing fitnesses from convergence
                 minimize = False
 
             convergence_threshold = ftn.get('convergence_threshold')
@@ -257,7 +263,8 @@ class Program:
 
             if convergence_threshold and f <= convergence_threshold:
                 _converged.append(True)
-                logging.debug(f'Converged {ftn_label}: {f} <= {convergence_threshold}')
+                logging.debug(
+                    f'Converged {ftn_label}: {f} <= {convergence_threshold}')
 
         # Use any or all to have at least one or all fitness converged when the convergence_threshold is provided
         if len(_converged) > 0:
@@ -276,14 +283,14 @@ class Program:
         """
 
         logging.debug(
-            f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}')
+            f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}'
+        )
 
         # Father=None is used to identify the root node of the program
         self.program = self._generate_tree(
             father=None,
             parsimony=self.parsimony,
-            parsimony_decay=self.parsimony_decay
-        )
+            parsimony_decay=self.parsimony_decay)
 
         self.parsimony = self._parsimony_bkp  # Restore parsimony for future operations
 
@@ -311,9 +318,10 @@ class Program:
 
         If the fitness of two programs are identical, we assume they are equivalent to each other.
         """
-        for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(), other.fitness.items()):
+        for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
+                                                      other.fitness.items()):
             # One difference is enough for them not to be identical
-            
+
             if round(a_fit, 2) != round(b_fit, 2):
                 return False
 
@@ -323,7 +331,8 @@ class Program:
                        depth=-1,
                        parsimony: float = .9,
                        parsimony_decay: float = .85,
-                       father: Union[Node, None] = None):
+                       father: Union[Node, None] = None,
+                       force_constant: bool = False):
         """ This method run the recursive generation of a subtree.
 
         If the node generated in a recursion loop is an OperationNode, then a deeper
@@ -335,29 +344,24 @@ class Program:
             depth: if a fixed depth is required, this arg is set to that value
             father: The father to the next generated node (None for the root node)
         """
-
         def gen_operation(operation_conf: dict, father):
-            return OperationNode(
-                operation=operation_conf['func'],
-                arity=operation_conf['arity'],
-                format_str=operation_conf['format_str'],
-                format_tf=operation_conf.get('format_tf'),
-                father=father
-            )
+            return OperationNode(operation=operation_conf['func'],
+                                 arity=operation_conf['arity'],
+                                 format_str=operation_conf['format_str'],
+                                 format_tf=operation_conf.get('format_tf'),
+                                 father=father)
 
         def gen_feature(feature, father, is_constant):
-            return FeatureNode(
-                feature=feature,
-                father=father,
-                is_constant=is_constant
-            )
+            return FeatureNode(feature=feature,
+                               father=father,
+                               is_constant=is_constant)
 
         if not parsimony:
             parsimony = self.parsimony
         if not parsimony_decay:
             parsimony_decay = self.parsimony_decay
 
-        if (random.random() < parsimony and depth == -1) or (depth > 0):
+        if ((random.random() < parsimony and depth == -1) or (depth > 0)) and not force_constant:
 
             operation = random.choice(self.operations)
             node = gen_operation(operation_conf=operation, father=father)
@@ -366,17 +370,18 @@ class Program:
             if depth == -1:
                 new_depth = -1
             else:
-                new_depth = depth-1
+                new_depth = depth - 1
 
-            for _ in range(node.arity):
+            for i in range(node.arity):
+                if operation == OPERATOR_POW and i == 1:
+                    force_constant = True
                 node.add_operand(
-                    self._generate_tree(
-                        depth=new_depth,
-                        father=node,
-                        parsimony=parsimony*parsimony_decay,
-                        parsimony_decay=parsimony_decay
-                    )
-                )
+                    self._generate_tree(depth=new_depth,
+                                        father=node,
+                                        parsimony=parsimony * parsimony_decay,
+                                        parsimony_decay=parsimony_decay,
+                                        force_constant=force_constant))
+            force_constant = False
 
         else:  # Generate a FeatureNode
             ''' The probability to get a feature from the training data is
@@ -384,32 +389,34 @@ class Program:
             Otherwise a constant value will be generated.
             '''
 
-            if random.random() > (1 / len(self.features)):
+            if random.random() > (1 / len(self.features)) and not force_constant:
                 # A Feature from the dataset
 
                 feature = random.choice(self.features)
 
-                node = gen_feature(
-                    feature=feature, father=father, is_constant=False)
+                node = gen_feature(feature=feature,
+                                   father=father,
+                                   is_constant=False)
 
             else:
                 # Generate a constant
 
-                feature = random.uniform(
-                    self.const_range[0], self.const_range[1])
+                feature = random.uniform(self.const_range[0],
+                                         self.const_range[1])
 
                 # Arbitrary rounding of the generated constant
                 feature = round(feature, 2)
 
-                node = gen_feature(
-                    feature=feature, father=father, is_constant=True)
+                node = gen_feature(feature=feature,
+                                   father=father,
+                                   is_constant=True)
 
         return node
 
-    def _select_random_node(self,
-                            root_node: Union[OperationNode, FeatureNode, InvalidNode],
-                            deepness: float = 0.15
-                            ) -> Union[OperationNode, FeatureNode]:
+    def _select_random_node(
+            self,
+            root_node: Union[OperationNode, FeatureNode, InvalidNode],
+            deepness: float = 0.15) -> Union[OperationNode, FeatureNode]:
         """ This method return a random node of a sub-tree starting from root_node.
         """
 
@@ -417,7 +424,6 @@ class Program:
             return random.choice(self.all_operations)
         except IndexError:  # When the root is also a FeatureNode or an InvalidNode
             return None
-
 
     def simplify(self, inplace: bool = False, inject: Union[str, None] = None):
         """ This method allow to simplify the structure of a program using a SymPy backend
@@ -434,23 +440,22 @@ class Program:
 
             """
             try:
-                if isinstance(program, Program) and isinstance(program.program, FeatureNode):
+                if isinstance(program, Program) and isinstance(
+                        program.program, FeatureNode):
                     return program.program
 
                 logging.debug(f'Simplifying program {program}')
 
                 if isinstance(program, Program):
-                    simplified = sympy.simplify(
-                        program.program, rational=True, inverse=True)
+                    simplified = sympy.parse_expr(program.program.render())
                 else:
-                    simplified = sympy.simplify(
-                        program, rational=True, inverse=True)
-                
+                    simplified = sympy.parse_expr(program)
+
                 logging.debug(
                     f'Extracting the program tree from the simplified')
 
-                new_program = extract_operation(
-                    element=simplified, father=None)
+                new_program = extract_operation(element=simplified,
+                                                father=None)
 
                 logging.debug(f'Simplified program {new_program}')
 
@@ -458,7 +463,7 @@ class Program:
 
             except UnboundLocalError:
                 return program.program
-        
+
         if inplace:
             if inject:
                 self.program = simplify_program(inject)
@@ -467,7 +472,7 @@ class Program:
 
         simp = deepcopy(self)
         simp.program = simplify_program(self)
-        
+
         return simp
 
     # GENETIC OPERATIONS
@@ -490,14 +495,12 @@ class Program:
         """
 
         if not other:
-            other = Program(
-                operations=self.operations,
-                features=self.features,
-                const_range=self.const_range,
-                program=self.program,
-                parsimony=self.parsimony,
-                parsimony_decay=self.parsimony_decay
-            )
+            other = Program(operations=self.operations,
+                            features=self.features,
+                            const_range=self.const_range,
+                            program=self.program,
+                            parsimony=self.parsimony,
+                            parsimony_decay=self.parsimony_decay)
             other.init_program()
 
         if self.complexity == 1 or other.complexity == 1:
@@ -507,7 +510,8 @@ class Program:
 
         if not isinstance(other, Program):
             raise TypeError(
-                f'Can cross-over only using another Program object: {type(other)} provided')
+                f'Can cross-over only using another Program object: {type(other)} provided'
+            )
 
         if self.features != other.features:
             raise AttributeError(
@@ -530,8 +534,9 @@ class Program:
         cross_over_point2.father = cross_over_point1.father
 
         if cross_over_point2.father:
-            cross_over_point2.father.operands[cross_over_point2.father.operands.index(
-                cross_over_point1)] = cross_over_point2
+            cross_over_point2.father.operands[
+                cross_over_point2.father.operands.index(
+                    cross_over_point1)] = cross_over_point2
         else:
             offspring = cross_over_point2
 
@@ -572,18 +577,16 @@ class Program:
 
         offspring = deepcopy(self.program)
 
-        mutate_point = self._select_random_node(
-            root_node=offspring, deepness=.3)
+        mutate_point = self._select_random_node(root_node=offspring,
+                                                deepness=.3)
 
         if not mutate_point:
             mutate_point = offspring
 
         try:
             child_to_mutate = random.randrange(mutate_point.arity)
-            mutated = self._generate_tree(
-                father=mutate_point,
-                depth=int(self.program_depth/2)
-            )
+            mutated = self._generate_tree(father=mutate_point,
+                                          depth=int(self.program_depth / 2))
             #logging.debug(f'\n\nMutating this\n\n{mutate_point.operands[child_to_mutate]}\n\nin this\n\n{mutated}\n\n')
 
             mutate_point.operands[child_to_mutate] = mutated
@@ -638,7 +641,7 @@ class Program:
         # Choose a random children to attach the previous mutate_point
         # The new_node is already a tree with depth = 1 so, in case of arity=2
         # operations the other operator is already set.
-        new_node.operands[random.randint(0, new_node.arity-1)] = mutate_point
+        new_node.operands[random.randint(0, new_node.arity - 1)] = mutate_point
         mutate_point.father = new_node
 
         # If the new_node is also the new root, offspring need to be updated.
@@ -713,15 +716,15 @@ class Program:
             inplace: to replace the program in the current object or to return a new one
         """
         offspring = deepcopy(self)
-            
-        leaves = offspring.get_features(return_objects=True) + offspring.get_constants()
+
+        leaves = offspring.get_features(
+            return_objects=True) + offspring.get_constants()
 
         mutate_point = random.choice(leaves)
         mutate_father = mutate_point.father
 
         # depth=0 generate a tree of only one FeatureNode
-        new_feature = offspring._generate_tree(
-            depth=0, father=mutate_father)
+        new_feature = offspring._generate_tree(depth=0, father=mutate_father)
 
         if mutate_father:
             mutate_father.operands[mutate_father.operands.index(
@@ -741,9 +744,12 @@ class Program:
         mutate_point = self._select_random_node(root_node=offspring)
 
         if not mutate_point:  # Only a FeatureNode without any OperationNode
-            new = Program(program=offspring, operations=self.operations,
-                          features=self.features, const_range=self.const_range,
-                          parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
+            new = Program(program=offspring,
+                          operations=self.operations,
+                          features=self.features,
+                          const_range=self.const_range,
+                          parsimony=self.parsimony,
+                          parsimony_decay=self.parsimony_decay)
 
             return new
 
@@ -759,8 +765,11 @@ class Program:
             self.program = offspring
             return self
 
-        new = Program(program=offspring, operations=self.operations,
-                      features=self.features, const_range=self.const_range,
-                      parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
+        new = Program(program=offspring,
+                      operations=self.operations,
+                      features=self.features,
+                      const_range=self.const_range,
+                      parsimony=self.parsimony,
+                      parsimony_decay=self.parsimony_decay)
 
         return new
