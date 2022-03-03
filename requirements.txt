@@ -1,5 +1,6 @@
+astropy
 numpy
 pandas
 sympy
-tensorflow
+tensorflow==2.7.0
 silence_tensorflow
