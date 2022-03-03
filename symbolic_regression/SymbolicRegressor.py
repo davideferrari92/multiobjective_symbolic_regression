@@ -75,11 +75,11 @@ class SymbolicRegressor:
 
         if inplace:
             self.population = list(
-                filter(lambda p: p._is_duplicated == False, self.population)
-            )
+                filter(lambda p: p._is_duplicated == False, self.population))
             return self.population
 
-        return list(filter(lambda p: p._is_duplicated == False, self.population))
+        return list(
+            filter(lambda p: p._is_duplicated == False, self.population))
 
     def drop_invalids(self, inplace: bool = False) -> list:
         """ This program removes invalid programs from the population
@@ -92,42 +92,39 @@ class SymbolicRegressor:
         """
         if inplace:
             self.population = list(
-                filter(lambda p: p.is_valid == True, self.population)
-            )
+                filter(lambda p: p.is_valid == True, self.population))
             return self.population
 
         return list(filter(lambda p: p.is_valid == True, self.population))
 
-    def fit(
-        self,
-        data: Union[dict, pd.Series, pd.DataFrame],
-        features: list,
-        fitness_functions: dict,
-        generations: int,
-        genetic_operators_frequency: dict,
-        operations: list,
-        n_jobs: int = -1,
-        stop_at_convergence: bool = True,
-        verbose: int = 0
-    ):
+    def fit(self,
+            data: Union[dict, pd.Series, pd.DataFrame],
+            features: list,
+            fitness_functions: dict,
+            generations: int,
+            genetic_operators_frequency: dict,
+            operations: list,
+            n_jobs: int = -1,
+            stop_at_convergence: bool = True,
+            verbose: int = 0):
         """This method support a KeyboardInterruption of the fit process
 
         This allow to interrupt the training at any point without losing
         the progress made.
         """
+        if not self.generation:
+            self.generation = 0
         start = time.perf_counter()
         try:
-            self._fit(
-                data=data,
-                features=features,
-                fitness_functions=fitness_functions,
-                generations=generations,
-                genetic_operators_frequency=genetic_operators_frequency,
-                operations=operations,
-                n_jobs=n_jobs,
-                stop_at_convergence=stop_at_convergence,
-                verbose=verbose
-            )
+            self._fit(data=data,
+                      features=features,
+                      fitness_functions=fitness_functions,
+                      generations=generations,
+                      genetic_operators_frequency=genetic_operators_frequency,
+                      operations=operations,
+                      n_jobs=n_jobs,
+                      stop_at_convergence=stop_at_convergence,
+                      verbose=verbose)
         except KeyboardInterrupt:
             self.generation -= 1  # The increment is applied even if the generation is interrupted
             stop = time.perf_counter()
@@ -138,24 +135,23 @@ class SymbolicRegressor:
         stop = time.perf_counter()
         self.training_duration = stop - start
 
-    def _fit(
-        self,
-        data: Union[dict, pd.Series, pd.DataFrame],
-        features: list,
-        fitness_functions: dict,
-        generations: int,
-        genetic_operators_frequency: dict,
-        operations: list,
-        n_jobs: int = -1,
-        stop_at_convergence: bool = True,
-        verbose: int = 0
-    ) -> list:
+    def _fit(self,
+             data: Union[dict, pd.Series, pd.DataFrame],
+             features: list,
+             fitness_functions: dict,
+             generations: int,
+             genetic_operators_frequency: dict,
+             operations: list,
+             n_jobs: int = -1,
+             stop_at_convergence: bool = True,
+             verbose: int = 0) -> list:
 
         if not self.population:
             logging.info(f"Initializing population")
             self.status = "Generating population"
-            self.population = Parallel(n_jobs=n_jobs, backend=backend_parallel)(
-                delayed(generate_population)(
+            self.population = Parallel(
+                n_jobs=n_jobs,
+                backend=backend_parallel)(delayed(generate_population)(
                     data=data,
                     features=features,
                     const_range=self.const_range,
@@ -163,15 +159,10 @@ class SymbolicRegressor:
                     fitness=fitness_functions,
                     parsimony=self.parsimony,
                     parsimony_decay=self.parsimony_decay,
-                )
-                for _ in range(self.population_size)
-            )
+                ) for _ in range(self.population_size))
         else:
             logging.info("Fitting with existing population")
-
-        if not self.generation:
-            self.generation = 0
-
+            
         elapsed_time = 0
         while True:
             self.generation += 1
@@ -179,8 +170,12 @@ class SymbolicRegressor:
             start_time_generation = time.perf_counter()
             converged_time = None
 
-            print("#################################################################")
-            print("#################################################################")
+            print(
+                "#################################################################"
+            )
+            print(
+                "#################################################################"
+            )
 
             print(f"Generation {self.generation}/{generations}")
 
@@ -194,21 +189,17 @@ class SymbolicRegressor:
             else:
                 m_workers = os.cpu_count()
 
-            executor = concurrent.futures.ThreadPoolExecutor()  # Or ProcessPoolExecutor
+            executor = concurrent.futures.ThreadPoolExecutor(
+            )  # Or ProcessPoolExecutor
             futures = []
-            with concurrent.futures.ProcessPoolExecutor(max_workers=m_workers) as executor:
+            with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=m_workers) as executor:
                 for _ in range(self.population_size):
                     futures.append(
-                        executor.submit(
-                            get_offspring,
-                            self.population,
-                            data,
-                            fitness_functions,
-                            self.generation,
-                            self.tournament_size,
-                            genetic_operators_frequency
-                        )
-                    )
+                        executor.submit(get_offspring, self.population, data,
+                                        fitness_functions, self.generation,
+                                        self.tournament_size,
+                                        genetic_operators_frequency))
 
                 result = concurrent.futures.wait(futures, timeout=120)
                 offsprings = [r.result(timeout=120) for r in result.done]
@@ -235,7 +226,7 @@ class SymbolicRegressor:
                 )
 
             # Integrate population in case of too many invalid programs
-            if len(self.population) < self.population_size*2:
+            if len(self.population) < self.population_size * 2:
                 self.status = "Refilling population"
                 missing_elements = 2*self.population_size - \
                     len(self.population)
@@ -245,9 +236,8 @@ class SymbolicRegressor:
                 )
 
                 self.population += Parallel(
-                    n_jobs=n_jobs, batch_size=28, backend=backend_parallel
-                )(
-                    delayed(generate_population)(
+                    n_jobs=n_jobs, batch_size=28,
+                    backend=backend_parallel)(delayed(generate_population)(
                         data=data,
                         features=features,
                         const_range=self.const_range,
@@ -255,9 +245,7 @@ class SymbolicRegressor:
                         fitness=fitness_functions,
                         parsimony=self.parsimony,
                         parsimony_decay=self.parsimony_decay,
-                    )
-                    for _ in range(missing_elements)
-                )
+                    ) for _ in range(missing_elements))
 
             logging.debug(f"Creating pareto front")
             self.status = "Creating pareto front"
@@ -267,10 +255,10 @@ class SymbolicRegressor:
             self.status = "Creating crowding distance"
             crowding_distance(self.population)
 
-            self.population.sort(
-                key=lambda p: p.crowding_distance, reverse=True)
+            self.population.sort(key=lambda p: p.crowding_distance,
+                                 reverse=True)
             self.population.sort(key=lambda p: p.rank, reverse=False)
-            self.population = self.population[: self.population_size]
+            self.population = self.population[:self.population_size]
 
             self.best_program = self.population[0]
             self.best_programs_history.append(self.best_program)
@@ -284,18 +272,26 @@ class SymbolicRegressor:
                     f"Population of {len(self.population)} elements and average complexity of {self.average_complexity}\n"
                 )
                 print(
-                    f"\tBest individual (complexity {self.population[0].complexity})\n\t{self.best_program.program}"
+                    f"\tBest individual(s) in the first Pareto Front"
                 )
-                print()
-                print(f"\twith fitness\n1)\t{self.population[0].fitness}")
-                print()
+                first_p_printed = 0
+                for p in self.population:
+                    if p.rank != 1:
+                        break
+                    print(f'{first_p_printed})\t{p.program}')
+                    print()
+                    print(f'\t{p.fitness}')
+                    print()
+                    first_p_printed += 1
+
+                
             if verbose > 1:
                 try:
-                    print(f"Following best fitness")
-                    print(f"2)\t{self.population[1].fitness}")
-                    print(f"3)\t{self.population[2].fitness}")
-                    print(f"4)\t{self.population[3].fitness}")
-                    print(f"5)\t{self.population[4].fitness}")
+                    print(f"Following 5 best fitness")
+                    print(f"{first_p_printed})\t{self.population[first_p_printed+1].fitness}")
+                    print(f"{first_p_printed})\t{self.population[first_p_printed+2].fitness}")
+                    print(f"{first_p_printed})\t{self.population[first_p_printed+3].fitness}")
+                    print(f"{first_p_printed})\t{self.population[first_p_printed+4].fitness}")
                     print('...\t...\n')
 
                 except IndexError:
@@ -328,10 +324,10 @@ class SymbolicRegressor:
                 self.status = "Terminated: generations completed"
                 return
 
-            elapsed_time += end_time_generation-start_time_generation
+            elapsed_time += end_time_generation - start_time_generation
 
             if self.generation > 1:
-                seconds_iter = round(elapsed_time/(self.generation), 1)
+                seconds_iter = round(elapsed_time / (self.generation), 1)
                 print(f"{elapsed_time} sec, {seconds_iter} sec/generation")
             else:
                 print(f"{elapsed_time} sec")
@@ -357,6 +353,7 @@ class SymbolicRegressor:
             row['index'] = index + 1
             row['program'] = p.program
             row['complexity'] = p.complexity
+            row['rank'] = p.rank
 
             for f_k, f_v in p.fitness.items():
                 row[f_k] = f_v
@@ -374,10 +371,11 @@ class SymbolicRegressor:
             row['generation'] = index + 1
             row['program'] = p.program
             row['complexity'] = p.complexity
+            row['rank'] = p.rank
 
             for f_k, f_v in p.fitness.items():
                 row[f_k] = f_v
 
             istances.append(row)
-        istances.reverse()
+
         return pd.DataFrame(istances)
