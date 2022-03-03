@@ -33,7 +33,6 @@ def _protected_inverse(x1):
     with np.errstate(divide='ignore', invalid='ignore'):
         return np.where(np.abs(x1) > 0.001, 1. / x1, 0.)
 
-
 def _protected_pow(x1, x2):
     """Closure of pow for zero arguments."""
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -42,6 +41,8 @@ def _protected_pow(x1, x2):
         except OverflowError:
             return 0.
         except ValueError:  # The math domain error
+            return 0.
+        except RuntimeWarning:
             return 0.
 
 
@@ -131,14 +132,14 @@ OPERATOR_MAX = {
     "func": max,
     "format_tf": 'tf.maximum({}, {})',
     "arity": 2,
-    "format_str": "max({}, {})"
+    "format_str": "Max({}, {})"
 }
 
 OPERATOR_MIN = {
     "func": min,
     "format_tf": 'tf.minimum({}, {})',
     "arity": 2,
-    "format_str": "min({}, {})"
+    "format_str": "Min({}, {})"
 }
 
 OPERATOR_SIGMOID = {
