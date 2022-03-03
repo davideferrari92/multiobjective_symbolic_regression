@@ -165,6 +165,14 @@ class Program:
         """
         return self.program.is_valid() and self._override_is_valid
 
+    def to_mathematica(self) -> str:
+        """ This allow to print the program in Mathematica format
+
+        Returns:
+            A string representing the program in Mathematica format
+        """
+        return sympy.printing.mathematica.mathematica_code(self.program)
+
     def get_constants(self):
         """ This method allow to get all constants used in a tree.
 
@@ -446,11 +454,14 @@ class Program:
 
                 logging.debug(f'Simplifying program {program}')
 
-                if isinstance(program, Program):
-                    simplified = sympy.parse_expr(program.program.render())
-                else:
-                    simplified = sympy.parse_expr(program)
-
+                try:
+                    if isinstance(program, Program):
+                        simplified = sympy.parse_expr(program.program.render())
+                    else:
+                        simplified = sympy.parse_expr(program)
+                except ValueError:
+                    program._override_is_valid = False
+                    return program.program
                 logging.debug(
                     f'Extracting the program tree from the simplified')
 
