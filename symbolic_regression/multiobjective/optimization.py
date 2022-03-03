@@ -1,4 +1,5 @@
 from typing import Union
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ from tensorflow.keras.layers import Input, Layer
 from symbolic_regression.multiobjective.utils import to_logistic
 
 silence_tensorflow()
-
+warnings.filterwarnings("ignore")
 
 def optimize(program: Program,
              data: Union[dict, pd.Series, pd.DataFrame, None],
@@ -44,7 +45,7 @@ def optimize(program: Program,
     '''
     if not isinstance(program.program,
                       FeatureNode) and n_constants > 0 and n_features_used > 0:
-        if constants_optimization_method == 'SDG':
+        if constants_optimization_method == 'SGD':
             f_opt = SGD
             prog = program
         if constants_optimization_method == 'ADAM':
@@ -52,7 +53,7 @@ def optimize(program: Program,
             prog = program
         if constants_optimization_method == 'NN':
             f_opt = NN
-            if task=='binary:logistic':
+            if task == 'binary:logistic':
                 prog = to_logistic(program=program)
 
         final_parameters, _, _ = f_opt(
@@ -65,7 +66,7 @@ def optimize(program: Program,
         )
         if len(final_parameters) > 0:
             prog.set_constants(new=final_parameters)
-            
+
         if constants_optimization_method == 'NN':
             program.program = prog.program.operands[0]
             program.program.father = None
@@ -110,7 +111,7 @@ class NNOptimizer(Layer):
         - weights are initially uniformly sampled in the range [const_range_min,const_range_max]
         - weights are set as trainable
         '''
-        constants_init=to_NN_weights_init(self.constants_list)
+        constants_init = to_NN_weights_init(self.constants_list)
         self.constants = self.add_weight(name="constants", shape=(self.units, self.n_constants), dtype='float32',
                                          regularizer=None, initializer=constants_init, trainable=True)
 
@@ -239,7 +240,7 @@ def SGD(program: Program,
         pyf_prog = lambdify([x_sym, c_sym], p_sym)
     except KeyError:  # When the function doesn't have sense
         return [], [], []
-    
+
     # Define batches
     n_batches = int(X_data.shape[0] / batch_size)
     X_batch = np.array_split(X_data, n_batches, 0)
@@ -253,12 +254,13 @@ def SGD(program: Program,
 
     for _ in range(epochs):
         for i in range(n_batches):
+            split_X_batch = np.split(X_batch[i], n_features, 1)
+            split_c_batch = np.split(
+                constants*np.ones_like(y_batch[i]), n_constants, 1)
 
             # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
-            y_pred = pyf_prog(tuple(np.split(X_batch[i], n_features, 1)),
-                              tuple(constants))
-            num_grad = pyf_grad(tuple(np.split(X_batch[i], n_features, 1)),
-                                tuple(constants))
+            y_pred = pyf_prog(tuple(split_X_batch), tuple(split_c_batch))
+            num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
 
             if task == 'regression:wmse':
                 av_loss = np.nanmean(w_batch[i] * (y_batch[i] - y_pred)**2)
@@ -377,13 +379,14 @@ def ADAM(program: Program,
 
     for _ in range(epochs):
         for i in range(n_batches):
+            split_X_batch = np.split(X_batch[i], n_features, 1)
+            split_c_batch = np.split(
+                constants*np.ones_like(y_batch[i]), n_constants, 1)
 
             # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
-            y_pred = pyf_prog(tuple(np.split(X_batch[i], n_features, 1)),
-                            tuple(constants))
-            num_grad = pyf_grad(tuple(np.split(X_batch[i], n_features, 1)),
-                                tuple(constants))
-            
+            y_pred = pyf_prog(tuple(split_X_batch), tuple(split_c_batch))
+            num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
+
             if task == 'regression:wmse':
                 av_loss = np.nanmean(w_batch[i] * (y_batch[i] - y_pred)**2)
                 av_grad = np.array([
