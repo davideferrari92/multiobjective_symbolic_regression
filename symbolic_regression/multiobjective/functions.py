@@ -33,6 +33,7 @@ def binary_cross_entropy(program: Program,
             constants_optimization_conf=constants_optimization_conf,
             task='binary:logistic')
 
+    
     if logistic:
         prog = to_logistic(program=prog)
 
@@ -61,6 +62,8 @@ def accuracy_bce(program: Program,
                  logistic: bool = True,
                  threshold: float = .5,
                  one_minus: bool = False):
+
+
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -85,6 +88,8 @@ def precision_bce(program: Program,
                   logistic: bool = True,
                   threshold: float = .5,
                   one_minus: bool = False):
+
+
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -108,6 +113,8 @@ def average_precision_score_bce(program: Program,
                                 target: str,
                                 logistic: bool = True,
                                 one_minus: bool = False):
+
+
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -138,6 +145,7 @@ def recall_bce(program: Program,
                logistic: bool = True,
                threshold: float = .5,
                one_minus: bool = False):
+
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -162,6 +170,7 @@ def f1_bce(program: Program,
            logistic: bool = True,
            threshold: float = .5,
            one_minus: bool = False):
+
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -190,6 +199,7 @@ def auroc_bce(program: Program,
     The function returns the AUC and the performance at the optimal
     threshold expressed by means of G-mean value.
     """
+
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -219,6 +229,7 @@ def gmeans(program: Program,
     Best performance at the threshold variation.
     Interpret this as the accuracy with the best threshold
     """
+
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -326,7 +337,9 @@ def value_range(program: Program, data: Union[dict, pd.DataFrame],
 ######################################## ORDERING PRESERVING ########################################
 
 
-def get_cumulant_hist(data, target):
+def get_cumulant_hist(data: pd.DataFrame, target: str):
+    """
+    """
     # TRUE TARGET VALUE
     y_true = np.array(data[target])
     # rescale
@@ -342,11 +355,19 @@ def get_cumulant_hist(data, target):
     return F_y
 
 
-def wasserstein(data, features, program, F_y):
+def wasserstein(program: Program, data: pd.DataFrame, F_y: np.array):
+    """
+    """
+
     # PROGRAM PREDICTION
     # rescale
-    y_pred = np.array(program.evaluate(data[features]))
-    dy = 1./(F_y.shape[0])
+    features = program.features
+    try:
+        y_pred = np.array(program.evaluate(data[features]))
+    except KeyError:
+        return np.inf
+    # we add -1 so that wasserstein distance belongs to [0,1]
+    dy = 1./(F_y.shape[0]-1)
     # rescale between [0,1]
     try:
         rescaled_y_pred = (y_pred-np.min(y_pred)) / \
@@ -373,6 +394,8 @@ def ordering(program: Program,
         print(f'Only support inversions or error. Default is error')
         method = 'error'
 
+    if not program.is_valid:
+        return np.inf
     data_ord = data.copy(deep=True)
     data_ord['pred'] = program.evaluate(data=data_ord)
 
@@ -388,7 +411,7 @@ def ordering(program: Program,
         error += (abs(mask)).sum()
 
     if method == 'error':
-        return error / math.factorial(data.shape[0] - 1)
+        return error
 
     if method == 'inversions':
         return inversions

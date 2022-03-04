@@ -47,14 +47,14 @@ def optimize(program: Program,
                       FeatureNode) and n_constants > 0 and n_features_used > 0:
         if constants_optimization_method == 'SGD':
             f_opt = SGD
-            prog = program
+            prog = program.simplify(inplace=True)
         if constants_optimization_method == 'ADAM':
             f_opt = ADAM
-            prog = program
+            prog = program.simplify(inplace=True)
         if constants_optimization_method == 'NN':
             f_opt = NN
             if task == 'binary:logistic':
-                prog = to_logistic(program=program)
+                prog = to_logistic(program=program.simplify(inplace=True))
 
         final_parameters, _, _ = f_opt(
             program=prog,

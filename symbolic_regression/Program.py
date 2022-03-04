@@ -243,9 +243,11 @@ class Program:
         self.fitness = dict()
         self.is_fitness_to_minimize = dict()
 
+        self.simplify(inplace=True)
+
         if not self.is_valid:
             return None
-
+        
         evaluated = fitness(program=self, data=data)
 
         _converged = []
