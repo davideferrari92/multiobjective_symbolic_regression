@@ -54,6 +54,7 @@ class SymbolicRegressor:
         self.parsimony = parsimony
         self.parsimony_decay = parsimony_decay
         self.tournament_size = tournament_size
+        self.elapsed_time = 0
 
         # Population characteristics
         self.average_complexity = None
@@ -163,7 +164,6 @@ class SymbolicRegressor:
         else:
             logging.info("Fitting with existing population")
             
-        elapsed_time = 0
         while True:
             self.generation += 1
 
@@ -324,13 +324,13 @@ class SymbolicRegressor:
                 self.status = "Terminated: generations completed"
                 return
 
-            elapsed_time += end_time_generation - start_time_generation
+            self.elapsed_time += end_time_generation - start_time_generation
 
             if self.generation > 1:
-                seconds_iter = round(elapsed_time / (self.generation), 1)
-                print(f"{elapsed_time} sec, {seconds_iter} sec/generation")
+                seconds_iter = round(self.elapsed_time / (self.generation), 1)
+                print(f"{self.elapsed_time} sec, {seconds_iter} sec/generation")
             else:
-                print(f"{elapsed_time} sec")
+                print(f"{self.elapsed_time} sec")
 
     def save_model(self, file: str):
         import pickle
