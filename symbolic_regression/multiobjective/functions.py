@@ -384,6 +384,12 @@ def wasserstein(program: Program, data: pd.DataFrame, F_y: np.array):
     wasserstein_d = dy*np.sum(np.abs(F_y_pred-F_y))
     return wasserstein_d
 
+def average_wasserstein(program: Program, data: pd.DataFrame, F_ys: list):
+    
+    wasserstein_list=[]
+    for F_y in F_ys:
+        wasserstein_list.append(wasserstein(program, data, F_y))
+    return sum(wasserstein_list) / len(wasserstein_list)
 
 def ordering(program: Program,
              data: pd.DataFrame,
@@ -416,6 +422,12 @@ def ordering(program: Program,
     if method == 'inversions':
         return inversions
 
+def average_order(program: Program, data: pd.DataFrame, targets: list, method: str = 'abs_val'):
+
+    order_list=[]
+    for target in targets:
+        order_list.append(ordering_preserving(program, data, target, method))
+    return sum(order_list) / len(order_list)
 
 def ordering_preserving(program: Program,
                         data: pd.DataFrame,
