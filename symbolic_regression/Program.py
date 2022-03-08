@@ -243,7 +243,10 @@ class Program:
         self.fitness = dict()
         self.is_fitness_to_minimize = dict()
 
-        self.simplify(inplace=True)
+        try:
+            self.simplify(inplace=True)
+        except ValueError:
+            self._override_is_valid = False
 
         if not self.is_valid:
             return None
@@ -462,6 +465,9 @@ class Program:
                     else:
                         simplified = sympy.parse_expr(program)
                 except ValueError:
+                    program._override_is_valid = False
+                    return program.program
+                except TypeError:
                     program._override_is_valid = False
                     return program.program
                 logging.debug(
