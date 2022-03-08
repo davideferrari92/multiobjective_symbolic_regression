@@ -163,21 +163,18 @@ class SymbolicRegressor:
                 ) for _ in range(self.population_size))
         else:
             logging.info("Fitting with existing population")
-            
+
         while True:
             self.generation += 1
 
             start_time_generation = time.perf_counter()
             converged_time = None
 
-            print(
-                "#################################################################"
-            )
-            print(
-                "#################################################################"
-            )
-
-            print(f"Generation {self.generation}/{generations}")
+            if verbose > 0:
+                print("############################################################")
+                print(f"Generation {self.generation}/{generations}")
+            else:
+                print(f"Generation {self.generation}/{generations}", end='\r')
 
             logging.debug(f"Generating offspring")
             self.status = "Generating offspring"
@@ -266,7 +263,7 @@ class SymbolicRegressor:
             self.average_complexity = np.mean(
                 [p.complexity for p in self.population])
 
-            if verbose > 0:
+            if verbose > 1:
                 print()
                 print(
                     f"Population of {len(self.population)} elements and average complexity of {self.average_complexity}\n"
@@ -284,14 +281,17 @@ class SymbolicRegressor:
                     print()
                     first_p_printed += 1
 
-                
-            if verbose > 1:
+            if verbose > 2:
                 try:
                     print(f"Following 5 best fitness")
-                    print(f"{first_p_printed})\t{self.population[first_p_printed+1].fitness}")
-                    print(f"{first_p_printed})\t{self.population[first_p_printed+2].fitness}")
-                    print(f"{first_p_printed})\t{self.population[first_p_printed+3].fitness}")
-                    print(f"{first_p_printed})\t{self.population[first_p_printed+4].fitness}")
+                    print(
+                        f"{first_p_printed})\t{self.population[first_p_printed+1].fitness}")
+                    print(
+                        f"{first_p_printed})\t{self.population[first_p_printed+2].fitness}")
+                    print(
+                        f"{first_p_printed})\t{self.population[first_p_printed+3].fitness}")
+                    print(
+                        f"{first_p_printed})\t{self.population[first_p_printed+4].fitness}")
                     print('...\t...\n')
 
                 except IndexError:
@@ -310,7 +310,7 @@ class SymbolicRegressor:
                     self.status = "Terminated: converged"
                     return
 
-            if self.checkpoint_file and self.checkpoint_frequency > 0 and self.checkpoint_frequency == self.generation:
+            if self.checkpoint_file and self.checkpoint_frequency > 0 and self.generation % self.checkpoint_frequency == 0:
                 try:
                     self.save_model(file=self.checkpoint_file)
                 except FileNotFoundError:
@@ -326,11 +326,13 @@ class SymbolicRegressor:
 
             self.elapsed_time += end_time_generation - start_time_generation
 
-            if self.generation > 1:
-                seconds_iter = round(self.elapsed_time / (self.generation), 1)
-                print(f"{self.elapsed_time} sec, {seconds_iter} sec/generation")
-            else:
-                print(f"{self.elapsed_time} sec")
+            if verbose > 0:
+                if self.generation > 1:
+                    seconds_iter = round(
+                        self.elapsed_time / (self.generation), 1)
+                    print(f"{self.elapsed_time} sec, {seconds_iter} sec/generation")
+                else:
+                    print(f"{self.elapsed_time} sec")
 
     def save_model(self, file: str):
         import pickle
