@@ -55,7 +55,9 @@ def optimize(program: Program,
             f_opt = NN
             if task == 'binary:logistic':
                 prog = to_logistic(program=program.simplify(inplace=True))
-
+            elif task == 'regression:wmse':
+                prog = program.simplify(inplace=True)
+        
         final_parameters, _, _ = f_opt(
             program=prog,
             data=data,
@@ -67,9 +69,11 @@ def optimize(program: Program,
         if len(final_parameters) > 0:
             prog.set_constants(new=final_parameters)
 
-        if constants_optimization_method == 'NN':
+        if constants_optimization_method == 'NN' and task == 'binary:logistic':
             program.program = prog.program.operands[0]
             program.program.father = None
+        else:
+            program.program = prog.program
 
     return program
 
@@ -263,9 +267,9 @@ def SGD(program: Program,
             num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
 
             if task == 'regression:wmse':
-                av_loss = np.nanmean(w_batch[i] * (y_batch[i] - y_pred)**2)
+                av_loss = np.nanmean(w_batch[i] * (y_pred - y_batch[i])**2)
                 av_grad = np.array([
-                    np.nanmean(2. * w_batch[i] * (y_batch[i] - y_pred) * g)
+                    np.nanmean(2. * w_batch[i] * (y_pred - y_batch[i]) * g)
                     for g in num_grad
                 ])
 
@@ -388,9 +392,9 @@ def ADAM(program: Program,
             num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
 
             if task == 'regression:wmse':
-                av_loss = np.nanmean(w_batch[i] * (y_batch[i] - y_pred)**2)
+                av_loss = np.nanmean(w_batch[i] * (y_pred - y_batch[i])**2)
                 av_grad = np.array([
-                    np.nanmean(2 * w_batch[i] * (y_batch[i] - y_pred) * g)
+                    np.nanmean(2 * w_batch[i] * (y_pred - y_batch[i]) * g)
                     for g in num_grad
                 ])
 

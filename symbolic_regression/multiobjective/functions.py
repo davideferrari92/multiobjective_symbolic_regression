@@ -1,4 +1,3 @@
-import math
 from typing import Union
 
 from astropy import stats
@@ -268,6 +267,7 @@ def wmse(program: Program,
          target: str,
          weights: str = None,
          constants_optimization: bool = False,
+         constants_optimization_method: str = None,
          constants_optimization_conf: dict = {}) -> float:
     """ Evaluates the weighted mean squared error
     """
@@ -278,17 +278,21 @@ def wmse(program: Program,
             data=data,
             target=target,
             weights=weights,
+            constants_optimization_method=constants_optimization_method,
             constants_optimization_conf=constants_optimization_conf,
             task='regression:wmse')
         program.program = optimized.program
 
     pred = optimized.evaluate(data=data)
 
-    if weights:
-        wmse = (((pred - data[target])**2) * data[weights]).mean()
-    else:
-        wmse = (((pred - data[target])**2)).mean()
-    return wmse
+    try:
+        if weights:
+            wmse = (((pred - data[target])**2) * data[weights]).mean()
+        else:
+            wmse = (((pred - data[target])**2)).mean()
+        return wmse 
+    except TypeError:
+        return np.inf
 
 
 def not_constant(program: Program,
@@ -459,7 +463,10 @@ def ordering_preserving(program: Program,
     data_ord['pred'] = program.evaluate(data=data_ord)
 
     # The number of inversions to match target ordering
-    argsort_pred = len(data_ord) - 1 - np.argsort(data_ord['pred'].to_numpy())
+    try:
+        argsort_pred = len(data_ord) - 1 - np.argsort(data_ord['pred'].to_numpy())
+    except TypeError:
+        return np.inf
 
     if method in ['inversions', 'inversions_and_error', 'error']:
         from symbolic_regression.multiobjective.utils import \
