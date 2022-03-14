@@ -12,10 +12,9 @@ from sympy.utilities.lambdify import lambdify
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Input, Layer
 
-from symbolic_regression.multiobjective.utils import to_logistic
-
 silence_tensorflow()
 warnings.filterwarnings("ignore")
+
 
 def optimize(program: Program,
              data: Union[dict, pd.Series, pd.DataFrame, None],
@@ -26,12 +25,11 @@ def optimize(program: Program,
              task: str = 'regression:wmse'):
     """
     """
-    if task not in ['regression:wmse', 'binary:logistic']:
+    if task not in ['regression:wmse', 'regression:wrrmse', 'binary:logistic']:
         raise AttributeError(
-            f'Task supported are regression:wmse or binary:logistic')
+            f'Task supported are regression:wmse, regression:wrrmse or binary:logistic')
 
     n_constants = len(program.get_constants())
-    n_features = len(program.features)
     n_features_used = len(program.features_used)
     '''
     not isinstance(program.program, FeatureNode)
@@ -45,21 +43,27 @@ def optimize(program: Program,
     '''
     if not isinstance(program.program,
                       FeatureNode) and n_constants > 0 and n_features_used > 0:
+
         if constants_optimization_method == 'SGD':
             f_opt = SGD
-            prog = program.simplify(inplace=True)
+            program.to_affine(data=data, target=target, inplace=True)
+
         if constants_optimization_method == 'ADAM':
             f_opt = ADAM
-            prog = program.simplify(inplace=True)
+            program.to_affine(data=data, target=target, inplace=True)
+
         if constants_optimization_method == 'NN':
             f_opt = NN
             if task == 'binary:logistic':
-                prog = to_logistic(program=program.simplify(inplace=True))
+                program.to_logistic(inplace=True)
+
             elif task == 'regression:wmse':
-                prog = program.simplify(inplace=True)
-        
+                program.to_affine(data=data, target=target, inplace=True)
+
+        program.simplify(inplace=True)
+
         final_parameters, _, _ = f_opt(
-            program=prog,
+            program=program,
             data=data,
             target=target,
             weights=weights,
@@ -67,13 +71,12 @@ def optimize(program: Program,
             task=task
         )
         if len(final_parameters) > 0:
-            prog.set_constants(new=final_parameters)
+            program.set_constants(new=final_parameters)
 
         if constants_optimization_method == 'NN' and task == 'binary:logistic':
-            program.program = prog.program.operands[0]
+            program.program = program.program.operands[0]
             program.program.father = None
-        else:
-            program.program = prog.program
+            program.is_logistic = False
 
     return program
 
@@ -272,6 +275,14 @@ def SGD(program: Program,
                     np.nanmean(2. * w_batch[i] * (y_pred - y_batch[i]) * g)
                     for g in num_grad
                 ])
+            elif task == 'regression:wrrmse':
+                y_av = np.mean(y_batch[i]*w_batch[i])+1e-20
+
+                sq_term = np.sqrt(np.nanmean(
+                    w_batch[i] * (y_pred - y_batch[i])**2))
+                av_loss = sq_term*100./y_av
+                av_grad = np.array(
+                    [100./(y_av*sq_term) * np.nanmean(w_batch[i] * (y_pred - y_batch[i]) * g) for g in num_grad])
 
             elif task == 'binary:logistic':
                 # compute average loss
@@ -397,6 +408,15 @@ def ADAM(program: Program,
                     np.nanmean(2 * w_batch[i] * (y_pred - y_batch[i]) * g)
                     for g in num_grad
                 ])
+
+            elif task == 'regression:wrrmse':
+                y_av = np.mean(y_batch[i]*w_batch[i])+1e-20
+
+                sq_term = np.sqrt(np.nanmean(
+                    w_batch[i] * (y_pred - y_batch[i])**2))
+                av_loss = sq_term*100./y_av
+                av_grad = np.array(
+                    [100./(y_av*sq_term) * np.nanmean(w_batch[i] * (y_pred - y_batch[i]) * g) for g in num_grad])
 
             elif task == 'binary:logistic':
                 # compute average loss

@@ -32,7 +32,6 @@ def binary_cross_entropy(program: Program,
             constants_optimization_conf=constants_optimization_conf,
             task='binary:logistic')
 
-    
     if logistic:
         prog = to_logistic(program=prog)
 
@@ -62,7 +61,6 @@ def accuracy_bce(program: Program,
                  threshold: float = .5,
                  one_minus: bool = False):
 
-
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -88,7 +86,6 @@ def precision_bce(program: Program,
                   threshold: float = .5,
                   one_minus: bool = False):
 
-
     if logistic:
         prog = to_logistic(program=program)
     else:
@@ -112,7 +109,6 @@ def average_precision_score_bce(program: Program,
                                 target: str,
                                 logistic: bool = True,
                                 one_minus: bool = False):
-
 
     if logistic:
         prog = to_logistic(program=program)
@@ -290,7 +286,43 @@ def wmse(program: Program,
             wmse = (((pred - data[target])**2) * data[weights]).mean()
         else:
             wmse = (((pred - data[target])**2)).mean()
-        return wmse 
+        return wmse
+    except TypeError:
+        return np.inf
+
+
+def wrrmse(program: Program,
+           data: Union[pd.DataFrame, pd.Series],
+           target: str,
+           weights: str = None,
+           constants_optimization: bool = False,
+           constants_optimization_method: str = None,
+           constants_optimization_conf: dict = {}) -> float:
+    """ Evaluates the weighted relative root mean squared error
+    """
+
+    if constants_optimization:
+        optimized = optimize(
+            program=program,
+            data=data,
+            target=target,
+            weights=weights,
+            constants_optimization_method=constants_optimization_method,
+            constants_optimization_conf=constants_optimization_conf,
+            task='regression:wrrmse')
+        program.program = optimized.program
+
+    pred = optimized.evaluate(data=data)
+
+    try:
+        if weights:
+            y_av = 1e-20+(data[target] * data[weights]).mean()
+            wmse = np.sqrt(
+                (((pred - data[target])**2) * data[weights]).mean())*100./y_av
+        else:
+            y_av = 1e-20+(data[target]).mean()
+            wmse = np.sqrt((((pred - data[target])**2)).mean())*100./y_av
+        return wmse
     except TypeError:
         return np.inf
 
@@ -388,17 +420,19 @@ def wasserstein(program: Program, data: pd.DataFrame, F_y: np.array):
     wasserstein_d = dy*np.sum(np.abs(F_y_pred-F_y))
     return wasserstein_d
 
+
 def average_wasserstein(program: Program, data: pd.DataFrame, F_ys: list):
-    
-    wasserstein_list=[]
+
+    wasserstein_list = []
     for F_y in F_ys:
         wasserstein_list.append(wasserstein(program, data, F_y))
     return sum(wasserstein_list) / len(wasserstein_list)
 
+
 def ordering(program: Program,
              data: pd.DataFrame,
              target: str,
-             method: str = 'error') -> float:
+             method: str = 'inversions') -> float:
 
     if method not in ['inversions', 'error']:
         print(f'Only support inversions or error. Default is error')
@@ -426,12 +460,14 @@ def ordering(program: Program,
     if method == 'inversions':
         return inversions
 
+
 def average_order(program: Program, data: pd.DataFrame, targets: list, method: str = 'abs_val'):
 
-    order_list=[]
+    order_list = []
     for target in targets:
         order_list.append(ordering_preserving(program, data, target, method))
     return sum(order_list) / len(order_list)
+
 
 def ordering_preserving(program: Program,
                         data: pd.DataFrame,
@@ -464,7 +500,8 @@ def ordering_preserving(program: Program,
 
     # The number of inversions to match target ordering
     try:
-        argsort_pred = len(data_ord) - 1 - np.argsort(data_ord['pred'].to_numpy())
+        argsort_pred = len(data_ord) - 1 - \
+            np.argsort(data_ord['pred'].to_numpy())
     except TypeError:
         return np.inf
 
