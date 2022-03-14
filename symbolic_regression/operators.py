@@ -148,3 +148,95 @@ OPERATOR_SIGMOID = {
     "arity": 1,
     "format_str": "sigmoid({})"
 }
+
+############################# LOGIC OPERATORS
+
+def _logic_and(x1, x2):
+    return x1 and x2
+
+OPERATOR_LOGIC_AND = {
+    "func": _logic_and,
+    "format_tf": 'tf.math.logical_and({}, {})',
+    "arity": 2,
+    "format_str": "and({}, {})"
+}
+
+def _logic_or(x1, x2):
+    return x1 or x2
+
+OPERATOR_LOGIC_OR = {
+    "func": _logic_or,
+    "format_tf": 'tf.math.logical_or({}, {})',
+    "arity": 2,
+    "format_str": "or({}, {})"
+}
+
+def _logic_xor(x1):
+    return not x1
+
+OPERATOR_LOGIC_XOR = {
+    "func": _logic_xor,
+    "format_tf": 'tf.math.logical_xor({}, {})',
+    "arity": 2,
+    "format_str": "xor({}, {})"
+}
+
+def _logic_not(x1):
+    return not x1
+
+OPERATOR_LOGIC_NOT = {
+    "func": _logic_not,
+    "format_tf": 'tf.math.logical_not({})',
+    "arity": 1,
+    "format_str": "not({})"
+}
+
+def _equal(x1, x2):
+    return x1 == x2
+
+OPERATOR_GREATER_EQUAL_THAN = {
+    "func": _equal,
+    "format_tf": 'tf.Equal({}, {})',
+    "arity": 2,
+    "format_str": "equal({}, {})"
+}
+
+def _less_than(x1, x2):
+    return x1 < x2
+
+OPERATOR_LESS_THAN = {
+    "func": _less_than,
+    "format_tf": 'tf.Less({}, {})',
+    "arity": 2,
+    "format_str": "less({}, {})"
+}
+
+def _less_equal_than(x1, x2):
+    return x1 <= x2
+
+OPERATOR_LESS_EQUAL_THAN = {
+    "func": _less_equal_than,
+    "format_tf": 'tf.LessEqual({}, {})',
+    "arity": 2,
+    "format_str": "lessEqual({}, {})"
+}
+
+def _greater_than(x1, x2):
+    return x1 <= x2
+
+OPERATOR_GREATER_THAN = {
+    "func": _greater_than,
+    "format_tf": 'tf.Greater({}, {})',
+    "arity": 2,
+    "format_str": "less({}, {})"
+}
+
+def _greater_equal_than(x1, x2):
+    return x1 <= x2
+
+OPERATOR_GREATER_EQUAL_THAN = {
+    "func": _greater_equal_than,
+    "format_tf": 'tf.GreaterEqual({}, {})',
+    "arity": 2,
+    "format_str": "lessEqual({}, {})"
+}
