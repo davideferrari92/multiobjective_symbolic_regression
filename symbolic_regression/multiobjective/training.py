@@ -287,6 +287,9 @@ def get_offspring(population: list, data: pd.DataFrame, fitness: list,
     elif gen_op == 'simplification':
         p_ret = program1.simplify(inplace=False)
 
+    elif gen_op == 'recalibrate':
+        p_ret = program1.recalibrate(inplace=False)
+
     elif gen_op == 'do_nothing':
         p_ret = program1
     else:
