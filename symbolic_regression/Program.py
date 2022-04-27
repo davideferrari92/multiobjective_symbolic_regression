@@ -214,7 +214,8 @@ class Program:
         target_min = data[target].min()
         target_max = data[target].max()
 
-        alpha = target_max + (target_max - target_min) * y_pred_max / (y_pred_min - y_pred_max)
+        alpha = target_max + (target_max - target_min) * \
+            y_pred_max / (y_pred_min - y_pred_max)
         beta = (target_max - target_min) / (y_pred_max - y_pred_min)
 
         add_node = OperationNode(
@@ -262,7 +263,7 @@ class Program:
             prog = self
         else:
             prog = deepcopy(self)
-        
+
         logistic_node.operands.append(prog.program)
         prog.program.father = logistic_node
         prog.program = logistic_node
@@ -323,7 +324,7 @@ class Program:
 
         if not self.is_valid:
             return None
-        
+
         evaluated = fitness(program=self, data=data)
 
         _converged = []
@@ -858,6 +859,32 @@ class Program:
             return self
 
         new = Program(program=offspring,
+                      operations=self.operations,
+                      features=self.features,
+                      const_range=self.const_range,
+                      parsimony=self.parsimony,
+                      parsimony_decay=self.parsimony_decay)
+
+        return new
+
+    def recalibrate(self, inplace: bool = False):
+        """
+        """
+        offspring: Program = deepcopy(self)
+
+        offspring.set_constants(
+            new=list(np.random.uniform(
+                low=self.const_range[0],
+                high=self.const_range[1],
+                size=len(self.get_constants())
+            ))
+        )
+
+        if inplace:
+            self.program = offspring.program
+            return self
+
+        new = Program(program=offspring.program,
                       operations=self.operations,
                       features=self.features,
                       const_range=self.const_range,
