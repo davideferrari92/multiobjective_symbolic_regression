@@ -46,7 +46,7 @@ In this repository, these **Genetic Operations** are implemented: Our list of ge
 TODO
 
 ## Example for using this library
-TODO
+You can find an iPython notebook in the examples folder that shows how this Python library can be used.
 
 # Contacts
 Feel free to get in touch writing to [davide.ferrari@kcl.ac.uk](mailto:davide.ferrari@kcl.ac.uk)
