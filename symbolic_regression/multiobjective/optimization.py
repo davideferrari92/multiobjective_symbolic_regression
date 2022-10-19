@@ -365,8 +365,6 @@ def ADAM(program: Program,
 
     # convert program render into sympy formula (symplify?)
     p_sym = program.program.render(format_diff=True)
-    print(p_sym)
-    print()
 
     # compute program analytic gradients with respect to the constants to be optimized
     grad = []
