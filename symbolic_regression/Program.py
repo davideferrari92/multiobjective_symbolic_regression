@@ -9,7 +9,7 @@ import sympy
 
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
-from symbolic_regression.operators import OPERATOR_POW
+from symbolic_regression.operators import OPERATOR_ADD, OPERATOR_MUL, OPERATOR_POW
 
 
 class Program:
@@ -83,6 +83,9 @@ class Program:
         self.parsimony = parsimony
         self._parsimony_bkp = parsimony
         self.parsimony_decay = parsimony_decay
+
+        self.is_logistic = False
+        self.is_affine = False
 
         if program:
             self.program: Node = program
@@ -165,6 +168,14 @@ class Program:
         """
         return self.program.is_valid() and self._override_is_valid
 
+    def to_mathematica(self) -> str:
+        """ This allow to print the program in Mathematica format
+
+        Returns:
+            A string representing the program in Mathematica format
+        """
+        return sympy.printing.mathematica.mathematica_code(self.program)
+
     def get_constants(self):
         """ This method allow to get all constants used in a tree.
 
@@ -187,6 +198,77 @@ class Program:
             self._set_constants_index(constant=constant, index=index)
 
         return to_return
+
+    def to_affine(self, data: pd.DataFrame, target: str, inplace: bool = False):
+        """ This function create an affine version of the program between the target maximum and minimum
+        """
+        if inplace:
+            prog = self
+        else:
+            prog = deepcopy(self)
+
+        y_pred = prog.evaluate(data=data)
+
+        y_pred_min = min(y_pred)
+        y_pred_max = max(y_pred)
+        target_min = data[target].min()
+        target_max = data[target].max()
+
+        alpha = target_max + (target_max - target_min) * \
+            y_pred_max / (y_pred_min - y_pred_max)
+        beta = (target_max - target_min) / (y_pred_max - y_pred_min)
+
+        add_node = OperationNode(
+            operation=OPERATOR_ADD['func'],
+            arity=OPERATOR_ADD['arity'],
+            format_str=OPERATOR_ADD['format_str'],
+            format_tf=OPERATOR_ADD.get('format_tf'),
+            father=None
+        )
+        add_node.add_operand(FeatureNode(
+            feature=alpha, father=add_node, is_constant=True))
+
+        mul_node = OperationNode(
+            operation=OPERATOR_MUL['func'],
+            arity=OPERATOR_MUL['arity'],
+            format_str=OPERATOR_MUL['format_str'],
+            format_tf=OPERATOR_MUL.get('format_tf'),
+            father=add_node
+        )
+
+        mul_node.add_operand(FeatureNode(
+            feature=beta, father=mul_node, is_constant=True))
+
+        prog.program.father = mul_node
+        mul_node.add_operand(prog.program)
+        add_node.add_operand(mul_node)
+
+        prog.program = add_node
+        prog.is_affine = True
+        return prog
+
+    def to_logistic(self, inplace: bool = False):
+        """
+        """
+        from symbolic_regression.operators import OPERATOR_SIGMOID
+        logistic_node = OperationNode(
+            operation=OPERATOR_SIGMOID['func'],
+            arity=OPERATOR_SIGMOID['arity'],
+            format_str=OPERATOR_SIGMOID['format_str'],
+            format_tf=OPERATOR_SIGMOID.get('format_tf'),
+            father=None
+        )
+        # So the upward pointer of the father is not permanent
+        if inplace:
+            prog = self
+        else:
+            prog = deepcopy(self)
+
+        logistic_node.operands.append(prog.program)
+        prog.program.father = logistic_node
+        prog.program = logistic_node
+        prog.is_logistic = True
+        return prog
 
     def get_features(self, return_objects: bool = False):
         """ This method recursively explore the tree and return a list of unique features used.
@@ -234,6 +316,11 @@ class Program:
         """
         self.fitness = dict()
         self.is_fitness_to_minimize = dict()
+
+        try:
+            self.simplify(inplace=True)
+        except ValueError:
+            self._override_is_valid = False
 
         if not self.is_valid:
             return None
@@ -447,11 +534,17 @@ class Program:
 
                 logging.debug(f'Simplifying program {program}')
 
-                if isinstance(program, Program):
-                    simplified = sympy.parse_expr(program.program.render())
-                else:
-                    simplified = sympy.parse_expr(program)
-
+                try:
+                    if isinstance(program, Program):
+                        simplified = sympy.parse_expr(program.program.render())
+                    else:
+                        simplified = sympy.parse_expr(program)
+                except ValueError:
+                    program._override_is_valid = False
+                    return program.program
+                except TypeError:
+                    program._override_is_valid = False
+                    return program.program
                 logging.debug(
                     f'Extracting the program tree from the simplified')
 
@@ -767,6 +860,32 @@ class Program:
             return self
 
         new = Program(program=offspring,
+                      operations=self.operations,
+                      features=self.features,
+                      const_range=self.const_range,
+                      parsimony=self.parsimony,
+                      parsimony_decay=self.parsimony_decay)
+
+        return new
+
+    def recalibrate(self, inplace: bool = False):
+        """
+        """
+        offspring: Program = deepcopy(self)
+
+        offspring.set_constants(
+            new=list(np.random.uniform(
+                low=self.const_range[0],
+                high=self.const_range[1],
+                size=len(self.get_constants())
+            ))
+        )
+
+        if inplace:
+            self.program = offspring.program
+            return self
+
+        new = Program(program=offspring.program,
                       operations=self.operations,
                       features=self.features,
                       const_range=self.const_range,

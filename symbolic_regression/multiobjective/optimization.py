@@ -1,5 +1,9 @@
 from typing import Union
 import warnings
+<<<<<<< HEAD
+=======
+
+>>>>>>> bbd8446ab5e1a41c46784aeb785bd83e3f660a3b
 import numpy as np
 import pandas as pd
 import sympy as sym
@@ -10,8 +14,6 @@ from symbolic_regression.Program import Program
 from sympy.utilities.lambdify import lambdify
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Input, Layer
-
-from symbolic_regression.multiobjective.utils import to_logistic
 
 silence_tensorflow()
 warnings.filterwarnings("ignore")
@@ -26,12 +28,11 @@ def optimize(program: Program,
              task: str = 'regression:wmse'):
     """
     """
-    if task not in ['regression:wmse', 'binary:logistic']:
+    if task not in ['regression:wmse', 'regression:wrrmse', 'binary:logistic']:
         raise AttributeError(
-            f'Task supported are regression:wmse or binary:logistic')
+            f'Task supported are regression:wmse, regression:wrrmse or binary:logistic')
 
     n_constants = len(program.get_constants())
-    n_features = len(program.features)
     n_features_used = len(program.features_used)
     '''
     not isinstance(program.program, FeatureNode)
@@ -45,19 +46,27 @@ def optimize(program: Program,
     '''
     if not isinstance(program.program,
                       FeatureNode) and n_constants > 0 and n_features_used > 0:
-        if constants_optimization_method == 'SDG':
+
+        if constants_optimization_method == 'SGD':
             f_opt = SGD
-            prog = program
+            program.to_affine(data=data, target=target, inplace=True)
+
         if constants_optimization_method == 'ADAM':
             f_opt = ADAM
-            prog = program
+            program.to_affine(data=data, target=target, inplace=True)
+
         if constants_optimization_method == 'NN':
             f_opt = NN
-            if task=='binary:logistic':
-                prog = to_logistic(program=program)
+            if task == 'binary:logistic':
+                program.to_logistic(inplace=True)
+
+            elif task == 'regression:wmse':
+                program.to_affine(data=data, target=target, inplace=True)
+
+        program.simplify(inplace=True)
 
         final_parameters, _, _ = f_opt(
-            program=prog,
+            program=program,
             data=data,
             target=target,
             weights=weights,
@@ -65,11 +74,12 @@ def optimize(program: Program,
             task=task
         )
         if len(final_parameters) > 0:
-            prog.set_constants(new=final_parameters)
-            
-        if constants_optimization_method == 'NN':
-            program.program = prog.program.operands[0]
+            program.set_constants(new=final_parameters)
+
+        if constants_optimization_method == 'NN' and task == 'binary:logistic':
+            program.program = program.program.operands[0]
             program.program.father = None
+            program.is_logistic = False
 
     return program
 
@@ -111,7 +121,7 @@ class NNOptimizer(Layer):
         - weights are initially uniformly sampled in the range [const_range_min,const_range_max]
         - weights are set as trainable
         '''
-        constants_init=to_NN_weights_init(self.constants_list)
+        constants_init = to_NN_weights_init(self.constants_list)
         self.constants = self.add_weight(name="constants", shape=(self.units, self.n_constants), dtype='float32',
                                          regularizer=None, initializer=constants_init, trainable=True)
 
@@ -240,7 +250,7 @@ def SGD(program: Program,
         pyf_prog = lambdify([x_sym, c_sym], p_sym)
     except KeyError:  # When the function doesn't have sense
         return [], [], []
-    
+
     # Define batches
     n_batches = int(X_data.shape[0] / batch_size)
     X_batch = np.array_split(X_data, n_batches, 0)
@@ -254,19 +264,34 @@ def SGD(program: Program,
 
     for _ in range(epochs):
         for i in range(n_batches):
+            split_X_batch = np.split(X_batch[i], n_features, 1)
+            split_c_batch = np.split(
+                constants*np.ones_like(y_batch[i]), n_constants, 1)
 
             # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
-            y_pred = pyf_prog(tuple(np.split(X_batch[i], n_features, 1)),
-                              tuple(constants))
-            num_grad = pyf_grad(tuple(np.split(X_batch[i], n_features, 1)),
-                                tuple(constants))
+            y_pred = pyf_prog(tuple(split_X_batch), tuple(split_c_batch))
+            num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
 
             if task == 'regression:wmse':
+<<<<<<< HEAD
                 av_loss = np.nanmean(w_batch[i] * (y_pred-y_batch[i])**2)
                 av_grad = np.array([
                     np.nanmean( 2. * w_batch[i]  (y_pred-y_batch[i]) * g)
+=======
+                av_loss = np.nanmean(w_batch[i] * (y_pred - y_batch[i])**2)
+                av_grad = np.array([
+                    np.nanmean(2. * w_batch[i] * (y_pred - y_batch[i]) * g)
+>>>>>>> bbd8446ab5e1a41c46784aeb785bd83e3f660a3b
                     for g in num_grad
                 ])
+            elif task == 'regression:wrrmse':
+                y_av = np.mean(y_batch[i]*w_batch[i])+1e-20
+
+                sq_term = np.sqrt(np.nanmean(
+                    w_batch[i] * (y_pred - y_batch[i])**2))
+                av_loss = sq_term*100./y_av
+                av_grad = np.array(
+                    [100./(y_av*sq_term) * np.nanmean(w_batch[i] * (y_pred - y_batch[i]) * g) for g in num_grad])
 
             elif task == 'binary:logistic':
                 # compute average loss
@@ -380,6 +405,7 @@ def ADAM(program: Program,
 
     for _ in range(epochs):
         for i in range(n_batches):
+<<<<<<< HEAD
             
             # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
             y_pred = pyf_prog(tuple(np.split(X_batch[i], n_features, 1)), tuple(constants))
@@ -389,8 +415,31 @@ def ADAM(program: Program,
                 av_loss = np.nanmean(w_batch[i] * (y_pred-y_batch[i])**2)
                 av_grad = np.array([
                     np.nanmean( 2. * w_batch[i]  (y_pred-y_batch[i]) * g)
+=======
+            split_X_batch = np.split(X_batch[i], n_features, 1)
+            split_c_batch = np.split(
+                constants*np.ones_like(y_batch[i]), n_constants, 1)
+
+            # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
+            y_pred = pyf_prog(tuple(split_X_batch), tuple(split_c_batch))
+            num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
+
+            if task == 'regression:wmse':
+                av_loss = np.nanmean(w_batch[i] * (y_pred - y_batch[i])**2)
+                av_grad = np.array([
+                    np.nanmean(2 * w_batch[i] * (y_pred - y_batch[i]) * g)
+>>>>>>> bbd8446ab5e1a41c46784aeb785bd83e3f660a3b
                     for g in num_grad
                 ])
+
+            elif task == 'regression:wrrmse':
+                y_av = np.mean(y_batch[i]*w_batch[i])+1e-20
+
+                sq_term = np.sqrt(np.nanmean(
+                    w_batch[i] * (y_pred - y_batch[i])**2))
+                av_loss = sq_term*100./y_av
+                av_grad = np.array(
+                    [100./(y_av*sq_term) * np.nanmean(w_batch[i] * (y_pred - y_batch[i]) * g) for g in num_grad])
 
             elif task == 'binary:logistic':
                 # compute average loss

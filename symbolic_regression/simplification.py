@@ -29,10 +29,10 @@ def extract_operation(element, father=None):
     elif str(element.func) == 'abs':
         current_operation = OPERATOR_ABS
 
-    elif str(element.func) == 'min':
+    elif str(element.func) == 'Min':
         current_operation = OPERATOR_MIN
 
-    elif str(element.func) == 'max':
+    elif str(element.func) == 'Max':
         current_operation = OPERATOR_MAX
     
     if current_operation:
