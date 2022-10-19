@@ -12,6 +12,7 @@ def to_logistic(program):
         arity=OPERATOR_SIGMOID['arity'],
         format_str=OPERATOR_SIGMOID['format_str'],
         format_tf=OPERATOR_SIGMOID.get('format_tf'),
+        format_diff=OPERATOR_SIGMOID['format_str'],
         father=None
     )
     # So the upward pointer of the father is not permanent

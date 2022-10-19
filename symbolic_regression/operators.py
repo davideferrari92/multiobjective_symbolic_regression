@@ -131,14 +131,16 @@ OPERATOR_MAX = {
     "func": max,
     "format_tf": 'tf.maximum({}, {})',
     "arity": 2,
-    "format_str": "max({}, {})"
+    "format_str": "max({}, {})",
+    "format_diff": "Max({}, {})"
 }
 
 OPERATOR_MIN = {
     "func": min,
     "format_tf": 'tf.minimum({}, {})',
     "arity": 2,
-    "format_str": "min({}, {})"
+    "format_str": "min({}, {})",
+    "format_diff": "Min({}, {})"
 }
 
 OPERATOR_SIGMOID = {

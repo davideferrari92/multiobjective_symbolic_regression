@@ -30,7 +30,7 @@ def binary_cross_entropy(program: Program,
             constants_optimization_conf=constants_optimization_conf,
             task='binary:logistic')
 
-    if logistic and constants_optimization_method == 'NN':
+    if logistic:
         prog = to_logistic(program=prog)
 
     pred = np.array(prog.evaluate(data=data))
@@ -315,6 +315,41 @@ def value_range(program: Program, data: Union[dict, pd.DataFrame],
                  lower_bound - np.array(result), 0))
 
     return upper_bound_constraint + lower_bound_constraint
+
+
+def get_cumulant_hist(data: pd.DataFrame,
+                      target: str) -> list:
+    #TRUE TARGET VALUE
+    y_true=np.array(data[target])
+    #rescale
+    rescaled_y_true=(y_true-np.min(y_true))/(np.max(y_true)-np.min(y_true))
+    #compute optimal density function histogram 
+    pd_y_true_grid,y_grid=stats.histogram(rescaled_y_true, bins='knuth',density=True)
+    #compute grid step
+    dy=y_grid[1]-y_grid[0]
+    #compute optimal cumulative histogram 
+    F_y=np.sum(dy*pd_y_true_grid*np.tril(np.ones(pd_y_true_grid.size), 0),1)
+    
+    return Fy
+
+def wasserstein(program: Program,
+                data: pd.DataFrame,
+                features: list,
+                target: str,
+                F_y) -> float:
+    #PROGRAM PREDICTION
+    #rescale
+    y_pred=np.array(program.evaluate(data[features]))
+    dy=1./(F_y.shape[0])
+    #rescale between [0,1]
+    rescaled_y_pred=(y_pred-np.min(y_pred))/(np.max(y_pred)-np.min(y_pred))
+    #compute density function histogram based on target optimal one
+    pd_y_pred_grid,_=stats.histogram(rescaled_y_pred, bins=F_y.shape[0]+1,density=True)
+    #compute optimal cumulative histogram 
+    F_y_pred=np.sum(dy*pd_y_pred_grid*np.tril(np.ones(pd_y_pred_grid.size), 0),1)
+
+    wasserstein_d=dy*np.sum(np.abs(F_y_pred-F_y))
+    return wasserstein_d
 
 
 def ordering(program: Program,

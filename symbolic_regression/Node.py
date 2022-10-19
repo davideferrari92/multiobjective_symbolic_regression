@@ -21,7 +21,7 @@ class OperationNode(Node):
     The operands can be OperationNode, if the formula continues deeply, or FeatureNode if
     the formula terminate and a feature is chosen.
     """
-    def __init__(self, operation: callable, format_tf: str, arity: int,
+    def __init__(self, operation: callable, format_tf: str, format_diff: str, arity: int,
                  format_str: str, father) -> None:
         """ To initialize an OperationNode
 
@@ -38,6 +38,7 @@ class OperationNode(Node):
         self.arity = arity
         self.format_str = format_str
         self.format_tf = format_tf
+        self.format_diff = format_diff
 
         self.operands = []
 
@@ -194,7 +195,13 @@ class OperationNode(Node):
                 node.render(data=data, format_tf=True)
                 for node in self.operands
             ])
-
+        
+        if format_diff:
+            return self.format_diff.format(*[
+                node.render(data=data, format_diff=format_diff)
+                for node in self.operands
+            ])
+        
         return self.format_str.format(*[
             node.render(data=data, format_diff=format_diff)
             for node in self.operands

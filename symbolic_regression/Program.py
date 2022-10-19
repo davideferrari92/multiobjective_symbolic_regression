@@ -349,6 +349,7 @@ class Program:
                                  arity=operation_conf['arity'],
                                  format_str=operation_conf['format_str'],
                                  format_tf=operation_conf.get('format_tf'),
+                                 format_diff=operation_conf.get('format_diff') if operation_conf.get('format_diff') else operation_conf.get('format_str'),
                                  father=father)
 
         def gen_feature(feature, father, is_constant):

@@ -1,5 +1,5 @@
 from typing import Union
-
+import warnings
 import numpy as np
 import pandas as pd
 import sympy as sym
@@ -14,6 +14,7 @@ from tensorflow.keras.layers import Input, Layer
 from symbolic_regression.multiobjective.utils import to_logistic
 
 silence_tensorflow()
+warnings.filterwarnings("ignore")
 
 
 def optimize(program: Program,
@@ -261,9 +262,9 @@ def SGD(program: Program,
                                 tuple(constants))
 
             if task == 'regression:wmse':
-                av_loss = np.nanmean(w_batch[i] * (y_batch[i] - y_pred)**2)
+                av_loss = np.nanmean(w_batch[i] * (y_pred-y_batch[i])**2)
                 av_grad = np.array([
-                    np.nanmean(2. * w_batch[i] * (y_batch[i] - y_pred) * g)
+                    np.nanmean( 2. * w_batch[i]  (y_pred-y_batch[i]) * g)
                     for g in num_grad
                 ])
 
@@ -349,6 +350,8 @@ def ADAM(program: Program,
 
     # convert program render into sympy formula (symplify?)
     p_sym = program.program.render(format_diff=True)
+    print(p_sym)
+    print()
 
     # compute program analytic gradients with respect to the constants to be optimized
     grad = []
@@ -377,17 +380,15 @@ def ADAM(program: Program,
 
     for _ in range(epochs):
         for i in range(n_batches):
-
+            
             # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
-            y_pred = pyf_prog(tuple(np.split(X_batch[i], n_features, 1)),
-                            tuple(constants))
-            num_grad = pyf_grad(tuple(np.split(X_batch[i], n_features, 1)),
-                                tuple(constants))
+            y_pred = pyf_prog(tuple(np.split(X_batch[i], n_features, 1)), tuple(constants))
+            num_grad = pyf_grad(tuple(np.split(X_batch[i], n_features, 1)), tuple(constants))
             
             if task == 'regression:wmse':
-                av_loss = np.nanmean(w_batch[i] * (y_batch[i] - y_pred)**2)
+                av_loss = np.nanmean(w_batch[i] * (y_pred-y_batch[i])**2)
                 av_grad = np.array([
-                    np.nanmean(2 * w_batch[i] * (y_batch[i] - y_pred) * g)
+                    np.nanmean( 2. * w_batch[i]  (y_pred-y_batch[i]) * g)
                     for g in num_grad
                 ])
 
