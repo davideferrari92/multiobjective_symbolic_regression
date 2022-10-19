@@ -165,16 +165,28 @@ class SymbolicRegressor:
             logging.info("Fitting with existing population")
 
         while True:
+            if generations > 0 and self.generation >= generations:
+                logging.info(
+                    f"The model already had trained for {self.generation} generations")
+                self.status = "Terminated: generations completed"
+                return
+            
             self.generation += 1
-
+            
             start_time_generation = time.perf_counter()
             converged_time = None
-
+            
+            if self.generation > 1:
+                seconds_iter = round(self.elapsed_time / (self.generation-1), 1)
+                timing_str = f"{self.elapsed_time} sec, {seconds_iter} sec/generation"
+            else:
+                timing_str = f"{self.elapsed_time} sec"
+            
             if verbose > 0:
                 print("############################################################")
-                print(f"Generation {self.generation}/{generations}")
+                print(f"Generation {self.generation}/{generations} - {timing_str}")
             else:
-                print(f"Generation {self.generation}/{generations}", end='\r')
+                print(f"Generation {self.generation}/{generations} - {timing_str}", end='\r')
 
             logging.debug(f"Generating offspring")
             self.status = "Generating offspring"
@@ -273,8 +285,8 @@ class SymbolicRegressor:
                 )
                 first_p_printed = 0
                 for p in self.population:
-                    if p.rank != 1:
-                        break
+                    if p.rank > 1:
+                        continue
                     print(f'{first_p_printed})\t{p.program}')
                     print()
                     print(f'\t{p.fitness}')
@@ -325,14 +337,6 @@ class SymbolicRegressor:
                 return
 
             self.elapsed_time += end_time_generation - start_time_generation
-
-            if verbose > 0:
-                if self.generation > 1:
-                    seconds_iter = round(
-                        self.elapsed_time / (self.generation), 1)
-                    print(f"{self.elapsed_time} sec, {seconds_iter} sec/generation")
-                else:
-                    print(f"{self.elapsed_time} sec")
 
     def save_model(self, file: str):
         import pickle

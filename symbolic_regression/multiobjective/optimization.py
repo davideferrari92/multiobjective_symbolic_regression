@@ -1,9 +1,5 @@
 from typing import Union
 import warnings
-<<<<<<< HEAD
-=======
-
->>>>>>> bbd8446ab5e1a41c46784aeb785bd83e3f660a3b
 import numpy as np
 import pandas as pd
 import sympy as sym
@@ -273,15 +269,9 @@ def SGD(program: Program,
             num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
 
             if task == 'regression:wmse':
-<<<<<<< HEAD
-                av_loss = np.nanmean(w_batch[i] * (y_pred-y_batch[i])**2)
-                av_grad = np.array([
-                    np.nanmean( 2. * w_batch[i]  (y_pred-y_batch[i]) * g)
-=======
                 av_loss = np.nanmean(w_batch[i] * (y_pred - y_batch[i])**2)
                 av_grad = np.array([
                     np.nanmean(2. * w_batch[i] * (y_pred - y_batch[i]) * g)
->>>>>>> bbd8446ab5e1a41c46784aeb785bd83e3f660a3b
                     for g in num_grad
                 ])
             elif task == 'regression:wrrmse':
@@ -405,17 +395,7 @@ def ADAM(program: Program,
 
     for _ in range(epochs):
         for i in range(n_batches):
-<<<<<<< HEAD
-            
-            # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
-            y_pred = pyf_prog(tuple(np.split(X_batch[i], n_features, 1)), tuple(constants))
-            num_grad = pyf_grad(tuple(np.split(X_batch[i], n_features, 1)), tuple(constants))
-            
-            if task == 'regression:wmse':
-                av_loss = np.nanmean(w_batch[i] * (y_pred-y_batch[i])**2)
-                av_grad = np.array([
-                    np.nanmean( 2. * w_batch[i]  (y_pred-y_batch[i]) * g)
-=======
+
             split_X_batch = np.split(X_batch[i], n_features, 1)
             split_c_batch = np.split(
                 constants*np.ones_like(y_batch[i]), n_constants, 1)
@@ -428,7 +408,6 @@ def ADAM(program: Program,
                 av_loss = np.nanmean(w_batch[i] * (y_pred - y_batch[i])**2)
                 av_grad = np.array([
                     np.nanmean(2 * w_batch[i] * (y_pred - y_batch[i]) * g)
->>>>>>> bbd8446ab5e1a41c46784aeb785bd83e3f660a3b
                     for g in num_grad
                 ])
 

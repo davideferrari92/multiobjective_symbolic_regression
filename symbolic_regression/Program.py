@@ -223,6 +223,7 @@ class Program:
             arity=OPERATOR_ADD['arity'],
             format_str=OPERATOR_ADD['format_str'],
             format_tf=OPERATOR_ADD.get('format_tf'),
+            format_diff=OPERATOR_ADD.get('format_diff', OPERATOR_ADD['format_str']),
             father=None
         )
         add_node.add_operand(FeatureNode(
@@ -233,6 +234,7 @@ class Program:
             arity=OPERATOR_MUL['arity'],
             format_str=OPERATOR_MUL['format_str'],
             format_tf=OPERATOR_MUL.get('format_tf'),
+            format_diff=OPERATOR_MUL.get('format_diff', OPERATOR_MUL['format_str']),
             father=add_node
         )
 
@@ -256,6 +258,7 @@ class Program:
             arity=OPERATOR_SIGMOID['arity'],
             format_str=OPERATOR_SIGMOID['format_str'],
             format_tf=OPERATOR_SIGMOID.get('format_tf'),
+            format_diff=OPERATOR_SIGMOID.get('format_diff', OPERATOR_SIGMOID['format_str']),
             father=None
         )
         # So the upward pointer of the father is not permanent

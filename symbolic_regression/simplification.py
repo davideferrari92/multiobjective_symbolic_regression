@@ -55,6 +55,7 @@ def extract_operation(element, father=None):
             arity=current_operation['arity'],
             format_str=current_operation['format_str'],
             format_tf=current_operation['format_tf'],
+            format_diff=current_operation.get('format_diff', current_operation['format_str']),
             father=father
         )
         

@@ -132,24 +132,16 @@ OPERATOR_MAX = {
     "func": max,
     "format_tf": 'tf.maximum({}, {})',
     "arity": 2,
-<<<<<<< HEAD
     "format_str": "max({}, {})",
     "format_diff": "Max({}, {})"
-=======
-    "format_str": "Max({}, {})"
->>>>>>> bbd8446ab5e1a41c46784aeb785bd83e3f660a3b
 }
 
 OPERATOR_MIN = {
     "func": min,
     "format_tf": 'tf.minimum({}, {})',
     "arity": 2,
-<<<<<<< HEAD
     "format_str": "min({}, {})",
     "format_diff": "Min({}, {})"
-=======
-    "format_str": "Min({}, {})"
->>>>>>> bbd8446ab5e1a41c46784aeb785bd83e3f660a3b
 }
 
 OPERATOR_SIGMOID = {
