@@ -47,11 +47,28 @@ In this repository, the **Genetic Operations** we implemented are:
 - *node deletion* (a random ```OpNode``` is deleted and its operators are shifted one level above)
 - *leaf mutation* (a random ```FeatNode``` is replaced by another from the allowed ones)
 - *operator mutation* (a random ```OpNode``` operation is replaced by another with the same number of operators, i.e., arity)
-- *simplification* (the individual can be a non-minimal representation of an expression and therefore, although being numerically equivalent, a reorganized and simplified tree is considered in place of the selected one; e.g., ```a+a+a``` becomes ```3*a```) 
+- *simplification* (the individual can be a non-minimal representation of an expression and therefore, although being numerically equivalent, a reorganized and simplified tree is considered in place of the selected one; e.g., $a+a+a$ becomes $3*a$) 
 - *recalibration* (to avoid getting stuck in local minima in the constants optimization process, with recalibration we randomly reset the constants before optimizing them so to better explore the space of possible solutons) 
 
 ## Multi-objective training using Non Dominant Sorting Algorithm (NSGA-II)
-TODO
+The Non Dominant Sorting Algorithm allow to sort individuals based on the performance measures in a multi-dimensional space typical of a multi-objective training.
+
+The concept of dominance is used to identify all the individuals whose performance is not worse than those of any other one. There may be more than one individual that satisfy this requirement and they are said to belong to the "First Pareto Front", the set of equally most optimal individual. This is depicted in the figure below as $R_1$. The remaining individuals are recursively attributed to the following pareto fronts $R_2, R_3, ..., R_n$ until the whole population is assigned.
+
+Here is a pictorial representation of a 2-dimensional pareto front from ([Mergos and Sextos, 2018](https://www.researchgate.net/publication/329870692_Multi-objective_optimum_selection_of_ground_motion_records_with_genetic_algorithms))
+
+<p align="center">
+<img src="/doc/Pareto-optimal-solutions.png" alt="Pareto Front" style="width:70%; border:0;">
+</p>
+
+Within each pareto front, the individuals are sorted to maximize the differences between individuals, so those who are further to each other in the fitness function multi-dimensional space are set to be higher in the ranking.
+
+Once sorted the entire population of ```2N``` elements (original population + the offsprings), we simply discard the less performing ```N``` elements, propagating to the next generation only the bst ```N```.
+A well perfroming training process sorts some of the new offsprings in the higher part of the ranking to report an improvement of the predictive performance generation after generation.
+
+At the end of training, the first pareto front contains the 
+
+The algorithm is depicted in the figure below.
 
 <p align="center">
 <img src="/doc/NSGA_Dominance.png" alt="NSGA-II Algorithm" style="width:70%; border:0;">
