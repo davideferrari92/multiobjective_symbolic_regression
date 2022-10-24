@@ -66,7 +66,8 @@ Within each pareto front, the individuals are sorted to maximize the differences
 Once sorted the entire population of ```2N``` elements (original population + the offsprings), we simply discard the less performing ```N``` elements, propagating to the next generation only the bst ```N```.
 A well perfroming training process sorts some of the new offsprings in the higher part of the ranking to report an improvement of the predictive performance generation after generation.
 
-At the end of training, the first pareto front contains the 
+At the end of training, the first pareto front contains the individuals that are not worse that any one else in the population and are therefore equally optimal for the task.
+We can identify the most balanced individual as the one closest to the origin of the fitness functions space.
 
 The algorithm is depicted in the figure below.
 
