@@ -13,7 +13,7 @@ Genetic algorithms are inspired by how the biological DNA evolution occurs in na
 A basic representation of an individual is reported as a binary tree in the figure below.
 
 <p align="center">
-<img src="/figure_expression.png" alt="Simple Expression" style="width:40%; border:0;">
+<img src="/doc/figure_expression.png" alt="Simple Expression" style="width:40%; border:0;">
 </p>
 
 Internal nodes are given by operations (```Operation Nodes```, or ```OpNode```), while the leaves are terminal nodes with variables or constants (```Feature Nodes``` or ```FeatNode```).
@@ -29,21 +29,33 @@ Operations are chosen from a predefined set based on what possibilities the expe
 - *maximum*
 - *minimum* 
 
-The genetic approach consist of a random creation of ```N``` individuals, therefore producing a sequence of independent models each with their structure, their operations, their constants, and their features. Randomness grants a great variability in the nature and behaviour of the individual models. 
+The genetic approach consist of a random creation of ```N``` individuals belonging to a population ```P``` producing a sequence of independent models each with their own structure, operations, constants, and features. Randomness grants a great variability in the nature and behaviour of the individual models. 
 
-The next step is a loop of ```G``` generations in which the algorithm create another set of ```N``` individuals starting from the original population, and applying to those individuals a set of genetic operations trying to produce a modified and better version of the previous individuals.
+The next step is a loop of ```G``` generations in each of which the algorithm create another set of ```N``` individuals from the original population and, with a tournament selection, applying to them a set of genetic operations trying to produce a modified and better version. The generation of these offsprings doubles the size of ```P``` to ```2N``` elements, so that at the end of each generation the Non Dominanst Sorting Algorithm described below re-organize the population to discard the ```N``` worst ones and keep only the ```N``` best. This is the essence of the propagation of the best genes from one generation to the following.
 
-In this repository, these **Genetic Operations** are implemented: Our list of genetic operations include:
+This process is depicted in the figure below.
+
+<p align="center">
+<img src="/doc/genetic_training.png" alt="Genetic Training" style="width:70%; border:0;">
+</p>
+
+In this repository, the **Genetic Operations** we implemented are:
+
 - *point mutation* (an ```OpNode``` and its sub-tree are replaced by a newly randomly generated sub-tree)
 - *crossover* (an ```OpNode``` and its sub-tree is replaced by an ```OpNode``` and its sub-tree from another individual of the pool)
 - *node insertion* (an new ```OpNode``` is inserted at a randomly selected point in the tree making it deeper of one level)
 - *node deletion* (a random ```OpNode``` is deleted and its operators are shifted one level above)
 - *leaf mutation* (a random ```FeatNode``` is replaced by another from the allowed ones)
 - *operator mutation* (a random ```OpNode``` operation is replaced by another with the same number of operators, i.e., arity)
-- *simplification* (the individual can be a non-minimal representation of an expression and therefore, although being numerically equivalent, a reorganized and simplified tree is considered in place of the selected one) 
+- *simplification* (the individual can be a non-minimal representation of an expression and therefore, although being numerically equivalent, a reorganized and simplified tree is considered in place of the selected one; e.g., ```a+a+a``` becomes ```3*a```) 
+- *recalibration* (to avoid getting stuck in local minima in the constants optimization process, with recalibration we randomly reset the constants before optimizing them so to better explore the space of possible solutons) 
 
 ## Multi-objective training using Non Dominant Sorting Algorithm (NSGA-II)
 TODO
+
+<p align="center">
+<img src="/doc/NSGA_Dominance.png" alt="NSGA-II Algorithm" style="width:70%; border:0;">
+</p>
 
 ## Example for using this library
 You can find an iPython notebook in the examples folder that shows how this Python library can be used.
@@ -57,18 +69,17 @@ Please use the following references to cite our work.
 ```
 @INPROCEEDINGS {ferrari2022,
   author = {D. Ferrari and V. Guidetti and F. Mandreoli},
+  title = {Multi-Objective Symbolic Regression for Data-Driven Scoring System Management},
   booktitle = {2022 IEEE International Conference on Data Mining (ICDM)},
-  title = {Multi-Objective Symbolic Regression for  Data-Driven Scoring System Management},
+  publisher = {IEEE Computer Society},
+  address = {Orlando, FL, USA},
+  keywords = {scoring systems, genetic programming, multi-objective symbolic regression},
   year = {2022},
+  month = {nov}
   volume = {},
   issn = {},
   pages = {},
-  abstract = {},
-  keywords = {scoring systems, genetic programming, multi-objective symbolic regression},
   doi = {},
   url = {},
-  publisher = {IEEE Computer Society},
-  address = {Orlando, FL, USA},
-  month = {nov}
 }
 ```
