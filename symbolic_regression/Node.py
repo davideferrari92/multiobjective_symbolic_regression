@@ -184,8 +184,8 @@ class OperationNode(Node):
 
     def render(self,
                data: Union[dict, pd.Series, pd.DataFrame, None] = None,
-               format_tf: bool = False,
-               format_diff: bool = False) -> str:
+               format_tf: str = None,
+               format_diff: str = None) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
 
         This call recursively itself untile the terminal nodes are reached.
@@ -290,8 +290,8 @@ class FeatureNode(Node):
 
     def render(self,
                data: Union[dict, pd.Series, None] = None,
-               format_tf: bool = False,
-               format_diff: bool = False) -> str:
+               format_tf: str = None,
+               format_diff: str = None) -> str:
         """ This method render the string representation of this FeatureNode
 
         If data is provided, the rendering consist of the value of the datapoint of the feature of this
@@ -340,6 +340,6 @@ class InvalidNode(Node):
 
     def render(self,
                data: Union[dict, pd.Series, None] = None,
-               format_tf: bool = False,
-               format_diff: bool = False) -> str:
+               format_tf: str = None,
+               format_diff: str = None) -> str:
         return 'InvalidNode'

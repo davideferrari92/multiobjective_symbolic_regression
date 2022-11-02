@@ -437,9 +437,9 @@ class Program:
         def gen_operation(operation_conf: dict, father):
             return OperationNode(operation=operation_conf['func'],
                                  arity=operation_conf['arity'],
-                                 format_str=operation_conf['format_str'],
+                                 format_str=operation_conf.get('format_str'),
                                  format_tf=operation_conf.get('format_tf'),
-                                 format_diff=operation_conf.get('format_diff') if operation_conf.get('format_diff') else operation_conf.get('format_str'),
+                                 format_diff=operation_conf.get('format_diff', operation_conf.get('format_str')),
                                  father=father)
 
         def gen_feature(feature, father, is_constant):
@@ -854,9 +854,10 @@ class Program:
         while new_operation['arity'] != mutate_point.arity:
             new_operation = random.choice(self.operations)
 
-        mutate_point.operation = new_operation['func']
-        mutate_point.format_str = new_operation['format_str']
-        mutate_point.format_tf = new_operation['format_tf']
+        mutate_point.operation = new_operation.get('func')
+        mutate_point.format_str = new_operation.get('format_str')
+        mutate_point.format_tf = new_operation.get('format_tf')
+        mutate_point.format_diff = new_operation.get('format_diff', new_operation.get('format_str'))
 
         if inplace:
             self.program = offspring

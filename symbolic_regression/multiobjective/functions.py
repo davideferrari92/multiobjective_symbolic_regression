@@ -100,7 +100,9 @@ def binary_cross_entropy(program: Program,
             constants_optimization_method=constants_optimization_method,
             constants_optimization_conf=constants_optimization_conf,
             task='binary:logistic')
-
+    else:
+        prog = program
+        
     if logistic:
         prog = to_logistic(program=prog)
 

@@ -3,15 +3,15 @@ import warnings
 import numpy as np
 import pandas as pd
 import sympy as sym
-import tensorflow as tf
+#import tensorflow as tf
 from silence_tensorflow import silence_tensorflow
 from symbolic_regression.Node import FeatureNode
 from symbolic_regression.Program import Program
 from sympy.utilities.lambdify import lambdify
-from tensorflow.keras import Model
-from tensorflow.keras.layers import Input, Layer
+#from tensorflow.keras import Model
+#from tensorflow.keras.layers import Input, Layer
 
-silence_tensorflow()
+#silence_tensorflow()
 warnings.filterwarnings("ignore")
 
 
@@ -79,7 +79,7 @@ def optimize(program: Program,
 
     return program
 
-
+"""
 class NNOptimizer(Layer):
     ''' 
     We create a single nuron NN with a customized activation function.
@@ -193,6 +193,7 @@ def NN(program: Program,
 
     return list(model.get_weights()[0][0]), [], []
 
+"""
 
 def SGD(program: Program,
         data: Union[dict, pd.Series, pd.DataFrame],
@@ -458,8 +459,9 @@ def ADAM(program: Program,
 
     return constants, loss, log
 
-
+"""
 def to_NN_weights_init(constants_list):
     def inititializer(shape, dtype=tf.float32):
         return tf.reshape(tf.constant(constants_list, dtype=dtype), (shape[0], shape[1]))
     return inititializer
+"""
