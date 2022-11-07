@@ -82,22 +82,5 @@ You can find an iPython notebook in the examples folder that shows how this Pyth
 Feel free to get in touch writing to [davide.ferrari@kcl.ac.uk](mailto:davide.ferrari@kcl.ac.uk)
 
 # Citations
-Please use the following references to cite our work.
 
-```
-@INPROCEEDINGS {ferrari2022,
-  author = {D. Ferrari and V. Guidetti and F. Mandreoli},
-  title = {Multi-Objective Symbolic Regression for Data-Driven Scoring System Management},
-  booktitle = {2022 IEEE International Conference on Data Mining (ICDM)},
-  publisher = {IEEE Computer Society},
-  address = {Orlando, FL, USA},
-  keywords = {scoring systems, genetic programming, multi-objective symbolic regression},
-  year = {2022},
-  month = {nov}
-  volume = {},
-  issn = {},
-  pages = {},
-  doi = {},
-  url = {},
-}
-```
+Coming soon
