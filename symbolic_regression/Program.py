@@ -415,7 +415,7 @@ class Program:
                                                       other.fitness.items()):
             # One difference is enough for them not to be identical
 
-            if round(a_fit, 2) != round(b_fit, 2):
+            if round(a_fit, 1) != round(b_fit, 1):
                 return False
 
         return True
