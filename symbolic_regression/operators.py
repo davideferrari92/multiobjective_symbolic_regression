@@ -6,7 +6,7 @@ import numpy as np
 
 def _protected_exp(x):
     try:
-        return math.exp(x)
+        return np.exp(x)
     except OverflowError:
         return 0.
 
@@ -14,7 +14,7 @@ def _protected_exp(x):
 def _protected_division(x1, x2):
     """Closure of division (x1/x2) for zero denominator."""
     with np.errstate(divide='ignore', invalid='ignore'):
-        return np.where(np.abs(x2) > 0.001, np.divide(x1, x2), 1.)
+        return np.where(np.abs(x2) > 1e-4, np.divide(x1, x2), np.sign(x1)*np.sign(x2)*10**3)
 
 
 def _protected_sqrt(x1):
@@ -25,19 +25,19 @@ def _protected_sqrt(x1):
 def _protected_log(x1):
     """Closure of log for zero arguments."""
     with np.errstate(divide='ignore', invalid='ignore'):
-        return np.where(x1 > 0.001, np.log(x1), 0.)
+        return np.where(x1 > 1e-4, np.log(x1), 0.)
 
 
 def _protected_inverse(x1):
     """Closure of inverse for zero arguments."""
     with np.errstate(divide='ignore', invalid='ignore'):
-        return np.where(np.abs(x1) > 0.001, 1. / x1, 0.)
+        return np.where(np.abs(x1) > 1e-4, 1. / x1, np.sign(x1)*10**3)
 
 def _protected_pow(x1, x2):
     """Closure of pow for zero arguments."""
     with np.errstate(divide='ignore', invalid='ignore'):
         try:
-            return math.pow(x1, x2)
+            return np.power(x1, x2)
         except OverflowError:
             return 0.
         except ValueError:  # The math domain error
@@ -129,19 +129,17 @@ OPERATOR_SQRT = {
     "format_str": "sqrt({})"}
 
 OPERATOR_MAX = {
-    "func": max,
+    "func": np.maximum,
     "format_tf": 'tf.maximum({}, {})',
     "arity": 2,
-    "format_str": "max({}, {})",
-    "format_diff": "max({}, {})"
+    "format_str": "max({}, {})"
 }
 
 OPERATOR_MIN = {
-    "func": min,
+    "func": np.minimum,
     "format_tf": 'tf.minimum({}, {})',
     "arity": 2,
-    "format_str": "min({}, {})",
-    "format_diff": "min({}, {})"
+    "format_str": "min({}, {})"
 }
 
 OPERATOR_SIGMOID = {
