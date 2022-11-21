@@ -14,11 +14,12 @@ from symbolic_regression.Program import Program
 
 ######################################## BINARY CLASSIFICATION ########################################
 
+
 def spearman_correlation(program: Program,
-              data: Union[pd.DataFrame, pd.Series],
-              target: str,
-              logistic: bool = False,
-              one_minus: bool = False):
+                         data: Union[pd.DataFrame, pd.Series],
+                         target: str,
+                         logistic: bool = False,
+                         one_minus: bool = False):
     """
     We compute ROC curve at different threshold values.
     The function returns the AUC and the performance at the optimal
@@ -34,24 +35,24 @@ def spearman_correlation(program: Program,
 
     try:
         pred = np.array(prog.evaluate(data=data))
-        
+
         cs, _ = spearmanr(ground_truth, pred)
         # 1- is because the Pareto optimality minimizes the fitness function
         if one_minus:
             return 1 - cs
         return cs
-    
+
     except TypeError:
         return np.inf
     except ValueError:
         return np.inf
-    
-    
+
+
 def kendall_correlation(program: Program,
-              data: Union[pd.DataFrame, pd.Series],
-              target: str,
-              logistic: bool = False,
-              one_minus: bool = False):
+                        data: Union[pd.DataFrame, pd.Series],
+                        target: str,
+                        logistic: bool = False,
+                        one_minus: bool = False):
     """
     We compute ROC curve at different threshold values.
     The function returns the AUC and the performance at the optimal
@@ -67,19 +68,17 @@ def kendall_correlation(program: Program,
 
     try:
         pred = np.array(prog.evaluate(data=data))
-        
+
         ck, _ = kendalltau(ground_truth, pred)
         # 1- is because the Pareto optimality minimizes the fitness function
         if one_minus:
             return 1 - ck
         return ck
-    
+
     except TypeError:
         return np.inf
     except ValueError:
         return np.inf
-
-
 
 
 def binary_cross_entropy(program: Program,
@@ -102,7 +101,7 @@ def binary_cross_entropy(program: Program,
             task='binary:logistic')
     else:
         prog = program
-        
+
     if logistic:
         prog = to_logistic(program=prog)
 
@@ -458,10 +457,12 @@ def get_cumulant_hist(data: pd.DataFrame, target: str, bins: int = None):
     rescaled_y_true = (y_true-np.min(y_true))/(np.max(y_true)-np.min(y_true))
     # compute optimal density function histogram
     if not bins:
-        pd_y_true_grid, y_grid = stats.histogram(rescaled_y_true, bins='knuth', density=True)
-    
+        pd_y_true_grid, y_grid = stats.histogram(
+            rescaled_y_true, bins='knuth', density=True)
+
     else:
-        pd_y_true_grid, y_grid = stats.histogram(rescaled_y_true, bins=bins, density=True)
+        pd_y_true_grid, y_grid = stats.histogram(
+            rescaled_y_true, bins=bins, density=True)
     # compute grid steps
     dy = y_grid[1]-y_grid[0]
     # compute optimal cumulative histogram
@@ -469,22 +470,24 @@ def get_cumulant_hist(data: pd.DataFrame, target: str, bins: int = None):
 
     return F_y
 
+
 def create_regression_weights(data: pd.DataFrame, target: str, bins: int = None):
     """
     """
-    y=np.array(data[target])
+    y = np.array(data[target])
     if not bins:
         count, division = stats.histogram(y, bins='knuth', density=True)
     else:
         count, division = stats.histogram(y, bins=bins, density=True)
-    effective_bins=np.sum((count!=0).astype(int)) 
-    aw=(np.sum(count)/effective_bins) 
-    weights=np.where(count!= 0. ,aw/count ,0. )
-    w_column=np.zeros((y.size,))               #create the weight column
+    effective_bins = np.sum((count != 0).astype(int))
+    aw = (np.sum(count)/effective_bins)
+    weights = np.where(count != 0., aw/count, 0.)
+    w_column = np.zeros((y.size,))  # create the weight column
     for i in range(len(count)):
-        w_column+= (y >= division[i])*(y <= division[i+1])*weights[i]
+        w_column += (y >= division[i])*(y <= division[i+1])*weights[i]
 
     return w_column
+
 
 def wasserstein(program: Program, data: pd.DataFrame, F_y: np.array):
     """
@@ -522,41 +525,6 @@ def average_wasserstein(program: Program, data: pd.DataFrame, F_ys: list):
     for F_y in F_ys:
         wasserstein_list.append(wasserstein(program, data, F_y))
     return sum(wasserstein_list) / len(wasserstein_list)
-
-
-def get_cumulant_hist(data: pd.DataFrame,
-                      target: str) -> list:
-    #TRUE TARGET VALUE
-    y_true=np.array(data[target])
-    #rescale
-    rescaled_y_true=(y_true-np.min(y_true))/(np.max(y_true)-np.min(y_true))
-    #compute optimal density function histogram 
-    pd_y_true_grid,y_grid=stats.histogram(rescaled_y_true, bins='knuth',density=True)
-    #compute grid step
-    dy=y_grid[1]-y_grid[0]
-    #compute optimal cumulative histogram 
-    F_y=np.sum(dy*pd_y_true_grid*np.tril(np.ones(pd_y_true_grid.size), 0),1)
-    
-    return Fy
-
-def wasserstein(program: Program,
-                data: pd.DataFrame,
-                features: list,
-                target: str,
-                F_y) -> float:
-    #PROGRAM PREDICTION
-    #rescale
-    y_pred=np.array(program.evaluate(data[features]))
-    dy=1./(F_y.shape[0])
-    #rescale between [0,1]
-    rescaled_y_pred=(y_pred-np.min(y_pred))/(np.max(y_pred)-np.min(y_pred))
-    #compute density function histogram based on target optimal one
-    pd_y_pred_grid,_=stats.histogram(rescaled_y_pred, bins=F_y.shape[0]+1,density=True)
-    #compute optimal cumulative histogram 
-    F_y_pred=np.sum(dy*pd_y_pred_grid*np.tril(np.ones(pd_y_pred_grid.size), 0),1)
-
-    wasserstein_d=dy*np.sum(np.abs(F_y_pred-F_y))
-    return wasserstein_d
 
 
 def ordering(program: Program,
