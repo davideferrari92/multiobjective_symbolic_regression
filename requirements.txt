@@ -1,6 +1,9 @@
 astropy
 numpy
 pandas
-sympy
+sympy==1.9
+scipy
+sklearn
 tensorflow==2.7.0
 silence_tensorflow
+joblib
