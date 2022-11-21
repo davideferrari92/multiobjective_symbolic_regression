@@ -420,10 +420,11 @@ def not_constant(program: Program,
 
     try:
         std_dev = np.std(result)
+        return np.max([0, epsilon - std_dev])
     except AttributeError:
         return np.nan
-
-    return np.max([0, epsilon - std_dev])
+    except TypeError:
+        return epsilon
 
 
 def value_range(program: Program, data: Union[dict, pd.DataFrame],
