@@ -13,6 +13,8 @@ from symbolic_regression.multiobjective.training import (create_pareto_front,
                                                          generate_population,
                                                          get_offspring)
 
+from loky import get_reusable_executor
+
 backend_parallel = 'loky'
 
 
@@ -170,23 +172,26 @@ class SymbolicRegressor:
                     f"The model already had trained for {self.generation} generations")
                 self.status = "Terminated: generations completed"
                 return
-            
+
             self.generation += 1
-            
+
             start_time_generation = time.perf_counter()
             converged_time = None
-            
+
             if self.generation > 1:
-                seconds_iter = round(self.elapsed_time / (self.generation-1), 1)
+                seconds_iter = round(self.elapsed_time /
+                                     (self.generation-1), 1)
                 timing_str = f"{self.elapsed_time} sec, {seconds_iter} sec/generation"
             else:
                 timing_str = f"{self.elapsed_time} sec"
-            
+
             if verbose > 0:
                 print("############################################################")
-                print(f"Generation {self.generation}/{generations} - {timing_str}")
+                print(
+                    f"Generation {self.generation}/{generations} - {timing_str}")
             else:
-                print(f"Generation {self.generation}/{generations} - {timing_str}", end='\r')
+                print(
+                    f"Generation {self.generation}/{generations} - {timing_str}", end='\r')
 
             logging.debug(f"Generating offspring")
             self.status = "Generating offspring"
@@ -198,23 +203,19 @@ class SymbolicRegressor:
             else:
                 m_workers = os.cpu_count()
 
-            executor = concurrent.futures.ThreadPoolExecutor(
-            )  # Or ProcessPoolExecutor
-            futures = []
-            with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=m_workers) as executor:
-                for _ in range(self.population_size):
-                    futures.append(
-                        executor.submit(get_offspring, self.population, data,
-                                        fitness_functions, self.generation,
-                                        self.tournament_size,
-                                        genetic_operators_frequency))
-
-                result = concurrent.futures.wait(futures, timeout=120)
-                offsprings = [r.result(timeout=120) for r in result.done]
-
-                self.population += offsprings
-
+            executor = get_reusable_executor(max_workers=m_workers)
+            offsprings = list(executor.map(
+                get_offspring, timeout=120,
+                initargs=(
+                    self.population,
+                    data,
+                    fitness_functions,
+                    self.generation,
+                    self.tournament_size,
+                    genetic_operators_frequency
+                )))
+            self.population += offsprings
+            
             # Removes all non valid programs in the population
             logging.debug(f"Removing duplicates")
             before_cleaning = len(self.population)
@@ -243,7 +244,7 @@ class SymbolicRegressor:
                 logging.info(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements"
                 )
-
+                
                 self.population += Parallel(
                     n_jobs=n_jobs, batch_size=28,
                     backend=backend_parallel)(delayed(generate_population)(
