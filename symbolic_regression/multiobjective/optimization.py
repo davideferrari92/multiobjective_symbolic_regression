@@ -3,15 +3,9 @@ import warnings
 import numpy as np
 import pandas as pd
 import sympy as sym
-#import tensorflow as tf
-#from silence_tensorflow import silence_tensorflow
 from symbolic_regression.Node import FeatureNode
 from symbolic_regression.Program import Program
 from sympy.utilities.lambdify import lambdify
-#from tensorflow.keras import Model
-#from tensorflow.keras.layers import Input, Layer
-
-#silence_tensorflow()
 warnings.filterwarnings("ignore")
 
 
@@ -51,13 +45,10 @@ def optimize(program: Program,
             f_opt = ADAM
             program.to_affine(data=data, target=target, inplace=True)
 
-        if constants_optimization_method == 'NN':
-            f_opt = NN
-            if task == 'binary:logistic':
-                program.to_logistic(inplace=True)
-
-            elif task == 'regression:wmse':
-                program.to_affine(data=data, target=target, inplace=True)
+        if constants_optimization_method == 'ADAM2FOLD':
+            f_opt = ADAM2FOLD
+            # Here there can be more than one target so need the index
+            program.to_affine(data=data, target=target[0], inplace=True)
 
         program.simplify(inplace=True)
 
@@ -72,128 +63,8 @@ def optimize(program: Program,
         if len(final_parameters) > 0:
             program.set_constants(new=final_parameters)
 
-        if constants_optimization_method == 'NN' and task == 'binary:logistic':
-            program.program = program.program.operands[0]
-            program.program.father = None
-            program.is_logistic = False
-
     return program
 
-"""
-class NNOptimizer(Layer):
-    ''' 
-    We create a single nuron NN with a customized activation function.
-    '''
-
-    def __init__(self,
-                 units: int,
-                 n_features: int,
-                 n_constants: int,
-                 exec_string: str,
-                 constants_list: list
-                 ):
-        '''Initializes the class and sets up the internal variables
-
-        Args:
-        - units:int = number of neurons in the NN (1 -> single neuron)
-        - n_features:int = number of input variables (number of columns in dataset, i.e. number features) 
-        - n_constants:int = number of numerical parameters appearing in program (number of float numbers used in program)
-        - const_range_min:float = lower bound in float range
-        - const_range_max:float = upper bound in float range
-        '''
-        super(NNOptimizer, self).__init__()
-        self.units = units
-        self.n_constants = n_constants
-        self.n_features = n_features
-        self.constants_list = constants_list
-
-        self.exec_string = exec_string
-
-    def build(self, input_shape):
-        '''Create the state of the layer (weights)
-
-        Weights are trainable parameters to be used as float values in symbolic regression after training
-        - weights appear as a numpy array of shape (units,n_constants) 
-        - weights are initially uniformly sampled in the range [const_range_min,const_range_max]
-        - weights are set as trainable
-        '''
-        constants_init = to_NN_weights_init(self.constants_list)
-        self.constants = self.add_weight(name="constants", shape=(self.units, self.n_constants), dtype='float32',
-                                         regularizer=None, initializer=constants_init, trainable=True)
-
-        super().build(input_shape)
-
-    def call(self, X):
-        '''Defines the computation from inputs to outputs
-        '''
-        X = tf.split(X, self.n_features, 1)
-        constants = tf.split(self.constants, self.n_constants, 1)
-
-        return eval(self.exec_string)
-
-
-def NN(program: Program,
-       data: Union[dict, pd.Series, pd.DataFrame],
-       target: str,
-       weights: str,
-       constants_optimization_conf: dict,
-       task: str):
-    from symbolic_regression.multiobjective.optimization import NNOptimizer
-
-    constants_list = [item.feature for item in program.get_constants()]
-    n_constants = len(program.get_constants())
-    n_features = len(program.features)
-
-    constants_optimizer = NNOptimizer(
-        units=1,
-        n_features=n_features,
-        n_constants=n_constants,
-        exec_string=program.program.render(
-            data=data.iloc[0, :], format_tf=True),
-        constants_list=constants_list
-    )
-
-    data_tensor = tf.constant(
-        data[program.features].to_numpy(), dtype=tf.float32)
-
-    target_tensor = tf.constant(
-        data[target].to_numpy(), dtype=tf.float32)
-    if weights:
-        weights_tensor = tf.constant(
-            data[weights].to_numpy(), dtype=tf.float32)
-    else:
-        weights_tensor = tf.ones_like(target_tensor)
-
-    inputs = Input(shape=[len(program.features)], name="Input")
-
-    tf.keras.backend.clear_session()
-    model = Model(inputs=inputs, outputs=constants_optimizer(inputs))
-
-    # https://keras.io/api/losses/
-    if task == 'regression:wmse':
-        # https://keras.io/api/losses/regression_losses/#meansquarederror-class
-        loss = tf.keras.losses.MeanSquaredError()
-    elif task == 'binary:logistic':
-        # https://keras.io/api/losses/probabilistic_losses/#binarycrossentropy-class
-        loss = tf.keras.losses.BinaryCrossentropy()
-
-    opt = tf.keras.optimizers.Adam(
-        learning_rate=constants_optimization_conf['learning_rate'])
-    model.compile(loss=loss, optimizer=opt,
-                  run_eagerly=False, metrics=['accuracy'])
-
-    model.fit(
-        data_tensor,
-        target_tensor,
-        sample_weight=weights_tensor,
-        batch_size=constants_optimization_conf['batch_size'],
-        epochs=constants_optimization_conf['epochs'],
-        verbose=constants_optimization_conf['verbose']
-    )
-
-    return list(model.get_weights()[0][0]), [], []
-
-"""
 
 def SGD(program: Program,
         data: Union[dict, pd.Series, pd.DataFrame],
@@ -373,6 +244,7 @@ def ADAM(program: Program,
         grad.append(sym.diff(p_sym, f'c{i}'))
 
     # define gradient and program python functions from sympy object
+
     try:
         pyf_grad = lambdify([x_sym, c_sym], grad)
         pyf_prog = lambdify([x_sym, c_sym], p_sym)
@@ -459,9 +331,135 @@ def ADAM(program: Program,
 
     return constants, loss, log
 
-"""
-def to_NN_weights_init(constants_list):
-    def inititializer(shape, dtype=tf.float32):
-        return tf.reshape(tf.constant(constants_list, dtype=dtype), (shape[0], shape[1]))
-    return inititializer
-"""
+
+def ADAM2FOLD(program: Program,
+              data: Union[dict, pd.Series, pd.DataFrame],
+              target: list,
+              weights: list,
+              constants_optimization_conf: dict,
+              task: str):
+    '''
+    ADAM with analytic derivatives
+    beta_1: float = 0.9, 
+    beta_2: float = 0.999, 
+    epsilon: float = 1e-07,
+    '''
+    #print('using ADAM2FOLD')
+    learning_rate = constants_optimization_conf['learning_rate']
+    batch_size = constants_optimization_conf['batch_size']
+    epochs = constants_optimization_conf['epochs']
+    gradient_clip = constants_optimization_conf['gradient_clip']
+    beta_1 = constants_optimization_conf['beta_1']
+    beta_2 = constants_optimization_conf['beta_2']
+    epsilon = constants_optimization_conf['epsilon']
+
+    if not program.is_valid:  # No constants in program
+        return [], [], []
+
+    n_features = len(program.features)
+    constants = np.array([item.feature for item in program.get_constants()])
+    n_constants = constants.size
+
+    if n_constants == 0:  # No constants in program
+        return [], [], []
+
+    # Initialize symbols for variables and constants
+    x_sym = ''
+    for f in program.features:
+        x_sym += f'{f},'
+    x_sym = sym.symbols(x_sym)
+    c_sym = sym.symbols('c0:{}'.format(n_constants))
+
+    # Initialize ground truth and data arrays
+    y_true_1 = np.reshape(data[target[0]].to_numpy(),
+                          (data[target[0]].shape[0], 1))
+    y_true_2 = np.reshape(data[target[1]].to_numpy(),
+                          (data[target[1]].shape[0], 1))
+    X_data = data[program.features].to_numpy()
+    if weights:
+        w1 = np.reshape(data[weights[0]].to_numpy(),
+                        (data[weights[0]].shape[0], 1))
+        w2 = np.reshape(data[weights[1]].to_numpy(),
+                        (data[weights[1]].shape[0], 1))
+    else:
+        w1 = np.ones_like(y_true_1)
+        w2 = np.ones_like(y_true_2)
+
+    # convert program render into sympy formula (symplify?)
+    p_sym = program.program.render(format_diff=True)
+
+    # compute program analytic gradients with respect to the constants to be optimized
+    grad = []
+    for i in range(n_constants):
+        grad.append(sym.diff(p_sym, f'c{i}'))
+
+    # define gradient and program python functions from sympy object
+    
+    try:
+        pyf_grad = lambdify([x_sym, c_sym], grad)
+        pyf_prog = lambdify([x_sym, c_sym], p_sym)
+    except KeyError:  # When the function doesn't have sense
+        return [], [], []
+    # Define batches
+    n_batches = int(X_data.shape[0] / batch_size)
+    X_batch = np.array_split(X_data, n_batches, 0)
+    y1_batch = np.array_split(y_true_1, n_batches, 0)
+    y2_batch = np.array_split(y_true_2, n_batches, 0)
+    w1_batch = np.array_split(w1, n_batches, 0)
+    w2_batch = np.array_split(w2, n_batches, 0)
+
+    log, loss = [], []  # lists to store learning process
+
+    # Initialize Adam variables
+    m = 0
+    v = 0
+    t = 1
+    var = 0
+
+    samples = 100
+
+    for _ in range(epochs):
+        for i in range(n_batches):
+            # sample lambdas from distribution
+            lambda1 = np.random.uniform(low=0.0, high=1.0, size=(1, samples))
+
+            split_X_batch = np.split(X_batch[i], n_features, 1)
+            split_c_batch = np.split(
+                constants*np.ones_like(y1_batch[i]), n_constants, 1)
+
+            # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
+            y_pred = pyf_prog(tuple(split_X_batch), tuple(split_c_batch))
+            num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
+
+            if task == 'regression:wmse':  # (N,1)
+                av_loss = np.nanmean(lambda1*(w1_batch[i] * (y_pred - y1_batch[i])**2)
+                                     + (1-lambda1)*(w2_batch[i] * (y_pred - y2_batch[i])**2))
+                av_grad = np.array([
+                    np.nanmean(2 * (lambda1*(w1_batch[i](y_pred - y1_batch[i]))
+                                   + (1-lambda1)*(w2_batch[i](y_pred - y2_batch[i]))) * g)
+                    for g in num_grad
+                ])
+
+            # try with new constants if loss is nan
+            if np.isnan(av_loss):
+                var += 0.2
+                constants = np.random.normal(0.0, var, constants.shape)
+
+            norm_grad = np.linalg.norm(av_grad)
+            if gradient_clip and (norm_grad > 1.):  # normalize gradients
+                av_grad = av_grad / (norm_grad + 1e-20)
+
+            # Updating momentum variables
+            m = beta_1 * m + (1 - beta_1) * av_grad
+            v = beta_2 * v + (1 - beta_2) * np.power(av_grad, 2)
+            m_hat = m / (1 - np.power(beta_1, t))
+            v_hat = v / (1 - np.power(beta_2, t))
+            t += 1
+
+            # Update constants
+            constants -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+
+        log.append(list(constants))
+        loss.append(av_loss)
+
+    return constants, loss, log
