@@ -8,6 +8,7 @@ import numpy as np
 class Node(ABC):
     """ A node can represent an operation or a feature in a binary tree
     """
+
     def __init__(self, father=None) -> None:
         self.father = father
 
@@ -21,6 +22,7 @@ class OperationNode(Node):
     The operands can be OperationNode, if the formula continues deeply, or FeatureNode if
     the formula terminate and a feature is chosen.
     """
+
     def __init__(self, operation: callable, format_tf: str, format_diff: str, arity: int,
                  format_str: str, father) -> None:
         """ To initialize an OperationNode
@@ -38,7 +40,7 @@ class OperationNode(Node):
         self.arity = arity
         self.format_str = format_str
         self.format_tf = format_tf
-        self.format_diff = format_diff
+        self.format_diff = format_diff if format_diff else format_str
 
         self.operands = []
 
@@ -76,20 +78,9 @@ class OperationNode(Node):
             data: The data on which to evaluate this node
         """
         result = None
-        if isinstance(data, dict):
+        if isinstance(data, dict) or isinstance(data, pd.DataFrame) or isinstance(data, pd.Series):
             result = self.operation(
                 *[node.evaluate(data=data) for node in self.operands])
-
-        elif isinstance(data, pd.Series):
-            result = self.operation(
-                *[node.evaluate(data=data) for node in self.operands])
-
-        elif isinstance(data, pd.DataFrame):
-            result = list()
-            for _, row in data.iterrows():
-                result.append(
-                    self.operation(
-                        *[node.evaluate(data=row) for node in self.operands]))
 
         else:
             raise TypeError(
@@ -184,8 +175,8 @@ class OperationNode(Node):
 
     def render(self,
                data: Union[dict, pd.Series, pd.DataFrame, None] = None,
-               format_tf: str = None,
-               format_diff: str = None) -> str:
+               format_tf: bool = False,
+               format_diff: bool = False) -> str:
         """ This method render the string of the program according to the formatting rules of its operations
 
         This call recursively itself untile the terminal nodes are reached.
@@ -195,13 +186,13 @@ class OperationNode(Node):
                 node.render(data=data, format_tf=True)
                 for node in self.operands
             ])
-        
+
         if format_diff:
             return self.format_diff.format(*[
                 node.render(data=data, format_diff=format_diff)
                 for node in self.operands
             ])
-        
+
         return self.format_str.format(*[
             node.render(data=data, format_diff=format_diff)
             for node in self.operands
@@ -211,6 +202,7 @@ class OperationNode(Node):
 class FeatureNode(Node):
     """ A FeatureNode represent a terminal node of the binary tree of the program and is always a feature or a constant
     """
+
     def __init__(self,
                  feature: Union[str, float],
                  father: Union[OperationNode, None] = None,
@@ -290,8 +282,8 @@ class FeatureNode(Node):
 
     def render(self,
                data: Union[dict, pd.Series, None] = None,
-               format_tf: str = None,
-               format_diff: str = None) -> str:
+               format_tf: bool = False,
+               format_diff: bool = False) -> str:
         """ This method render the string representation of this FeatureNode
 
         If data is provided, the rendering consist of the value of the datapoint of the feature of this
@@ -340,6 +332,6 @@ class InvalidNode(Node):
 
     def render(self,
                data: Union[dict, pd.Series, None] = None,
-               format_tf: str = None,
-               format_diff: str = None) -> str:
+               format_tf: bool = False,
+               format_diff: bool = False) -> str:
         return 'InvalidNode'

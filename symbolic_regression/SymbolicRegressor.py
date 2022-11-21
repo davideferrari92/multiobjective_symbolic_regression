@@ -204,7 +204,7 @@ class SymbolicRegressor:
                 m_workers = os.cpu_count()
 
             executor = get_reusable_executor(max_workers=m_workers)
-            offsprings = list(executor.map(
+            offsprings = list(set(executor.map(
                 get_offspring, timeout=120,
                 initargs=(
                     self.population,
@@ -213,9 +213,9 @@ class SymbolicRegressor:
                     self.generation,
                     self.tournament_size,
                     genetic_operators_frequency
-                )))
+                ))))
             self.population += offsprings
-            
+
             # Removes all non valid programs in the population
             logging.debug(f"Removing duplicates")
             before_cleaning = len(self.population)
@@ -244,7 +244,7 @@ class SymbolicRegressor:
                 logging.info(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements"
                 )
-                
+
                 self.population += Parallel(
                     n_jobs=n_jobs, batch_size=28,
                     backend=backend_parallel)(delayed(generate_population)(

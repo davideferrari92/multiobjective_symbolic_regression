@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import sympy as sym
 #import tensorflow as tf
-from silence_tensorflow import silence_tensorflow
+#from silence_tensorflow import silence_tensorflow
 from symbolic_regression.Node import FeatureNode
 from symbolic_regression.Program import Program
 from sympy.utilities.lambdify import lambdify

@@ -1,4 +1,3 @@
-import math
 import operator
 
 import numpy as np
@@ -32,6 +31,7 @@ def _protected_inverse(x1):
     """Closure of inverse for zero arguments."""
     with np.errstate(divide='ignore', invalid='ignore'):
         return np.where(np.abs(x1) > 1e-4, 1. / x1, np.sign(x1)*10**3)
+
 
 def _protected_pow(x1, x2):
     """Closure of pow for zero arguments."""
@@ -149,10 +149,12 @@ OPERATOR_SIGMOID = {
     "format_str": "sigmoid({})"
 }
 
-############################# LOGIC OPERATORS
+# LOGIC OPERATORS
+
 
 def _logic_and(x1, x2):
     return x1 and x2
+
 
 OPERATOR_LOGIC_AND = {
     "func": _logic_and,
@@ -161,8 +163,10 @@ OPERATOR_LOGIC_AND = {
     "format_str": "and({}, {})"
 }
 
+
 def _logic_or(x1, x2):
     return x1 or x2
+
 
 OPERATOR_LOGIC_OR = {
     "func": _logic_or,
@@ -171,8 +175,10 @@ OPERATOR_LOGIC_OR = {
     "format_str": "or({}, {})"
 }
 
+
 def _logic_xor(x1):
     return not x1
+
 
 OPERATOR_LOGIC_XOR = {
     "func": _logic_xor,
@@ -181,8 +187,10 @@ OPERATOR_LOGIC_XOR = {
     "format_str": "xor({}, {})"
 }
 
+
 def _logic_not(x1):
     return not x1
+
 
 OPERATOR_LOGIC_NOT = {
     "func": _logic_not,
@@ -191,8 +199,10 @@ OPERATOR_LOGIC_NOT = {
     "format_str": "not({})"
 }
 
+
 def _equal(x1, x2):
     return x1 == x2
+
 
 OPERATOR_GREATER_EQUAL_THAN = {
     "func": _equal,
@@ -201,8 +211,10 @@ OPERATOR_GREATER_EQUAL_THAN = {
     "format_str": "equal({}, {})"
 }
 
+
 def _less_than(x1, x2):
     return x1 < x2
+
 
 OPERATOR_LESS_THAN = {
     "func": _less_than,
@@ -211,8 +223,10 @@ OPERATOR_LESS_THAN = {
     "format_str": "less({}, {})"
 }
 
+
 def _less_equal_than(x1, x2):
     return x1 <= x2
+
 
 OPERATOR_LESS_EQUAL_THAN = {
     "func": _less_equal_than,
@@ -221,8 +235,10 @@ OPERATOR_LESS_EQUAL_THAN = {
     "format_str": "lessEqual({}, {})"
 }
 
+
 def _greater_than(x1, x2):
     return x1 <= x2
+
 
 OPERATOR_GREATER_THAN = {
     "func": _greater_than,
@@ -231,8 +247,10 @@ OPERATOR_GREATER_THAN = {
     "format_str": "less({}, {})"
 }
 
+
 def _greater_equal_than(x1, x2):
     return x1 <= x2
+
 
 OPERATOR_GREATER_EQUAL_THAN = {
     "func": _greater_equal_than,
