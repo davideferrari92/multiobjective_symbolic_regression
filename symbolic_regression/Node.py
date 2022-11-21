@@ -319,6 +319,13 @@ class InvalidNode(Node):
     def _get_features(self, features_list=list):
         return features_list
 
+    def _get_complexity(self, base_complexity=0):
+        """ This method increase the complexity of the program by 1
+        It is usually called by an OperationNode _get_complexity which
+        accounts for the rest of the program.
+        """
+        return base_complexity + 1
+        
     def _get_operations_used(self, base_operations_used=dict):
         return base_operations_used
 
