@@ -75,12 +75,20 @@ The algorithm is depicted in the figure below.
 <img src="/doc/NSGA_Dominance.png" alt="NSGA-II Algorithm" style="width:70%; border:0;">
 </p>
 
+# Multi-objective Symbolic Regression for Score Systems Management
+
+
 ## Example for using this library
 You can find an iPython notebook in the examples folder that shows how this Python library can be used.
+
+# Known Issues
+- This implementation has been developed to work using ```sympy==1.9```. We are aware of execution problems when using with newer versions.
 
 # Contacts
 Feel free to get in touch writing to [davide.ferrari@kcl.ac.uk](mailto:davide.ferrari@kcl.ac.uk)
 
 # Citations
 
-Coming soon
+- Davide Ferrari, Veronica Guidetti, Federica Mandreoli: Multi-Objective Symbolic Regression for Data-Driven Scoring System Management. IEEE International Conference on Data Mining (ICDM), Orlando (FL), Dec. 2022; - See more at: [https://www.isgroup.unimore.it/members-federica.html#sthash.FgZR93je.dpuf](https://www.isgroup.unimore.it/members-federica.html#sthash.FgZR93je.dpuf)
+
+- Davide Ferrari, Veronica Guidetti, Yanzhong Wang, Vasa Curcin: Multi-objective Symbolic Regression to Generate Data-driven, Non-fixed Structure and Intelligible Mortality Predictors using EHR: Binary Classification Methodology and Comparison with State-of-the-art. Proceedings of the American Medical Informatics (AMIA) Annual Symposium, Washington DC, Nov. 2022; - See more at: [https://scholar.google.it/citations?view_op=view_citation&hl=en&user=5zwLd3IAAAAJ&citation_for_view=5zwLd3IAAAAJ:W7OEmFMy1HYC](https://scholar.google.it/citations?view_op=view_citation&hl=en&user=5zwLd3IAAAAJ&citation_for_view=5zwLd3IAAAAJ:W7OEmFMy1HYC)
