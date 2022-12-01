@@ -42,6 +42,7 @@ class SymbolicRegressor:
         # Model characteristics
         self.best_program = None
         self.best_programs_history = []
+        self.first_pareto_front_history = []
         self.converged_generation = None
         self.generation = None
         self.population = None
@@ -163,6 +164,7 @@ class SymbolicRegressor:
                     parsimony=self.parsimony,
                     parsimony_decay=self.parsimony_decay,
                 ) for _ in range(self.population_size))
+
         else:
             logging.info("Fitting with existing population")
 
@@ -198,10 +200,7 @@ class SymbolicRegressor:
 
             offsprings = []
 
-            if n_jobs > 0:
-                m_workers = n_jobs
-            else:
-                m_workers = os.cpu_count()
+            m_workers = n_jobs if n_jobs > 0 else os.cpu_count()
 
             executor = get_reusable_executor(max_workers=m_workers)
             offsprings = list(set(executor.map(
@@ -214,6 +213,7 @@ class SymbolicRegressor:
                     self.tournament_size,
                     genetic_operators_frequency
                 ))))
+            
             self.population += offsprings
 
             # Removes all non valid programs in the population
@@ -245,7 +245,7 @@ class SymbolicRegressor:
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements"
                 )
 
-                self.population += Parallel(
+                refill = Parallel(
                     n_jobs=n_jobs, batch_size=28,
                     backend=backend_parallel)(delayed(generate_population)(
                         data=data,
@@ -256,6 +256,8 @@ class SymbolicRegressor:
                         parsimony=self.parsimony,
                         parsimony_decay=self.parsimony_decay,
                     ) for _ in range(missing_elements))
+
+                self.population += refill
 
             logging.debug(f"Creating pareto front")
             self.status = "Creating pareto front"
@@ -272,6 +274,7 @@ class SymbolicRegressor:
 
             self.best_program = self.population[0]
             self.best_programs_history.append(self.best_program)
+            self.first_pareto_front_history.append(list(self.first_pareto_front))
 
             self.average_complexity = np.mean(
                 [p.complexity for p in self.population])
@@ -350,6 +353,10 @@ class SymbolicRegressor:
 
         with open(file, "rb") as f:
             return pickle.load(f)
+    
+    @property
+    def first_pareto_front(self):
+        return [p for p in self.population if p.rank == 1]
 
     @property
     def summary(self):

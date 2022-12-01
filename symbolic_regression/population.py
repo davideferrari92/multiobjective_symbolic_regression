@@ -27,6 +27,6 @@ def generate_population(features,
     p.init_program()
 
     p.eval_fitness(fitness=fitness, program=p,
-                   data=data, target=target, weights=weights)
+                  data=data, target=target, weights=weights)
 
     return p
