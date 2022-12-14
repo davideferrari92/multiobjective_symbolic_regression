@@ -6,6 +6,7 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+import pygmo as pg
 from joblib.parallel import Parallel, delayed
 
 from symbolic_regression.multiobjective.training import (create_pareto_front,
@@ -49,6 +50,8 @@ class SymbolicRegressor:
         self.population_size = population_size
         self.status = "Uninitialized"
         self.training_duration = None
+        self.fpf_hypervolume = None
+        self.fpf_hypervolume_history = []
 
         # Training configurations
         self.checkpoint_file = checkpoint_file
@@ -282,7 +285,7 @@ class SymbolicRegressor:
             if verbose > 1:
                 print()
                 print(
-                    f"Population of {len(self.population)} elements and average complexity of {self.average_complexity}\n"
+                    f"Population of {len(self.population)} elements and average complexity of {self.average_complexity} and 1PF hypervolume of {self.hypervolume}\n"
                 )
                 print(
                     f"\tBest individual(s) in the first Pareto Front"
@@ -314,7 +317,7 @@ class SymbolicRegressor:
                     pass  # Stops printing in very small populations
 
             end_time_generation = time.perf_counter()
-
+            
             if self.best_program.converged:
                 converged_time = time.perf_counter()
                 if not self.converged_generation:
@@ -341,6 +344,22 @@ class SymbolicRegressor:
                 return
 
             self.elapsed_time += end_time_generation - start_time_generation
+
+    @property
+    def hypervolume(self):
+        
+        fitness_to_hypervolume = []
+        for fitness, value in self.first_pareto_front[0]._fitness_template.items():
+            if value.get('hv_reference', None) and value.get('minimize', True):
+                fitness_to_hypervolume.append(fitness)
+
+        references = [self.first_pareto_front[0]._fitness_template[fitness]['hv_reference'] for fitness in fitness_to_hypervolume]
+        points = [[p._fitness_template[fitness]['func'] for fitness in fitness_to_hypervolume] for p in self.first_pareto_front]
+
+        self.fpf_hypervolume = pg.hypervolume(points).compute(references)
+        self.fpf_hypervolume_history.append(self.fpf_hypervolume)
+
+        return self.fpf_hypervolume
 
     def save_model(self, file: str):
         import pickle

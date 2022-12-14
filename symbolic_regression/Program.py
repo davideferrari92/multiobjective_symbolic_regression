@@ -6,6 +6,7 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import sympy
+import pygmo as pg
 
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
@@ -79,6 +80,7 @@ class Program:
         self.programs_dominates: list = []
         self.programs_dominated_by: list = []
         self.crowding_distance: float = 0
+        self.program_hypervolume: float = np.nan
 
         self.parsimony = parsimony
         self._parsimony_bkp = parsimony
@@ -331,11 +333,11 @@ class Program:
         if not self.is_valid:
             return None
 
-        evaluated = fitness(program=self, data=data)
+        self._fitness_template = fitness(program=self, data=data)
 
         _converged = []
 
-        for ftn_label, ftn in evaluated.items():
+        for ftn_label, ftn in self._fitness_template.items():
 
             f = ftn['func']
 
@@ -575,6 +577,34 @@ class Program:
         simp.program = simplify_program(self)
 
         return simp
+
+    @property
+    def hypervolume(self) -> float:
+        """ This method return the hypervolume of the program
+
+        The hypervolume is the volume occupied by the fitness space by the program.
+        It can be of any dimension.
+        """
+
+        if not self.program.is_valid:
+            return np.nan
+
+        fitness_to_hypervolume = []
+        for fitness, value in self._fitness_template.items():
+            if value.get('hv_reference', None) and value.get('minimize', True):
+                fitness_to_hypervolume.append(fitness)
+
+        if not fitness_to_hypervolume:
+            return np.nan
+
+        points = [[self._fitness_template[f]['func']
+                   for f in fitness_to_hypervolume]]
+        references = [self._fitness_template[f]['hv_reference']
+                      for f in fitness_to_hypervolume]
+
+        self.program_hypervolume = pg.hypervolume(points).compute(references)
+
+        return self.program_hypervolume
 
     # GENETIC OPERATIONS
     def cross_over(self, other=None, inplace: bool = False) -> None:
