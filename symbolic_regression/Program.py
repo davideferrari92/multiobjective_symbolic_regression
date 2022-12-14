@@ -225,6 +225,7 @@ class Program:
             arity=OPERATOR_ADD['arity'],
             format_str=OPERATOR_ADD['format_str'],
             format_tf=OPERATOR_ADD.get('format_tf'),
+            symbol=OPERATOR_ADD.get('symbol'),
             format_diff=OPERATOR_ADD.get(
                 'format_diff', OPERATOR_ADD['format_str']),
             father=None
@@ -237,6 +238,7 @@ class Program:
             arity=OPERATOR_MUL['arity'],
             format_str=OPERATOR_MUL['format_str'],
             format_tf=OPERATOR_MUL.get('format_tf'),
+            symbol=OPERATOR_MUL.get('symbol'),
             format_diff=OPERATOR_MUL.get(
                 'format_diff', OPERATOR_MUL['format_str']),
             father=add_node
@@ -262,6 +264,7 @@ class Program:
             arity=OPERATOR_SIGMOID['arity'],
             format_str=OPERATOR_SIGMOID['format_str'],
             format_tf=OPERATOR_SIGMOID.get('format_tf'),
+            symbol=OPERATOR_SIGMOID.get('symbol'),
             format_diff=OPERATOR_SIGMOID.get(
                 'format_diff', OPERATOR_SIGMOID['format_str']),
             father=None
@@ -365,6 +368,10 @@ class Program:
         if len(_converged) > 0:
             self.converged = all(_converged)
 
+    @property
+    def hash(self):
+        return self.program.hash(hash_list=[])
+
     def init_program(self) -> None:
         """ This method initialize a new program calling the recursive generation function.
 
@@ -444,6 +451,7 @@ class Program:
                                  arity=operation_conf['arity'],
                                  format_str=operation_conf.get('format_str'),
                                  format_tf=operation_conf.get('format_tf'),
+                                 symbol=operation_conf.get('symbol'),
                                  format_diff=operation_conf.get(
                                      'format_diff', operation_conf.get('format_str')),
                                  father=father)
@@ -891,6 +899,7 @@ class Program:
         mutate_point.operation = new_operation.get('func')
         mutate_point.format_str = new_operation.get('format_str')
         mutate_point.format_tf = new_operation.get('format_tf')
+        mutate_point.symbol = new_operation.get('symbol')
         mutate_point.format_diff = new_operation.get(
             'format_diff', new_operation.get('format_str'))
 

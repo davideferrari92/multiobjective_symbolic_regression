@@ -5,6 +5,13 @@ import pandas as pd
 import numpy as np
 
 
+def hash_djb2(s: str) -> int:
+    hash = 5381
+    for x in s:
+        hash = (hash << 5) + hash + ord(x)
+    return hash & 0xFFFFFFFF
+
+
 class Node(ABC):
     """ A node can represent an operation or a feature in a binary tree
     """
@@ -23,7 +30,7 @@ class OperationNode(Node):
     the formula terminate and a feature is chosen.
     """
 
-    def __init__(self, operation: callable, format_tf: str, format_diff: str, arity: int,
+    def __init__(self, operation: callable, format_tf: str, format_diff: str, arity: int, symbol: str,
                  format_str: str, father) -> None:
         """ To initialize an OperationNode
 
@@ -37,6 +44,7 @@ class OperationNode(Node):
         super().__init__(father)
 
         self.operation = operation
+        self.symbol = symbol
         self.arity = arity
         self.format_str = format_str
         self.format_tf = format_tf
@@ -151,7 +159,7 @@ class OperationNode(Node):
 
         return features_list
 
-    def _get_operations_used(self, base_operations_used={}):
+    def _get_operations_used(self, base_operations_used: dict = dict):
         if not base_operations_used.get(self.operation):
             base_operations_used[self.operation] = 0
 
@@ -163,6 +171,22 @@ class OperationNode(Node):
                     base_operations_used=base_operations_used)
 
         return base_operations_used
+
+    def hash(self, hash_list: list = list) -> int:
+
+        child_hash = []
+        for child in self.operands:
+            child_hash.append(child.hash(hash_list=hash_list))
+
+        operation_hash = hash_djb2(f'{self.symbol}{"".join([str(x) for x in child_hash])}')
+
+        hash_list.append(operation_hash)
+
+        for child in child_hash:
+            if isinstance(child, int):
+                hash_list.append(child)
+
+        return hash_list
 
     def is_valid(self):
 
@@ -259,21 +283,26 @@ class FeatureNode(Node):
 
         return result
 
-    def _get_all_operations(self, all_operations=list):
+    def _get_all_operations(self, all_operations: list = list):
         return all_operations
 
-    def _get_complexity(self, base_complexity=0):
+    def _get_complexity(self, base_complexity: int = 0):
         """ This method increase the complexity of the program by 1
         It is usually called by an OperationNode _get_complexity which
         accounts for the rest of the program.
         """
         return base_complexity + 1
 
-    def _get_depth(self, base_depth=0):
+    def _get_depth(self, base_depth: int = 0):
         return base_depth + 1
 
-    def _get_features(self, features_list=[]):
+    def _get_features(self, features_list: list = list):
         return features_list
+
+    def hash(self, hash_list: list = list) -> int:
+        """ This method return the hash of the FeatureNode
+        """
+        return hash_djb2(str(self.feature))
 
     def is_valid(self):
         if pd.isna(self.feature):
@@ -325,9 +354,12 @@ class InvalidNode(Node):
         accounts for the rest of the program.
         """
         return base_complexity + 1
-        
+
     def _get_operations_used(self, base_operations_used=dict):
         return base_operations_used
+
+    def hash(self, hash_list: list = list) -> int:
+        return hash_djb2('InvalidNode')
 
     def is_valid(self):
         return False
