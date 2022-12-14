@@ -78,7 +78,8 @@ def SGD(program: Program,
     learning_rate = constants_optimization_conf['learning_rate']
     batch_size = constants_optimization_conf['batch_size']
     epochs = constants_optimization_conf['epochs']
-    gradient_clip = constants_optimization_conf['gradient_clip']
+    gradient_clip = constants_optimization_conf.get('gradient_clip', None)
+    l2_param = constants_optimization_conf.get('l2_param', None)
 
     if not program.is_valid:  # No constants in program
         return [], [], []
@@ -181,7 +182,10 @@ def SGD(program: Program,
                 av_grad = av_grad / (norm_grad + 1e-20)
 
             # Updating constants
-            constants -= learning_rate * av_grad
+            if l2_param:
+                constants -= learning_rate * av_grad + 2 * learning_rate * l2_param * constants
+            else:
+                constants -= learning_rate * av_grad
 
         log.append(list(constants))
         loss.append(av_loss)
@@ -209,6 +213,7 @@ def ADAM(program: Program,
     beta_1 = constants_optimization_conf['beta_1']
     beta_2 = constants_optimization_conf['beta_2']
     epsilon = constants_optimization_conf['epsilon']
+    l2_param = constants_optimization_conf.get('l2_param', None)
 
     if not program.is_valid:  # No constants in program
         return [], [], []
@@ -324,7 +329,10 @@ def ADAM(program: Program,
             t += 1
 
             # Update constants
-            constants -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+            if l2_param:
+                constants -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon) + 2 * learning_rate * l2_param * constants
+            else:
+                constants -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
 
         log.append(list(constants))
         loss.append(av_loss)
