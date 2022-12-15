@@ -10,6 +10,11 @@ def _protected_exp(x):
         return 0.
 
 
+def _protected_mul(x1, x2):
+    """Closure of multiplication for zero arguments."""
+    with np.errstate(over='ignore', under='ignore'):
+        return np.multiply(x1, x2)
+
 def _protected_division(x1, x2):
     """Closure of division (x1/x2) for zero denominator."""
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -69,7 +74,7 @@ OPERATOR_SUB = {
 }
 
 OPERATOR_MUL = {
-    "func": operator.mul,
+    "func": _protected_mul,
     "format_tf": 'tf.multiply({}, {})',
     "arity": 2,
     "symbol": "*",

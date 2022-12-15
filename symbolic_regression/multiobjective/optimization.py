@@ -79,7 +79,8 @@ def SGD(program: Program,
     batch_size = constants_optimization_conf['batch_size']
     epochs = constants_optimization_conf['epochs']
     gradient_clip = constants_optimization_conf.get('gradient_clip', None)
-    l2_param = constants_optimization_conf.get('l2_param', None)
+    l1_param = constants_optimization_conf.get('l1_param', 0)
+    l2_param = constants_optimization_conf.get('l2_param', 0)
 
     if not program.is_valid:  # No constants in program
         return [], [], []
@@ -182,10 +183,8 @@ def SGD(program: Program,
                 av_grad = av_grad / (norm_grad + 1e-20)
 
             # Updating constants
-            if l2_param:
-                constants -= learning_rate * av_grad + 2 * learning_rate * l2_param * constants
-            else:
-                constants -= learning_rate * av_grad
+            constants -= learning_rate * av_grad + 2 * learning_rate * l2_param * \
+                constants + learning_rate * l1_param * np.sign(constants)
 
         log.append(list(constants))
         loss.append(av_loss)
@@ -213,7 +212,8 @@ def ADAM(program: Program,
     beta_1 = constants_optimization_conf['beta_1']
     beta_2 = constants_optimization_conf['beta_2']
     epsilon = constants_optimization_conf['epsilon']
-    l2_param = constants_optimization_conf.get('l2_param', None)
+    l1_param = constants_optimization_conf.get('l1_param', 0)
+    l2_param = constants_optimization_conf.get('l2_param', 0)
 
     if not program.is_valid:  # No constants in program
         return [], [], []
@@ -329,10 +329,9 @@ def ADAM(program: Program,
             t += 1
 
             # Update constants
-            if l2_param:
-                constants -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon) + 2 * learning_rate * l2_param * constants
-            else:
-                constants -= learning_rate * m_hat / (np.sqrt(v_hat) + epsilon)
+            constants -= learning_rate * m_hat / \
+                (np.sqrt(v_hat) + epsilon) + 2 * learning_rate * l2_param * \
+                constants + learning_rate * l1_param * np.sign(constants)
 
         log.append(list(constants))
         loss.append(av_loss)
@@ -402,7 +401,7 @@ def ADAM2FOLD(program: Program,
         grad.append(sym.diff(p_sym, f'c{i}'))
 
     # define gradient and program python functions from sympy object
-    
+
     try:
         pyf_grad = lambdify([x_sym, c_sym], grad)
         pyf_prog = lambdify([x_sym, c_sym], p_sym)

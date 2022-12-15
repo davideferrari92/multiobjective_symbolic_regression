@@ -1,14 +1,16 @@
+import copy
 import sympy
 
 from symbolic_regression.Node import FeatureNode, InvalidNode, OperationNode
 from symbolic_regression.operators import *
 
 
-def extract_operation(element, father=None):
+def extract_operation(element_to_extract, father=None):
     """ Extract a single operation from the sympy.simplify output
     It is meant to be used recursively.
     """
 
+    element = copy.deepcopy(element_to_extract)
     current_operation = None
 
     if element.is_Pow:
@@ -70,7 +72,7 @@ def extract_operation(element, father=None):
             '''
 
             # Left child will be one of the arity+n operands
-            n_op = extract_operation(element=args.pop(), father=new_operation)
+            n_op = extract_operation(element_to_extract=args.pop(), father=new_operation)
             new_operation.add_operand(n_op)
 
             # args now has one element removed and need to be overwritten to converge the recursion.
@@ -78,12 +80,12 @@ def extract_operation(element, father=None):
 
             # Right child will be again the same element (same operation and one less of the args)
             # until n_args == arity.
-            n_op = extract_operation(element=element, father=new_operation)
+            n_op = extract_operation(element_to_extract=element, father=new_operation)
             new_operation.add_operand(n_op)
         else:
             # When n_args == arity, just loop on the remaining args and add as terminal children
             for op in args:
-                n_op = extract_operation(element=op, father=new_operation)
+                n_op = extract_operation(element_to_extract=op, father=new_operation)
                 new_operation.add_operand(n_op)
 
         return new_operation

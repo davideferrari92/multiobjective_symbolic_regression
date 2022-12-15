@@ -1,5 +1,6 @@
 datasets/
 tmp/
+.vscode/
 
 # Jupyter files
 .ipynb_checkpoints

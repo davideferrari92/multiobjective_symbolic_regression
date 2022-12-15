@@ -553,9 +553,10 @@ class Program:
 
                 try:
                     if isinstance(program, Program):
-                        simplified = sympy.parse_expr(program.program.render())
+                        simplified = sympy.parse_expr(program.program.render(), evaluate=False)
                     else:
-                        simplified = sympy.parse_expr(program)
+                        simplified = sympy.parse_expr(program, evaluate=False)
+
                 except ValueError:
                     program._override_is_valid = False
                     return program.program
@@ -565,7 +566,7 @@ class Program:
                 logging.debug(
                     f'Extracting the program tree from the simplified')
 
-                new_program = extract_operation(element=simplified,
+                new_program = extract_operation(element_to_extract=simplified,
                                                 father=None)
 
                 logging.debug(f'Simplified program {new_program}')
@@ -574,7 +575,7 @@ class Program:
 
             except UnboundLocalError:
                 return program.program
-
+        
         if inplace:
             if inject:
                 self.program = simplify_program(inject)

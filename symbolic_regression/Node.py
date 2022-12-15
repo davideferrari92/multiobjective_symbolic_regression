@@ -178,7 +178,8 @@ class OperationNode(Node):
         for child in self.operands:
             child_hash.append(child.hash(hash_list=hash_list))
 
-        operation_hash = hash_djb2(f'{self.symbol}{"".join([str(x) for x in child_hash])}')
+        operation_hash = hash_djb2(
+            f'{self.symbol}{"".join([str(x) for x in child_hash])}')
 
         hash_list.append(operation_hash)
 

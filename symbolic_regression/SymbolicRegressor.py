@@ -356,9 +356,13 @@ class SymbolicRegressor:
         references = [self.first_pareto_front[0]._fitness_template[fitness]['hv_reference'] for fitness in fitness_to_hypervolume]
         points = [[p._fitness_template[fitness]['func'] for fitness in fitness_to_hypervolume] for p in self.first_pareto_front]
 
-        self.fpf_hypervolume = pg.hypervolume(points).compute(references)
-        self.fpf_hypervolume_history.append(self.fpf_hypervolume)
-
+        try:
+            self.fpf_hypervolume = pg.hypervolume(points).compute(references)
+            self.fpf_hypervolume_history.append(self.fpf_hypervolume)
+        except:
+            self.fpf_hypervolume = 0
+            self.fpf_hypervolume_history.append(0)
+            
         return self.fpf_hypervolume
 
     def save_model(self, file: str):
