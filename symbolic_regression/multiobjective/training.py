@@ -301,4 +301,7 @@ def get_offspring(population: list, data: pd.DataFrame, fitness: list,
     # Add the fitness to the object after the cross_over or mutation
     p_ret.evaluate_fitness(fitness=fitness, data=data)
 
+    # Reset the hash to force the re-computation
+    p_ret._hash = None
+    
     return p_ret

@@ -10,7 +10,8 @@ def extract_operation(element_to_extract, father=None):
     It is meant to be used recursively.
     """
 
-    element = copy.deepcopy(element_to_extract)
+    element = element_to_extract
+
     current_operation = None
 
     if element.is_Pow:
@@ -38,7 +39,7 @@ def extract_operation(element_to_extract, father=None):
         current_operation = OPERATOR_MAX
     
     if current_operation:
-        args = list(element.args)
+        args = list(element._args)
 
         # 1/x is treated as pow(x, -1) which is more unstable.
         # We convert it to an actual 1/x
@@ -72,7 +73,8 @@ def extract_operation(element_to_extract, father=None):
             '''
 
             # Left child will be one of the arity+n operands
-            n_op = extract_operation(element_to_extract=args.pop(), father=new_operation)
+            left_child = args.pop(0)
+            n_op = extract_operation(element_to_extract=left_child, father=new_operation)
             new_operation.add_operand(n_op)
 
             # args now has one element removed and need to be overwritten to converge the recursion.

@@ -174,6 +174,7 @@ class OperationNode(Node):
 
     def hash(self, hash_list: list = list) -> int:
 
+        # Evaluate child hashes to then evaluate the operation one
         child_hash = []
         for child in self.operands:
             child_hash.append(child.hash(hash_list=hash_list))
@@ -181,11 +182,13 @@ class OperationNode(Node):
         operation_hash = hash_djb2(
             f'{self.symbol}{"".join([str(x) for x in child_hash])}')
 
-        hash_list.append(operation_hash)
+        # Add the operation hash to the list and then the children ones
 
         for child in child_hash:
             if isinstance(child, int):
-                hash_list.append(child)
+                hash_list.insert(0, child)
+        
+        hash_list.insert(0, operation_hash)
 
         return hash_list
 

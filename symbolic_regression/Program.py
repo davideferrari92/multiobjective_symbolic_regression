@@ -5,7 +5,7 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
-import sympy
+from sympy.parsing.sympy_parser import parse_expr
 import pygmo as pg
 
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
@@ -81,6 +81,7 @@ class Program:
         self.programs_dominated_by: list = []
         self.crowding_distance: float = 0
         self.program_hypervolume: float = np.nan
+        self._hash: list = None
 
         self.parsimony = parsimony
         self._parsimony_bkp = parsimony
@@ -253,6 +254,9 @@ class Program:
 
         prog.program = add_node
         prog.is_affine = True
+
+        # Reset the hash to force the re-computation
+        self._hash = None
         return prog
 
     def to_logistic(self, inplace: bool = False):
@@ -279,6 +283,10 @@ class Program:
         prog.program.father = logistic_node
         prog.program = logistic_node
         prog.is_logistic = True
+
+        # Reset the hash to force the re-computation
+        self._hash = None
+
         return prog
 
     def get_features(self, return_objects: bool = False):
@@ -370,7 +378,10 @@ class Program:
 
     @property
     def hash(self):
-        return self.program.hash(hash_list=[])
+        if not self._hash:
+            self._hash = self.program.hash(hash_list=[])
+        
+        return self._hash
 
     def init_program(self) -> None:
         """ This method initialize a new program calling the recursive generation function.
@@ -398,6 +409,9 @@ class Program:
 
         logging.debug(f'Generated a program of depth {self.program_depth}')
         logging.debug(self.program)
+
+        # Reset the hash to force the re-computation
+        self._hash = None
 
     def __lt__(self, other):
         """ This ordering function allow to compare programs by their fitness value
@@ -538,31 +552,24 @@ class Program:
         """
         from symbolic_regression.simplification import extract_operation
 
-        def simplify_program(program: Union[Program, str]) -> Program:
+        if self._hash:
+            return self
+
+        def simplify_program(program: str) -> Program:
             """ This function simplify a program using a SymPy backend
 
             try: the root node of the program, not the Program object
 
             """
             try:
-                if isinstance(program, Program) and isinstance(
-                        program.program, FeatureNode):
-                    return program.program
-
                 logging.debug(f'Simplifying program {program}')
 
                 try:
-                    if isinstance(program, Program):
-                        simplified = sympy.parse_expr(program.program.render(), evaluate=False)
-                    else:
-                        simplified = sympy.parse_expr(program, evaluate=False)
-
+                    simplified = parse_expr(program, evaluate=False)
                 except ValueError:
-                    program._override_is_valid = False
-                    return program.program
+                    return False
                 except TypeError:
-                    program._override_is_valid = False
-                    return program.program
+                    return False
                 logging.debug(
                     f'Extracting the program tree from the simplified')
 
@@ -574,18 +581,25 @@ class Program:
                 return new_program
 
             except UnboundLocalError:
-                return program.program
+                return program
         
         if inplace:
-            if inject:
-                self.program = simplify_program(inject)
-            self.program = simplify_program(self)
-            return self
+            to_return = self
+        else:
+            to_return = deepcopy(self)
+        
+        if inject:
+            simp = simplify_program(inject)
+        else:
+            simp = simplify_program(to_return.program.render())
+        
+        to_return.program = simp
+        if not simp:
+            to_return._override_is_valid = False
 
-        simp = deepcopy(self)
-        simp.program = simplify_program(self)
-
-        return simp
+        # Reset the hash to force the re-computation
+        to_return._hash = None
+        return to_return
 
     @property
     def hypervolume(self) -> float:
