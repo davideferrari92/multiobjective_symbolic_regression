@@ -91,7 +91,7 @@ def binary_cross_entropy(program: Program,
                          constants_optimization_conf: dict = {}):
 
     if constants_optimization:
-        prog = optimize(
+        optimized = optimize(
             program=program,
             data=data,
             target=target,
@@ -99,9 +99,8 @@ def binary_cross_entropy(program: Program,
             constants_optimization_method=constants_optimization_method,
             constants_optimization_conf=constants_optimization_conf,
             task='binary:logistic')
-    else:
-        prog = program
-
+        program.program = optimized.program
+    
     if logistic:
         prog = to_logistic(program=prog)
 
@@ -348,8 +347,8 @@ def wmse(program: Program,
             constants_optimization_conf=constants_optimization_conf,
             task='regression:wmse')
         program.program = optimized.program
-
-    pred = optimized.evaluate(data=data)
+        
+    pred = program.evaluate(data=data)
 
     try:
         if weights:
@@ -384,7 +383,7 @@ def wrrmse(program: Program,
             task='regression:wrrmse')
         program.program = optimized.program
 
-    pred = optimized.evaluate(data=data)
+    pred = program.evaluate(data=data)
 
     try:
         if weights:
