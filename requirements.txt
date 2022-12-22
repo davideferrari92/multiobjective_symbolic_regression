@@ -3,6 +3,7 @@ numpy
 pandas
 sympy==1.9
 scipy
-sklearn
+scikit-learn
 joblib
 pygmo
+loky
