@@ -102,9 +102,9 @@ def binary_cross_entropy(program: Program,
         program.program = optimized.program
     
     if logistic:
-        prog = to_logistic(program=prog)
+        program = to_logistic(program=program)
 
-    pred = np.array(prog.evaluate(data=data))
+    pred = np.array(program.evaluate(data=data))
     ground_truth = data[target]
 
     if weights:
