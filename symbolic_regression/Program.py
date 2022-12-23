@@ -1,16 +1,18 @@
 import logging
 import random
 from copy import deepcopy
-from typing import Union
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
-from sympy.parsing.sympy_parser import parse_expr
 import pygmo as pg
+import sympy
+from sympy.parsing.sympy_parser import parse_expr
 
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
 from symbolic_regression.operators import OPERATOR_ADD, OPERATOR_MUL, OPERATOR_POW
+from symbolic_regression.multiobjective.optimization import SGD, ADAM, ADAM2FOLD
 
 
 class Program:
@@ -45,13 +47,14 @@ class Program:
 
     """
 
-    def __init__(self,
-                 operations: list,
-                 features: list,
-                 const_range: tuple = None,
-                 program: Node = None,
-                 parsimony: float = .9,
-                 parsimony_decay: float = .85) -> None:
+    def __init__(
+            self,
+            operations: list,
+            features: list,
+            const_range: tuple = None,
+            program: Node = None,
+            parsimony: float = .9,
+            parsimony_decay: float = .85) -> None:
         """
 
         Args:
@@ -95,6 +98,8 @@ class Program:
         else:
             self.program: Node = InvalidNode()
             self.fitness = float(np.inf)
+            self.fitness_functions = list()
+            self.is_fitness_to_minimize = dict()
 
     def __copy__(self):
         cls = self.__class__
@@ -114,6 +119,22 @@ class Program:
             logging.warning(
                 f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}'
             )
+
+    def __lt__(self, other):
+        """ This ordering function allow to compare programs by their fitness value
+
+        TODO fix docstring with new fitness dictionaries
+
+        Args:
+            other: The program to which compare the current one
+        """
+
+        if isinstance(self.fitness, dict):
+            return self.rank <= other.rank and self.crowding_distance >= other.crowding_distance
+
+        else:
+            raise TypeError(
+                f'program.fitness is not a dict: {type(self.fitness)}')
 
     @property
     def complexity(self):
@@ -171,149 +192,6 @@ class Program:
         """
         return self.program.is_valid() and self._override_is_valid
 
-    def to_mathematica(self) -> str:
-        """ This allow to print the program in Mathematica format
-
-        Returns:
-            A string representing the program in Mathematica format
-        """
-        return sympy.printing.mathematica.mathematica_code(self.program)
-
-    def get_constants(self):
-        """ This method allow to get all constants used in a tree.
-
-        The constants are used for the neuronal-based constants optimizer; it requires
-        all constants to be in a fixed order explored by a DFS descent of the tree.
-        """
-        to_return = None
-        if isinstance(self.program, OperationNode):
-            to_return = self.program._get_constants(const_list=[])
-
-        # Only one constant FeatureNode
-        elif self.program.is_constant:
-            to_return = [self.program]
-
-        else:
-            # Only one non-constant FeatureNode
-            to_return = []
-
-        for index, constant in enumerate(to_return):
-            self._set_constants_index(constant=constant, index=index)
-
-        return to_return
-
-    def to_affine(self, data: pd.DataFrame, target: str, inplace: bool = False):
-        """ This function create an affine version of the program between the target maximum and minimum
-        """
-        if inplace:
-            prog = self
-        else:
-            prog = deepcopy(self)
-
-        y_pred = prog.evaluate(data=data)
-
-        y_pred_min = min(y_pred)
-        y_pred_max = max(y_pred)
-        target_min = data[target].min()
-        target_max = data[target].max()
-
-        alpha = target_max + (target_max - target_min) * \
-            y_pred_max / (y_pred_min - y_pred_max)
-        beta = (target_max - target_min) / (y_pred_max - y_pred_min)
-
-        add_node = OperationNode(
-            operation=OPERATOR_ADD['func'],
-            arity=OPERATOR_ADD['arity'],
-            format_str=OPERATOR_ADD['format_str'],
-            format_tf=OPERATOR_ADD.get('format_tf'),
-            symbol=OPERATOR_ADD.get('symbol'),
-            format_diff=OPERATOR_ADD.get(
-                'format_diff', OPERATOR_ADD['format_str']),
-            father=None
-        )
-        add_node.add_operand(FeatureNode(
-            feature=alpha, father=add_node, is_constant=True))
-
-        mul_node = OperationNode(
-            operation=OPERATOR_MUL['func'],
-            arity=OPERATOR_MUL['arity'],
-            format_str=OPERATOR_MUL['format_str'],
-            format_tf=OPERATOR_MUL.get('format_tf'),
-            symbol=OPERATOR_MUL.get('symbol'),
-            format_diff=OPERATOR_MUL.get(
-                'format_diff', OPERATOR_MUL['format_str']),
-            father=add_node
-        )
-
-        mul_node.add_operand(FeatureNode(
-            feature=beta, father=mul_node, is_constant=True))
-
-        prog.program.father = mul_node
-        mul_node.add_operand(prog.program)
-        add_node.add_operand(mul_node)
-
-        prog.program = add_node
-        prog.is_affine = True
-
-        # Reset the hash to force the re-computation
-        self._hash = None
-        return prog
-
-    def to_logistic(self, inplace: bool = False):
-        """
-        """
-        from symbolic_regression.operators import OPERATOR_SIGMOID
-        logistic_node = OperationNode(
-            operation=OPERATOR_SIGMOID['func'],
-            arity=OPERATOR_SIGMOID['arity'],
-            format_str=OPERATOR_SIGMOID['format_str'],
-            format_tf=OPERATOR_SIGMOID.get('format_tf'),
-            symbol=OPERATOR_SIGMOID.get('symbol'),
-            format_diff=OPERATOR_SIGMOID.get(
-                'format_diff', OPERATOR_SIGMOID['format_str']),
-            father=None
-        )
-        # So the upward pointer of the father is not permanent
-        if inplace:
-            prog = self
-        else:
-            prog = deepcopy(self)
-
-        logistic_node.operands.append(prog.program)
-        prog.program.father = logistic_node
-        prog.program = logistic_node
-        prog.is_logistic = True
-
-        # Reset the hash to force the re-computation
-        self._hash = None
-
-        return prog
-
-    def get_features(self, return_objects: bool = False):
-        """ This method recursively explore the tree and return a list of unique features used.
-        """
-        if isinstance(self.program, OperationNode):
-            return self.program._get_features(features_list=[],
-                                              return_objects=return_objects)
-
-        # Only one non-constant FeatureNode
-        elif not self.program.is_constant:
-            return [self.program]
-
-        # Only one constant FeatureNode
-        # Use get_constants() to have a list of all constant FeatureNode objects
-        return []
-
-    def set_constants(self, new):
-        """ This method allow to overwrite the value of constants after the neuron-based optimization
-        """
-        for constant, new_value in zip(self.get_constants(), new):
-            constant.feature = new_value
-
-    @staticmethod
-    def _set_constants_index(constant, index):
-        constant.index = index
-
     def evaluate(
             self, data: Union[dict, pd.Series,
                               pd.DataFrame]) -> Union[int, float]:
@@ -330,9 +208,47 @@ class Program:
 
         return self.program.evaluate(data=data)
 
-    def evaluate_fitness(self, data, fitness):
+    def evaluate_fitness(self, fitness_functions: List, data: pd.DataFrame):
+        """ This function evaluate the fitness of the program on the given data.
+        The fitness functions are passed as a list of BaseFitness objects.
         """
-        """
+
+        self.fitness_functions = fitness_functions
+        self.fitness = dict()
+        self.is_fitness_to_minimize = dict()
+
+        try:
+            self.simplify(inplace=True)
+        except ValueError:
+            self._override_is_valid = False
+            return None
+
+        _converged = []
+
+        for ftn in self.fitness_functions:
+            if ftn.label in self.fitness:
+                raise ValueError(f"Fitness function {ftn.label} already used")
+            fitness_value = ftn.evaluate(program=self, data=data)
+
+            convergence_threshold = ftn.convergence_threshold
+
+            if pd.isna(fitness_value):
+                fitness_value = np.inf
+                self._override_is_valid = False
+
+            self.fitness[ftn.label] = fitness_value
+            self.is_fitness_to_minimize[ftn.label] = ftn.minimize
+
+            if convergence_threshold and fitness_value <= convergence_threshold:
+                _converged.append(True)
+
+        if len(_converged) > 0:
+            self.converged = all(_converged)
+
+    '''
+    def evaluate_fitness(self, data: pd.DataFrame, fitness_functions: list):
+
+        self.fitness_functions = fitness_functions
         self.fitness = dict()
         self.is_fitness_to_minimize = dict()
 
@@ -375,73 +291,7 @@ class Program:
         # Use any or all to have at least one or all fitness converged when the convergence_threshold is provided
         if len(_converged) > 0:
             self.converged = all(_converged)
-
-    @property
-    def hash(self):
-        if not self._hash:
-            self._hash = self.program.hash(hash_list=[])
-        
-        return self._hash
-
-    def init_program(self) -> None:
-        """ This method initialize a new program calling the recursive generation function.
-
-        The generation of a program follows a genetic algorithm in which the choice on how to
-        progress in the generation randomly choose whether to put anothe operation (deepening
-        the program) or to put a terminal node (a feature from the dataset or a constant)
-
-        Args:
-            parsimony: The ratio with which to choose operations among terminal nodes
-            parsimony_decay: The ratio with which the parsimony decreases to prevent infinite programs
-        """
-
-        logging.debug(
-            f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}'
-        )
-
-        # Father=None is used to identify the root node of the program
-        self.program = self._generate_tree(
-            father=None,
-            parsimony=self.parsimony,
-            parsimony_decay=self.parsimony_decay)
-
-        self.parsimony = self._parsimony_bkp  # Restore parsimony for future operations
-
-        logging.debug(f'Generated a program of depth {self.program_depth}')
-        logging.debug(self.program)
-
-        # Reset the hash to force the re-computation
-        self._hash = None
-
-    def __lt__(self, other):
-        """ This ordering function allow to compare programs by their fitness value
-
-        TODO fix docstring with new fitness dictionaries
-
-        Args:
-            other: The program to which compare the current one
-        """
-
-        if isinstance(self.fitness, dict):
-            return self.rank <= other.rank and self.crowding_distance >= other.crowding_distance
-
-        else:
-            raise TypeError(
-                f'program.fitness is not a dict: {type(self.fitness)}')
-
-    def is_duplicate(self, other):
-        """ Determines whether two programs are equivalent based on equal fitnesses
-
-        If the fitness of two programs are identical, we assume they are equivalent to each other.
-        """
-        for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
-                                                      other.fitness.items()):
-            # One difference is enough for them not to be identical
-
-            if round(a_fit, 1) != round(b_fit, 1):
-                return False
-
-        return True
+    '''
 
     def _generate_tree(self,
                        depth=-1,
@@ -532,10 +382,200 @@ class Program:
 
         return node
 
-    def _select_random_node(
-            self,
-            root_node: Union[OperationNode, FeatureNode, InvalidNode],
-            deepness: float = 0.15) -> Union[OperationNode, FeatureNode]:
+    def get_constants(self):
+        """ This method allow to get all constants used in a tree.
+
+        The constants are used for the neuronal-based constants optimizer; it requires
+        all constants to be in a fixed order explored by a DFS descent of the tree.
+        """
+        to_return = None
+        if isinstance(self.program, OperationNode):
+            to_return = self.program._get_constants(const_list=[])
+
+        # Only one constant FeatureNode
+        elif self.program.is_constant:
+            to_return = [self.program]
+
+        else:
+            # Only one non-constant FeatureNode
+            to_return = []
+
+        for index, constant in enumerate(to_return):
+            self._set_constants_index(constant=constant, index=index)
+
+        return to_return
+
+    def get_features(self, return_objects: bool = False):
+        """ This method recursively explore the tree and return a list of unique features used.
+        """
+        if isinstance(self.program, OperationNode):
+            return self.program._get_features(features_list=[],
+                                              return_objects=return_objects)
+
+        # Only one non-constant FeatureNode
+        elif not self.program.is_constant:
+            return [self.program]
+
+        # Only one constant FeatureNode
+        # Use get_constants() to have a list of all constant FeatureNode objects
+        return []
+
+    @property
+    def hash(self):
+        if not self._hash:
+            self._hash = self.program.hash(hash_list=[])
+
+        return self._hash
+
+    @property
+    def hypervolume(self) -> float:
+        """ This method return the hypervolume of the program
+
+        The hypervolume is the volume occupied by the fitness space by the program.
+        It can be of any dimension.
+        """
+
+        if not self.program.is_valid:
+            return np.nan
+
+        fitness_to_hypervolume = []
+        for fitness in self.fitness_functions:
+            if fitness.hypervolume_reference and fitness.minimize:
+                fitness_to_hypervolume.append(fitness)
+
+        if not fitness_to_hypervolume:
+            return np.nan
+
+        points = [[self.fitness[ftn.label] for ftn in fitness_to_hypervolume]]
+        references = [
+            ftn.hypervolume_reference for ftn in fitness_to_hypervolume]
+
+        self.program_hypervolume = pg.hypervolume(points).compute(references)
+
+        return self.program_hypervolume
+
+    def init_program(self) -> None:
+        """ This method initialize a new program calling the recursive generation function.
+
+        The generation of a program follows a genetic algorithm in which the choice on how to
+        progress in the generation randomly choose whether to put anothe operation (deepening
+        the program) or to put a terminal node (a feature from the dataset or a constant)
+
+        Args:
+            parsimony: The ratio with which to choose operations among terminal nodes
+            parsimony_decay: The ratio with which the parsimony decreases to prevent infinite programs
+        """
+
+        logging.debug(
+            f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}'
+        )
+
+        # Father=None is used to identify the root node of the program
+        self.program = self._generate_tree(
+            father=None,
+            parsimony=self.parsimony,
+            parsimony_decay=self.parsimony_decay)
+
+        self.parsimony = self._parsimony_bkp  # Restore parsimony for future operations
+
+        logging.debug(f'Generated a program of depth {self.program_depth}')
+        logging.debug(self.program)
+
+        # Reset the hash to force the re-computation
+        self._hash = None
+
+    def is_duplicate(self, other):
+        """ Determines whether two programs are equivalent based on equal fitnesses
+
+        If the fitness of two programs are identical, we assume they are equivalent to each other.
+        """
+        for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
+                                                      other.fitness.items()):
+            # One difference is enough for them not to be identical
+
+            if round(a_fit, 1) != round(b_fit, 1):
+                return False
+
+        return True
+
+    def is_constant(self):
+        """ This method return True if the program is a constant, False otherwise.
+        """
+        return isinstance(self.program, FeatureNode) and self.program.is_constant
+
+    @property
+    def is_valid(self):
+        """ This method return True if the program is valid, False otherwise.
+        """
+        return self.program.is_valid
+
+    def optimize(self,
+                 data: pd.DataFrame,
+                 target: str,
+                 weights: str,
+                 constants_optimization: str,
+                 constants_optimization_conf: dict,
+                 inplace: bool = False):
+
+        if not constants_optimization or not self.is_valid:
+            return
+
+        task = constants_optimization_conf['task']
+
+        if task not in ['regression:wmse', 'regression:wrrmse', 'binary:logistic']:
+            raise AttributeError(
+                f'Task supported are regression:wmse, regression:wrrmse or binary:logistic')
+
+        n_constants = len(self.get_constants())
+        n_features_used = len(self.features_used)
+
+        if not isinstance(self.program, FeatureNode) and n_constants > 0 and n_features_used > 0:
+            ''' Rationale for the conditions:
+
+            not isinstance(program.program, FeatureNode)
+                programs with only a FeatureNode are not acceptable anyway
+
+            n_constants > 0
+                as the optimization algorithm optimize only constants
+
+            n_features_used > 0
+                as it is a constant program anyway and the optimized won't work with this configuration
+            '''
+            if constants_optimization == 'SGD':
+                f_opt = SGD
+                self.to_affine(data=data, target=target, inplace=True)
+
+            if constants_optimization == 'ADAM':
+                f_opt = ADAM
+                self.to_affine(data=data, target=target, inplace=True)
+
+            if constants_optimization == 'ADAM2FOLD':
+                # Here there can be more than one target so need the index
+                f_opt = ADAM2FOLD
+                self.to_affine(data=data, target=target[0], inplace=True)
+            else:
+                raise AttributeError(
+                    f'Constants optimization method {constants_optimization} not supported')
+
+            to_optimize = self if inplace else deepcopy(self)
+
+            to_optimize.simplify(inplace=True)
+
+            final_parameters, _, _ = f_opt(
+                program=to_optimize,
+                data=data,
+                target=target,
+                weights=weights,
+                constants_optimization_conf=constants_optimization_conf,
+                task=task
+            )
+
+            if len(final_parameters) > 0:
+                to_optimize.set_constants(new=final_parameters)
+
+            return to_optimize
+
+    def _select_random_node(self) -> Node:
         """ This method return a random node of a sub-tree starting from root_node.
         """
 
@@ -543,6 +583,16 @@ class Program:
             return random.choice(self.all_operations)
         except IndexError:  # When the root is also a FeatureNode or an InvalidNode
             return None
+
+    def set_constants(self, new):
+        """ This method allow to overwrite the value of constants after the neuron-based optimization
+        """
+        for constant, new_value in zip(self.get_constants(), new):
+            constant.feature = new_value
+
+    @staticmethod
+    def _set_constants_index(constant, index):
+        constant.index = index
 
     def simplify(self, inplace: bool = False, inject: Union[str, None] = None):
         """ This method allow to simplify the structure of a program using a SymPy backend
@@ -565,7 +615,7 @@ class Program:
                 logging.debug(f'Simplifying program {program}')
 
                 try:
-                    simplified = parse_expr(program, evaluate=False)
+                    simplified = parse_expr(program, evaluate=True)
                 except ValueError:
                     return False
                 except TypeError:
@@ -582,17 +632,17 @@ class Program:
 
             except UnboundLocalError:
                 return program
-        
+
         if inplace:
             to_return = self
         else:
             to_return = deepcopy(self)
-        
+
         if inject:
             simp = simplify_program(inject)
         else:
             simp = simplify_program(to_return.program.render())
-        
+
         to_return.program = simp
         if not simp:
             to_return._override_is_valid = False
@@ -601,35 +651,105 @@ class Program:
         to_return._hash = None
         return to_return
 
-    @property
-    def hypervolume(self) -> float:
-        """ This method return the hypervolume of the program
-
-        The hypervolume is the volume occupied by the fitness space by the program.
-        It can be of any dimension.
+    def to_affine(self, data: pd.DataFrame, target: str, inplace: bool = False):
+        """ This function create an affine version of the program between the target maximum and minimum
         """
 
-        if not self.program.is_valid:
-            return np.nan
+        if not self.is_valid:
+            return self
 
-        fitness_to_hypervolume = []
-        for fitness, value in self._fitness_template.items():
-            if value.get('hv_reference', None) and value.get('minimize', True):
-                fitness_to_hypervolume.append(fitness)
+        if inplace:
+            prog = self
+        else:
+            prog = deepcopy(self)
 
-        if not fitness_to_hypervolume:
-            return np.nan
+        y_pred = prog.evaluate(data=data)
 
-        points = [[self._fitness_template[f]['func']
-                   for f in fitness_to_hypervolume]]
-        references = [self._fitness_template[f]['hv_reference']
-                      for f in fitness_to_hypervolume]
+        y_pred_min = min(y_pred)
+        y_pred_max = max(y_pred)
+        target_min = data[target].min()
+        target_max = data[target].max()
 
-        self.program_hypervolume = pg.hypervolume(points).compute(references)
+        alpha = target_max + (target_max - target_min) * \
+            y_pred_max / (y_pred_min - y_pred_max)
+        beta = (target_max - target_min) / (y_pred_max - y_pred_min)
 
-        return self.program_hypervolume
+        add_node = OperationNode(
+            operation=OPERATOR_ADD['func'],
+            arity=OPERATOR_ADD['arity'],
+            format_str=OPERATOR_ADD['format_str'],
+            format_tf=OPERATOR_ADD.get('format_tf'),
+            symbol=OPERATOR_ADD.get('symbol'),
+            format_diff=OPERATOR_ADD.get(
+                'format_diff', OPERATOR_ADD['format_str']),
+            father=None
+        )
+        add_node.add_operand(FeatureNode(
+            feature=alpha, father=add_node, is_constant=True))
+
+        mul_node = OperationNode(
+            operation=OPERATOR_MUL['func'],
+            arity=OPERATOR_MUL['arity'],
+            format_str=OPERATOR_MUL['format_str'],
+            format_tf=OPERATOR_MUL.get('format_tf'),
+            symbol=OPERATOR_MUL.get('symbol'),
+            format_diff=OPERATOR_MUL.get(
+                'format_diff', OPERATOR_MUL['format_str']),
+            father=add_node
+        )
+
+        mul_node.add_operand(FeatureNode(
+            feature=beta, father=mul_node, is_constant=True))
+
+        prog.program.father = mul_node
+        mul_node.add_operand(prog.program)
+        add_node.add_operand(mul_node)
+
+        prog.program = add_node
+        prog.is_affine = True
+
+        # Reset the hash to force the re-computation
+        self._hash = None
+        return prog
+
+    def to_logistic(self, inplace: bool = False):
+        from symbolic_regression.operators import OPERATOR_SIGMOID
+        logistic_node = OperationNode(
+            operation=OPERATOR_SIGMOID['func'],
+            arity=OPERATOR_SIGMOID['arity'],
+            format_str=OPERATOR_SIGMOID['format_str'],
+            format_tf=OPERATOR_SIGMOID.get('format_tf'),
+            symbol=OPERATOR_SIGMOID.get('symbol'),
+            format_diff=OPERATOR_SIGMOID.get(
+                'format_diff', OPERATOR_SIGMOID['format_str']),
+            father=None
+        )
+        # So the upward pointer of the father is not permanent
+        if inplace:
+            program_to_logistic = self
+        else:
+            program_to_logistic = deepcopy(self)
+
+        logistic_node.operands.append(program_to_logistic.program)
+        program_to_logistic.program.father = logistic_node
+        program_to_logistic.program = logistic_node
+        program_to_logistic.is_logistic = True
+
+        # Reset the hash to force the re-computation
+        self._hash = None
+
+        return program_to_logistic
+
+    def to_mathematica(self) -> str:
+        """ This allow to print the program in Mathematica format
+
+        Returns:
+            A string representing the program in Mathematica format
+        """
+        return sympy.printing.mathematica.mathematica_code(self.program)
 
     # GENETIC OPERATIONS
+
     def cross_over(self, other=None, inplace: bool = False) -> None:
         """ This module perform a cross-over between this program and another from the population
 

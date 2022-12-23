@@ -172,32 +172,33 @@ class OperationNode(Node):
 
         return base_operations_used
 
-    def hash(self, hash_list: list = list) -> int:
+    def hash(self, hash_list: list = list) -> list:
 
         # Evaluate child hashes to then evaluate the operation one
         child_hash = []
         for child in self.operands:
-            child_hash.append(child.hash(hash_list=hash_list))
+            ch = child.hash(hash_list=hash_list)
+            child_hash.append(ch)
 
-        operation_hash = hash_djb2(
-            f'{self.symbol}{"".join([str(x) for x in child_hash])}')
+        operation_hash = f' {self.symbol} '.join(c for c in child_hash)
 
         # Add the operation hash to the list and then the children ones
 
         for child in child_hash:
-            if isinstance(child, int):
+            if isinstance(child, str):
                 hash_list.insert(0, child)
         
         hash_list.insert(0, operation_hash)
 
         return hash_list
 
+    @property
     def is_valid(self):
 
         v = True
 
         for child in self.operands:
-            v = v and child.is_valid()
+            v = v and child.is_valid
 
         return v
 
@@ -252,7 +253,7 @@ class FeatureNode(Node):
     def __repr__(self) -> str:
         """ To print the current node in a readable way
         """
-        return f'FeatureNode({self.render()})'
+        return self.render()
 
     def evaluate(
         self,
@@ -306,12 +307,13 @@ class FeatureNode(Node):
     def hash(self, hash_list: list = list) -> int:
         """ This method return the hash of the FeatureNode
         """
-        return hash_djb2(str(self.feature))
+        if self.is_constant:
+            return 'C'
+        return self.render()
 
+    @property
     def is_valid(self):
-        if pd.isna(self.feature):
-            return False
-        return True
+        return not pd.isna(self.feature)
 
     def render(self,
                data: Union[dict, pd.Series, None] = None,
@@ -363,8 +365,9 @@ class InvalidNode(Node):
         return base_operations_used
 
     def hash(self, hash_list: list = list) -> int:
-        return hash_djb2('InvalidNode')
+        return 'InvalidNode'
 
+    @property
     def is_valid(self):
         return False
 

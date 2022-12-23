@@ -4,12 +4,11 @@ import numpy as np
 import pandas as pd
 import sympy as sym
 from symbolic_regression.Node import FeatureNode
-from symbolic_regression.Program import Program
 from sympy.utilities.lambdify import lambdify
 warnings.filterwarnings("ignore")
 
 
-def optimize(program: Program,
+def optimize(program,
              data: Union[dict, pd.Series, pd.DataFrame, None],
              target: str,
              weights: str,
@@ -66,7 +65,7 @@ def optimize(program: Program,
     return program
 
 
-def SGD(program: Program,
+def SGD(program,
         data: Union[dict, pd.Series, pd.DataFrame],
         target: str,
         weights: str,
@@ -192,7 +191,7 @@ def SGD(program: Program,
     return constants, loss, log
 
 
-def ADAM(program: Program,
+def ADAM(program,
          data: Union[dict, pd.Series, pd.DataFrame],
          target: str,
          weights: str,
@@ -339,7 +338,7 @@ def ADAM(program: Program,
     return constants, loss, log
 
 
-def ADAM2FOLD(program: Program,
+def ADAM2FOLD(program,
               data: Union[dict, pd.Series, pd.DataFrame],
               target: list,
               weights: list,

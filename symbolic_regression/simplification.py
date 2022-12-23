@@ -1,4 +1,3 @@
-import copy
 import sympy
 
 from symbolic_regression.Node import FeatureNode, InvalidNode, OperationNode
