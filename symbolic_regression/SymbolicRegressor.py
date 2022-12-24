@@ -2,6 +2,7 @@ import logging
 import os
 import random
 import time
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
@@ -19,31 +20,54 @@ class SymbolicRegressor:
 
     def __init__(
         self,
+        client_name: str,
         checkpoint_file: str = None,
         checkpoint_frequency: int = -1,
-        const_range: tuple = None,
-        parsimony=0.9,
-        parsimony_decay=0.9,
-        population_size: int = 100,
-        tournament_size: int = 10,
-        genetic_operators_frequency: dict = {},
+        const_range: tuple = (0, 1),
+        parsimony=0.8,
+        parsimony_decay=0.85,
+        population_size: int = 300,
+        tournament_size: int = 3,
+        genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1},
     ) -> None:
         """ This class implements the basic features for training a Symbolic Regression algorithm
 
         Args:
-            - const_range: this is the range of values from which to generate constants in the program
-            - fitness_functions: the functions to use for evaluating programs' performance
-            - parsimony: the ratio to which a new operation is chosen instead of a terminal node in program generations
-            - parsimony_decay: a modulation parameter to decrease the parsimony and limit program generation depth
-            - tournament_size: this modulate the tournament selection and set the dimension of the selection
+            - client_name: str
+                the name of the client
+
+            - checkpoint_file: str (default: None)
+                the file to save the model
+
+            - checkpoint_frequency: int (default: -1)
+                the frequency of saving the model
+
+            - const_range: tuple (default: (0, 1))
+                this is the range of values from which to generate constants in the program
+
+            - parsimony: float (default: 0.8)
+                the ratio to which a new operation is chosen instead of a terminal node in program generations
+
+            - parsimony_decay: float (default: 0.85)
+                a modulation parameter to decrease the parsimony and limit program generation depth
+
+            - population_size: int (default: 300)
+                the size of the population
+
+            - tournament_size: int (default: 3)
+                this modulate the tournament selection and set the dimension of the selection
+
+            - genetic_operators_frequency: dict (default: {'crossover': 1, 'mutation': 1})
+                this is a dictionary that set the relative frequency of each genetic operator
         """
 
         # Regressor Configuration
+        self.client_name: str = client_name
         self.checkpoint_file: str = checkpoint_file
         self.checkpoint_frequency: int = checkpoint_frequency
         self.elapsed_time: int = 0
-        self.features: list = None
-        self.operations: list = None
+        self.features: List = None
+        self.operations: List = None
         self.population_size: int = population_size
 
         # Population Configuration
@@ -55,18 +79,18 @@ class SymbolicRegressor:
 
         # Training Configuration
         self.best_program = None
-        self.best_programs_history: list = []
+        self.best_programs_history: List = []
         self.converged_generation: int = None
-        self.fitness_functions: list[BaseFitness] = None
-        self.first_pareto_front_history: list = []
+        self.fitness_functions: List[BaseFitness] = None
+        self.first_pareto_front_history: List = []
         self.fpf_hypervolume: float = None
-        self.fpf_hypervolume_history: list = []
+        self.fpf_hypervolume_history: List = []
         self.generations_to_train: int = None
         self.generation: int = None
         self.genetic_operators_frequency: dict = genetic_operators_frequency
-        self.population: list = None
+        self.population: List = None
         self.status: str = "Uninitialized"
-        self.training_duration: int = None
+        self.training_duration: int = 0
 
     def save_model(self, file: str):
         import pickle
@@ -81,7 +105,15 @@ class SymbolicRegressor:
             return pickle.load(f)
 
     def _create_pareto_front(self):
+        """
+        This method creates the pareto front of the population
+        The pareto front is a group of programs that are non-dominated by any other program in the population
+        The first pareto front is the one with the lowest rank and therefore the best programs
+        The following pareto fronts are the ones with the next lowest rank and so on
 
+        We use the first pareto fron to identify the most optimal programs the crowding distance to identify the most
+        diverse programs.
+        """
         pareto_front = []
 
         # Loop over the entire matrix, can be optimised to do only the triangular matrix
@@ -130,6 +162,14 @@ class SymbolicRegressor:
             pareto_front = next_pareto_front
 
     def _crowding_distance(self):
+        """
+        This method calculates the crowding distance for each program in the population
+        The crowding distance is used to identify the most diverse programs in the population
+        It is calculated as the sum of the normalized distances between the programs in the pareto front
+        The distance is calculated for each objective function.
+
+        The higher the crowding distance the more diverse the program is with respect to the other programs in the same pareto front
+        """
 
         rank_iter = 1
         pareto_front = self.extract_pareto_front(rank=rank_iter)
@@ -164,9 +204,23 @@ class SymbolicRegressor:
     @staticmethod
     def dominance(program1: Program, program2: Program) -> bool:
         """
-        Return True if program1 dominate over program2.
-        It dominates if all the fitnesses are equal or better and at least one fitness is
-        better
+        This method checks if program1 dominates program2
+        A program p1 dominates a program p2 if all the fitness of p1 are 
+        less or equal than p2 and at least one is less than p2
+
+        We use this method to create the pareto fronts
+        We allow fitness functions to be set not to be minimized, in this 
+        case the fitness is calculated but not used to create the pareto fronts
+
+        Args:
+            = program1: Program
+                The program that is being checked if it dominates program2
+            = program2: Program
+                The program that is being checked if it is dominated by program1
+
+        Returns:
+            = True if program1 dominates program2
+            = False otherwise
         """
 
         # How many element in the p1.fitness are less than p2.fitness
@@ -192,12 +246,14 @@ class SymbolicRegressor:
         return False
 
     def drop_duplicates(self, inplace: bool = False) -> list:
-        """ This method removes duplicated programs
-
-        Programs are considered duplicated if they have the same performance
+        """ 
+        This method removes the duplicates from the population
+        A program is considered a duplicate if it has the same fitness rounded to 
+        the number of decimals specified in the implementation of the program
 
         Args:
-            - inplace: allow to overwrite the current population or duplicate the object
+            - inplace: bool (default False)
+                If True the population is updated, if False a new list is returned
         """
 
         for index, p in enumerate(self.population):
@@ -215,13 +271,15 @@ class SymbolicRegressor:
             filter(lambda p: p._is_duplicated == False, self.population))
 
     def drop_invalids(self, inplace: bool = False) -> list:
-        """ This program removes invalid programs from the population
-
-        A program can be invalid when mathematical operation are not possible
-        or if the siplification generated operation which are not supported.
+        """
+        This method removes the invalid programs from the population
+        A program is considered invalid if it has an InvalidNode in its tree or 
+        if at least one of the operations is mathematically impossible, like 
+        division by zero.
 
         Args:
-            - inplace: allow to overwrite the current population or duplicate the object
+            - inplace: bool (default False)
+                If True the population is updated, if False a new list is returned
         """
         if inplace:
             self.population = list(
@@ -230,7 +288,30 @@ class SymbolicRegressor:
 
         return list(filter(lambda p: p.is_valid == True, self.population))
 
+    def compute_performance(self, data: Union[dict, pd.DataFrame, pd.Series]):
+        """
+        This method computes the performance of each program in the population
+
+        Args:
+            - data: Union[dict, pd.DataFrame, pd.Series]
+                The data on which the performance is computed
+        """
+        for p in self.population:
+            p.evaluate_fitness(self.fitness_functions, data)
+
     def extract_pareto_front(self, rank: int):
+        """
+        This method extracts the programs in the population that are in the pareto front
+        of the specified rank
+
+        Args:
+            - rank: int
+                The rank of the pareto front to be extracted
+
+        Returns:
+            - pareto_front: List
+                The list of programs in the pareto front of the specified rank
+        """
         pareto_front = []
         for p in self.population:
             if p and p.rank == rank:
@@ -238,7 +319,48 @@ class SymbolicRegressor:
 
         return pareto_front
 
-    def fit(self, data: pd.DataFrame, features: list, operations: list, fitness_functions: list, generations_to_train: int, n_jobs: int = -1, stop_at_convergence: bool = False, verbose: int = 0) -> None:
+    def fit(self,
+            data: Union[dict, pd.DataFrame, pd.Series],
+            features: List[str],
+            operations: List[dict],
+            fitness_functions:
+            List[BaseFitness],
+            generations_to_train: int,
+            n_jobs: int = -1,
+            stop_at_convergence: bool = False,
+            verbose: int = 0) -> None:
+        """
+        This method trains the population.
+
+        This method implements store in this object the arguments passed at its execution;
+        because these are required in other methods of the class.
+
+        We implement here the call to the method that performs the training allowing to
+        catch the exception KeyboardInterrupt that is raised when the user stops the training.
+        This allow the user to stop the training at any time and not lose the progress made.
+        The actual training is then implemented in the private method _fit.
+
+        Args:
+            - data: Union[dict, pd.DataFrame, pd.Series]
+                The data on which the training is performed
+            - features: List
+                The list of features to be used in the training
+            - operations: List
+                The list of operations to be used in the training
+            - fitness_functions: List[BaseFitness]
+                The list of fitness functions to be used in the training
+            - generations_to_train: int
+                The number of generations to train
+            - n_jobs: int (default -1)
+                The number of jobs to be used in the training
+            - stop_at_convergence: bool (default False)
+                If True the training stops when the population converges
+            - verbose: int (default 0)
+                The verbosity level of the training
+
+        Returns:
+            - None
+        """
         self.data = data
         self.features = features
         self.operations = operations
@@ -253,21 +375,54 @@ class SymbolicRegressor:
 
         start = time.perf_counter()
         try:
-            self._run_training()
+            self._fit()
         except KeyboardInterrupt:
             self.generation -= 1  # The increment is applied even if the generation is interrupted
-            stop = time.perf_counter()
-            self.training_duration = stop - start
             self.status = "Interrupted by KeyboardInterrupt"
             logging.warning(f"Training terminated by a KeyboardInterrupt")
-            return
-        stop = time.perf_counter()
-        self.training_duration = stop - start
 
-    def generate_individual(self, data: pd.DataFrame, features: list, operations: list, const_range: tuple, fitness_functions: list, parsimony: float = 0.90, parsimony_decay: float = 0.90):
+        stop = time.perf_counter()
+        self.training_duration += stop - start
+
+    def generate_individual(self,
+                            data: Union[dict, pd.DataFrame, pd.Series],
+                            features: List[str],
+                            operations: List[dict],
+                            const_range: tuple,
+                            fitness_functions: List[BaseFitness],
+                            parsimony: float = 0.8,
+                            parsimony_decay: float = 0.85) -> Program:
+
         """
-        We need data in order to evaluate the fitness of the program because
-        this method is executed in parallel.
+        This method generates a new individual for the population
+
+        Args:
+            - data: Union[dict, pd.DataFrame, pd.Series]
+                The data on which the performance are evaluated. We could use evaluate_fitness
+                later, but we need to evaluate the fitness here to compute it in the
+                parallel initialization.
+            - features: List[str]
+                The list of features to be used in the generation
+            - operations: List[dict]
+                The list of operations to be used in the generation
+            - const_range: tuple
+                The range of the constants to be used in the generation. There will then be
+                adapted during the optimization process.
+            - fitness_functions: List[BaseFitness]
+                The list of fitness functions to be used in the generation
+            - parsimony: float (default 0.8)
+                The parsimony coefficient to be used in the generation. This modulates how
+                likely the program is to be complex (deep) or simple (shallow).
+            - parsimony_decay: float (default 0.85)
+                The parsimony decay to be used in the generation. This modulates how the parsimony
+                coefficient is updated at each generation. The parsimony coefficient is multiplied
+                by this value at each generation. This allows to decrease the parsimony coefficient
+                over time to prevent the program to be too complex (deep).
+                
+        Returns:
+            - p: Program
+                The generated program
+
         """
         p = Program(
             features=features,
@@ -284,7 +439,8 @@ class SymbolicRegressor:
         return p
 
     def _get_offspring(self):
-        """ This function generate an offspring of a program from the current population
+        """
+        This method generates an offspring of a program from the current population
 
         The offspring is a program to which a genetic alteration has been applied.
         The possible operations are as follow:
@@ -299,24 +455,30 @@ class SymbolicRegressor:
             - operator mutation: a random operation is replaced by another with the same arity
             - leaf mutation: a terminal node (feature or constant) is replaced by a different one
             - simplify: uses a sympy backend to simplify the program ad reduce its complexity
-            - do nothing: in this case no mutation is applied
+            - do nothing: in this case no mutation is applied and the program is returned as is
 
         The frequency of which those operation are applied is determined by the dictionary
         genetic_operations_frequency in which the relative frequency of each of the desired operations
         is expressed with integers. The higher the number the likelier the operation will be chosen.
+        Use integers > 1 to increase the frequency of an operation. Use 1 as minimum value.
 
         The program to which apply the operation is chosen using the tournament_selection, a method
         that identify the best program among a random selection of k programs from the population.
 
         Args:
-            population: The population of programs from which to extract the program for the mutation
-            fitness: The list of fitness functions for this task
-            tournament_size: The size of the pool of random programs from which to choose in for the mutations
-            genetic_operations_frequency: The relative frequency with which to coose the genetic operation to apply
-            generations: The number of training generations (used to appropriately behave in the first one)
+            - None
+        
+        Returns:
+            - _offspring: Program
+                The offspring of the current population
+            
+            - program1: Program     (only in case of errors or if the program is not valid)
+                The program from which the offspring is generated
         """
 
-        # This allow to randomly chose a genetic operation to
+        # Select the genetic operation to apply
+        # The frequency of each operation is determined by the dictionary
+        # genetic_operators_frequency. The higher the number the likelier the operation will be chosen.
         ops = list()
         for op, freq in self.genetic_operators_frequency.items():
             ops += [op] * freq
@@ -327,43 +489,48 @@ class SymbolicRegressor:
                                               generation=self.generation)
 
         if program1 is None or not program1.is_valid:
+            # If the program is not valid, we return a the same program without any alteration
+            # because it would be unlikely to generate a valid offspring.
+            # This program will be removed from the population later.
             return program1
 
+        _offspring: Program = None
+        
         if gen_op == 'crossover':
             program2 = self._tournament_selection(population=self.population,
                                                   tournament_size=self.tournament_size,
                                                   generation=self.generation)
             if program2 is None or not program2.is_valid:
                 return program1
-            p_ret = program1.cross_over(other=program2, inplace=False)
+            _offspring = program1.cross_over(other=program2, inplace=False)
 
         elif gen_op == 'randomize':
             # Will generate a new tree as other
-            p_ret = program1.cross_over(other=None, inplace=False)
+            _offspring = program1.cross_over(other=None, inplace=False)
 
         elif gen_op == 'mutation':
-            p_ret = program1.mutate(inplace=False)
+            _offspring = program1.mutate(inplace=False)
 
         elif gen_op == 'delete_node':
-            p_ret = program1.delete_node(inplace=False)
+            _offspring = program1.delete_node(inplace=False)
 
         elif gen_op == 'insert_node':
-            p_ret = program1.insert_node(inplace=False)
+            _offspring = program1.insert_node(inplace=False)
 
         elif gen_op == 'mutate_operator':
-            p_ret = program1.mutate_operator(inplace=False)
+            _offspring = program1.mutate_operator(inplace=False)
 
         elif gen_op == 'mutate_leaf':
-            p_ret = program1.mutate_leaf(inplace=False)
+            _offspring = program1.mutate_leaf(inplace=False)
 
         elif gen_op == 'simplification':
-            p_ret = program1.simplify(inplace=False)
+            _offspring = program1.simplify(inplace=False)
 
         elif gen_op == 'recalibrate':
-            p_ret = program1.recalibrate(inplace=False)
+            _offspring = program1.recalibrate(inplace=False)
 
         elif gen_op == 'do_nothing':
-            p_ret = program1
+            _offspring = program1
         else:
             logging.warning(
                 f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize'
@@ -371,16 +538,41 @@ class SymbolicRegressor:
             return program1
 
         # Add the fitness to the object after the cross_over or mutation
-        p_ret.evaluate_fitness(
+        _offspring.evaluate_fitness(
             fitness_functions=self.fitness_functions, data=self.data)
 
         # Reset the hash to force the re-computation
-        p_ret._hash = None
+        _offspring._hash = None
 
-        return p_ret
+        return _offspring
 
     @property
     def hypervolume(self):
+        """
+        This method computes the hypervolume of the current population
+
+        The hypervolume is computed using the hypervolume reference point
+        defined in the fitness functions.
+        
+        If the reference point is not defined the hypervolume is computed 
+        using the maximum value of each fitness function as reference point.
+
+        If the reference point is defined but the fitness function is not
+        a minimization problem, the hypervolume is computed using the maximum
+        value of each fitness function as reference point.
+
+        If the reference point is defined but is lower than the maximum value
+        of the fitness function, the hypervolume is computed using the maximum
+        value of each fitness function as reference point and the reference
+        point is updated to the new value.
+
+        Args:
+            - None
+
+        Returns:
+            - hypervolume: float
+                The hypervolume of the current population
+        """
 
         fitness_to_hypervolume = []
         for fitness in self.fitness_functions:
@@ -408,7 +600,33 @@ class SymbolicRegressor:
 
         return self.fpf_hypervolume
 
-    def _run_training(self):
+    def _fit(self):
+        """
+        This method is the main loop of the genetic programming algorithm.
+
+        Firstly we initialize the population of N individuals if it is not already initialized.
+        Then we loop over the generations and apply the genetic operators
+        to the population.
+
+        We then generate other N offspring using the genetic operators and
+        we add them to the population. This generates a population of 2N individuals.
+
+        To select the population of N individuals to pass to the next generation
+        we use the NSGA-II algorithm (Non-dominant Sorting Genetic Algorithm) which 
+        sort the 2N individuals in non-dominated fronts and then select the N individuals
+        that have the best performance.
+        
+        We need to remove the individuals that are not valid because and also the individuals
+        that are duplicated. If removing the invalid and duplicated individuals leaves us
+        with less than N individuals, we generate new individuals to fill the population.
+
+        Args:
+            - None
+        
+        Returns:
+            - None
+
+        """
         if not self.population:
             logging.info(f"Initializing population")
             self.status = "Generating population"
@@ -569,10 +787,24 @@ class SymbolicRegressor:
             self.elapsed_time += end_time_generation - start_time_generation
 
     def _tournament_selection(self):
-        """ The tournament selection is used to choose the programs to which apply genetic operations
+        """
+        Tournament selection
 
-        Firstly a random selection of k elements from the population is selected and 
-        the best program among them is chosen.
+        This method selects the best program from a random sample of the population.
+        It is used to apply the genetic operators during the generation of the
+        offsprings.
+
+        We firstly chose a random set of K programs from the population. Then we
+        select the best program from this set. If the generation is 0, we use the
+        program's complexity to select the best program. In the other generations
+        we use the pareto front rank and the crowding distance.
+
+        Args:
+            - None
+
+        Returns:
+            - best_member: Program
+                The best program selected by the tournament selection
         """
 
         tournament_members = random.choices(
@@ -604,10 +836,32 @@ class SymbolicRegressor:
 
     @property
     def first_pareto_front(self):
+        """
+        First Pareto Front
+        
+        This method returns the first Pareto Front of the population.
+
+        Args:
+            - None
+
+        Returns:
+            - first_pareto_front: list
+                The first Pareto Front of the population
+        """
         return [p for p in self.population if p.rank == 1]
 
     @property
     def summary(self):
+        """
+        Summary
+
+        This method returns a summary of the evolutionary process.
+
+        Args:
+            - None
+        Returns:
+            - summary: pd.DataFrame
+        """
         istances = []
 
         for index, p in enumerate(self.population):
@@ -626,6 +880,16 @@ class SymbolicRegressor:
 
     @property
     def best_history(self):
+        """
+        Best history
+
+        This method returns a summary of the best programs found during the evolutionary process.
+
+        Args:
+            - None
+        Returns:
+            - best_history: pd.DataFrame
+        """
         istances = []
 
         for index, p in enumerate(self.best_programs_history):
