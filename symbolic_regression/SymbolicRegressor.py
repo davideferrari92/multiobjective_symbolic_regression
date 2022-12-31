@@ -486,28 +486,15 @@ class SymbolicRegressor:
             timing_str = f"{self.elapsed_time} sec, {seconds_iter} sec/generation"
 
             print("############################################################")
-            print(
-                f"Generation {self.generation}/{self.generations_to_train} - {timing_str}")
+            print(f"Generation {self.generation}/{self.generations_to_train} - {timing_str}")
 
             self.status = "Generating offspring"
 
             offsprings = list()
-            m_workers = self.n_jobs if self.n_jobs > 0 else os.cpu_count()
 
             offsprings = Parallel(
                 n_jobs=self.n_jobs,
                 backend=backend_parallel)(delayed(self._get_offspring)() for _ in range(self.population_size))
-
-            # executor = get_reusable_executor(max_workers=m_workers)
-            # offsprings = list(set(executor.map(
-            #     self._get_offspring, timeout=120,
-            #     initargs=(
-            #         self.population,
-            #         self.fitness_functions,
-            #         self.generation,
-            #         self.tournament_size,
-            #         self.genetic_operators_frequency
-            #     ))))
 
             logging.debug(f"Offsprings generated: {len(offsprings)}")
             self.population += offsprings
