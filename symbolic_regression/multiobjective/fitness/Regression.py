@@ -1,5 +1,7 @@
 from symbolic_regression.Program import Program
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from sklearn.preprocessing import MinMaxScaler
+
 import pandas as pd
 import numpy as np
 
@@ -8,7 +10,7 @@ class WeightedMeanSquaredError(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
         """ This fitness requires the following arguments:
-        
+
         - target: str
         - weights: str
 
@@ -16,14 +18,14 @@ class WeightedMeanSquaredError(BaseFitness):
         super().__init__(**kwargs)
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
-        
+
         self.optimize(program=program, data=data)
 
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
 
         pred = program_to_evaluate.evaluate(data=data)
-        
+
         if self.weights not in data.columns:
             data[self.weights] = self._create_regression_weights(
                 data=data, target=self.target, bins=self.bins)
@@ -43,7 +45,7 @@ class WeightedMeanAbsoluteError(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
         """ This fitness requires the following arguments:
-        
+
         - target: str
         - weights: str
 
@@ -51,9 +53,9 @@ class WeightedMeanAbsoluteError(BaseFitness):
         super().__init__(**kwargs)
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
-        
+
         self.optimize(program=program, data=data)
-        
+
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
 
@@ -78,7 +80,7 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
         """ This fitness requires the following arguments:
-        
+
         - target: str
         - weights: str
 
@@ -88,7 +90,7 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
 
         self.optimize(program=program, data=data)
-        
+
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
 
@@ -115,11 +117,59 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
             return np.inf
 
 
+class MeanAveragePercentageError(BaseFitness):
+    """ Mean Average Percentage Error (MAPE) """
+
+    def __init__(self, **kwargs) -> None:
+        """ This fitness requires the following arguments:
+
+        - target: str
+
+        """
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+        
+        self.optimize(program=program, data=data)
+
+        if not program.is_valid:
+            return np.inf
+
+        program_to_evaluate = program.to_logistic(
+            inplace=False) if self.logistic else program
+
+        pred = pd.Series(program_to_evaluate.evaluate(data=data))
+
+        if len(pred.dropna()) < len(pred):
+            return np.inf
+
+        try:
+            """
+            We need to normalize between 0 and 1 both the prediction and the target
+            because the MAPE is not scale invariant.
+            """
+            if isinstance(pred, float):
+                pred = np.full(shape=len(data[self.target]),fill_value=pred)
+            
+            scaler = MinMaxScaler()
+            target = np.array(data[self.target]).reshape(-1, 1)
+            scaler.fit(target)
+
+            pred = scaler.transform(np.array(pred).reshape(-1, 1))
+            
+            mape = np.mean(np.abs((pred - target) / target))
+            return mape
+        except TypeError:
+            return np.inf
+        except ValueError:
+            return np.inf
+
+
 class NotConstant(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
         """ This fitness requires the following arguments:
-        
+
         - epsilon: float
 
         """
@@ -128,7 +178,7 @@ class NotConstant(BaseFitness):
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
 
         self.optimize(program=program, data=data)
-        
+
         pred = program.evaluate(data=data)
 
         try:
@@ -153,7 +203,7 @@ class ValueRange(BaseFitness):
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
 
         self.optimize(program=program, data=data)
-        
+
         pred = program.evaluate(data=data)
 
         upper_bound_constraint = np.mean(
