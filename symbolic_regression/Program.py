@@ -1,7 +1,7 @@
 import logging
 import random
 from copy import deepcopy
-from typing import List, Union
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,7 @@ from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
 from symbolic_regression.operators import OPERATOR_ADD, OPERATOR_MUL, OPERATOR_POW
 from symbolic_regression.multiobjective.optimization import SGD, ADAM, ADAM2FOLD
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 
 
 class Program:
@@ -47,59 +48,77 @@ class Program:
 
     """
 
-    def __init__(
-            self,
-            operations: list,
-            features: list,
-            const_range: tuple = None,
-            program: Node = None,
-            parsimony: float = .9,
-            parsimony_decay: float = .85) -> None:
+    def __init__(self, operations: List[Dict], features: List[str], const_range: Tuple = (0, 1), program: Node = None, parsimony: float = .8, parsimony_decay: float = .85) -> None:
         """
+
 
         Args:
-            operations: The list of possible operations to use as operations
-            features: The list of possible features to use as terminal nodes
-            const_range: The range of possible values for constant terminals in the program
-            program: An existing program from which to initialize this object
-            parsimony: the modulator that determine how deep the tree generation will go
-            parsimony_decay: the modulator that decays the parsimony to prevent infinite trees
+            - operations: List[Dict]
+                List of possible operations. Each operation is a dictionary with the following keys:
+                    - func: callable
+                        The function that will be executed by the operation
+                    - arity: int
+                        The number of operands of the operation
+                    - format_str: str
+                        The format pattern of the operation when printed in a string formula
+                    - format_tf: str
+                        The format pattern of the operation when printed in a tensorflow formula
+                    - symbol: str
+                        The symbol of the operation
+
+            - features: List[str]
+                List of possible features from which to choose the terminal nodes
+
+            - const_range: Tuple  (default: (0, 1))
+                Range from which to choose the numerical constants.
+
+            - program: Node  (default: None)
+                The root node of the tree. If None, a new tree will be generated.
+
+            - parsimony: float  (default: .8)
+                The parsimony coefficient. It is used to modulate the depth of the program.
+                Use values between 0 and 1. The higher the value, the deeper the program.
+
+            - parsimony_decay: float  (default: .85)
+                The decay of the parsimony coefficient. It is used to modulate the depth of the program.
+                Use values between 0 and 1. The higher the value, the deeper the program.
+
         """
 
-        self.operations = operations
-        self.features = features
-        self.const_range = const_range
-        self._constants = []
-        self.converged = False
+        self.operations: List[Dict] = operations
+        self.features: List[str] = features
+        self.const_range: Tuple = const_range
+        self._constants: List = list()
+        self.converged: bool = False
 
         # Operational attributes
-        self._override_is_valid = True
-        self._is_duplicated = False
+        self._override_is_valid: bool = True
+        self._is_duplicated: bool = False
         self._program_depth: int = 0
         self._complexity: int = 0
 
         # Pareto Front Attributes
         self.rank: int = np.inf
-        self.programs_dominates: list = []
-        self.programs_dominated_by: list = []
+        self.programs_dominates: List[Program] = list()
+        self.programs_dominated_by: List[Program] = list()
         self.crowding_distance: float = 0
         self.program_hypervolume: float = np.nan
-        self._hash: list = None
+        self._hash: List[int] = None
 
-        self.parsimony = parsimony
-        self._parsimony_bkp = parsimony
-        self.parsimony_decay = parsimony_decay
+        self.parsimony: float = parsimony
+        self._parsimony_bkp: float = parsimony
+        self.parsimony_decay: float = parsimony_decay
 
-        self.is_logistic = False
-        self.is_affine = False
+        self.is_logistic: bool = False
+        self.is_affine: bool = False
 
         if program:
             self.program: Node = program
         else:
             self.program: Node = InvalidNode()
-            self.fitness = float(np.inf)
-            self.fitness_functions = list()
-            self.is_fitness_to_minimize = dict()
+            self.fitness: Dict = dict()
+            self.fitness_functions: List[BaseFitness] = list()
+            self.is_fitness_to_minimize: Dict[bool] = dict()
 
     def __copy__(self):
         cls = self.__class__
@@ -120,21 +139,22 @@ class Program:
                 f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}'
             )
 
-    def __lt__(self, other):
-        """ This ordering function allow to compare programs by their fitness value
+    def __lt__(self, other: 'Program'):
+        """
+        Overload of the less than operator. It is used to compare two programs.
 
-        TODO fix docstring with new fitness dictionaries
+        A program is less than another if it has a lower or equal rank and a higher or equal crowding distance.
 
         Args:
-            other: The program to which compare the current one
+            - other: Program
+                The other program to compare with
+
+        Returns:
+            - bool
+                True if the program is less than the other program, False otherwise
         """
 
-        if isinstance(self.fitness, dict):
-            return self.rank <= other.rank and self.crowding_distance >= other.crowding_distance
-
-        else:
-            raise TypeError(
-                f'program.fitness is not a dict: {type(self.fitness)}')
+        return self.rank <= other.rank and self.crowding_distance >= other.crowding_distance
 
     @property
     def complexity(self):
@@ -192,27 +212,39 @@ class Program:
         """
         return self.program.is_valid() and self._override_is_valid
 
-    def evaluate(
-            self, data: Union[dict, pd.Series,
-                              pd.DataFrame]) -> Union[int, float]:
-        """ This call evaluate the program on some given data calling the function
-        of the evaluation of the root node of the program.
-        This will recursively call the evaluation on all the children returning the
-        final result based on the given data
+    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+        """ This function evaluate the program on the given data.
+        The data can be a dictionary, a pandas Series or a pandas DataFrame.
 
         Args:
-            data: the data on which to evaluate this program
+            - data: dict, pd.Series, pd.DataFrame
+                The data on which the program will be evaluated
+
+        Returns:
+            - int, float
+                The result of the evaluation
         """
         if not self.is_valid:
-            return None
+            return np.nan
 
         return self.program.evaluate(data=data)
 
-    def evaluate_fitness(self, fitness_functions: List, data: pd.DataFrame):
+    def compute_fitness(self, fitness_functions: List[BaseFitness], data: Union[dict, pd.Series, pd.DataFrame]) -> None:
         """ This function evaluate the fitness of the program on the given data.
-        The fitness functions are passed as a list of BaseFitness objects.
+        The data can be a dictionary, a pandas Series or a pandas DataFrame.
+
+        Args:
+            - fitness_functions: List[BaseFitness]
+                The fitness functions to evaluate
+            - data: Union[dict, pd.Series, pd.DataFrame]
+                The data on which the program will be evaluated
+
+        Returns:
+            - None
         """
 
+        # We need to store the fitness functions in the program
+        # as we need them in other parts of the code (e.g. in the hypervolume computation)
         self.fitness_functions = fitness_functions
         self.fitness = dict()
         self.is_fitness_to_minimize = dict()
@@ -242,75 +274,37 @@ class Program:
             if convergence_threshold and fitness_value <= convergence_threshold:
                 _converged.append(True)
 
-        if len(_converged) > 0:
-            self.converged = all(_converged)
+        # Only if all the fitness functions have converged, then the program has converged
+        self.converged = all(_converged) if len(_converged) > 0 else False
 
-    '''
-    def evaluate_fitness(self, data: pd.DataFrame, fitness_functions: list):
-
-        self.fitness_functions = fitness_functions
-        self.fitness = dict()
-        self.is_fitness_to_minimize = dict()
-
-        try:
-            self.simplify(inplace=True)
-        except ValueError:
-            self._override_is_valid = False
-
-        if not self.is_valid:
-            return None
-
-        self._fitness_template = fitness(program=self, data=data)
-
-        _converged = []
-
-        for ftn_label, ftn in self._fitness_template.items():
-
-            f = ftn['func']
-
-            minimize = True
-            if ftn.get('minimize') == False or not ftn.get(
-                    'minimize'
-            ):  # Exclude non minimizing fitnesses from convergence
-                minimize = False
-
-            convergence_threshold = ftn.get('convergence_threshold')
-
-            if pd.isna(f):
-                f = np.inf
-                self._override_is_valid = False
-
-            self.fitness[ftn_label] = f
-            self.is_fitness_to_minimize[ftn_label] = minimize
-
-            if convergence_threshold and f <= convergence_threshold:
-                _converged.append(True)
-                logging.debug(
-                    f'Converged {ftn_label}: {f} <= {convergence_threshold}')
-
-        # Use any or all to have at least one or all fitness converged when the convergence_threshold is provided
-        if len(_converged) > 0:
-            self.converged = all(_converged)
-    '''
-
-    def _generate_tree(self,
-                       depth=-1,
-                       parsimony: float = .9,
-                       parsimony_decay: float = .85,
-                       father: Union[Node, None] = None,
-                       force_constant: bool = False):
-        """ This method run the recursive generation of a subtree.
-
-        If the node generated in a recursion loop is an OperationNode, then a deeper
-        recursion is performed to populate its operands.
-        If the node is a FeatureNode instead, the recursion terminate and a FeatureNode
-        is added to the operation's operands list
+    def _generate_tree(self, depth=-1, parsimony: float = .8, parsimony_decay: float = .85, father: Union[Node, None] = None, force_constant: bool = False) -> Node:
+        """ This function generate a tree of a given depth.
 
         Args:
-            depth: if a fixed depth is required, this arg is set to that value
-            father: The father to the next generated node (None for the root node)
+            - depth: int  (default=-1)
+                The depth of the tree to generate. If -1, the depth will be randomly generated
+
+            - parsimony: float  (default=.8)
+                The parsimony coefficient. This modulates the depth of the generated tree.
+                Use values between 0 and 1; the closer to 1, the deeper the tree will be.
+
+            - parsimony_decay: float  (default=.85)
+                The parsimony decay coefficient. This value is multiplied to the parsimony coefficient
+                at each depth level. Use values between 0 and 1; the closer to 1, the quicker the
+                parsimony coefficient will decay and therefore the shallower the tree will be.
+                Use a lower value to prevent the tree from exploding and reaching a RecursionError.
+
+            - father: Node  (default=None)
+                The father of the node to generate. If None, the node will be the root of the tree.
+
+            - force_constant: bool  (default=False)
+                If True, the next node will be a constant node.
+
+        Returns:
+            - Node
+                The generated tree. It's a recursive process and the returned node is the root of the tree.
         """
-        def gen_operation(operation_conf: dict, father):
+        def gen_operation(operation_conf: Dict, father: Union[Node, None] = None):
             return OperationNode(operation=operation_conf['func'],
                                  arity=operation_conf['arity'],
                                  format_str=operation_conf.get('format_str'),
@@ -320,30 +314,31 @@ class Program:
                                      'format_diff', operation_conf.get('format_str')),
                                  father=father)
 
-        def gen_feature(feature, father, is_constant):
-            return FeatureNode(feature=feature,
-                               father=father,
-                               is_constant=is_constant)
+        def gen_feature(feature: str, father: Union[Node, None], is_constant: bool = False):
+            return FeatureNode(feature=feature, father=father, is_constant=is_constant)
 
+        # We can either pass dedicated parsimony and parsimony_decay values or use the ones
+        # defined in the class
         if not parsimony:
             parsimony = self.parsimony
         if not parsimony_decay:
             parsimony_decay = self.parsimony_decay
 
         if ((random.random() < parsimony and depth == -1) or (depth > 0)) and not force_constant:
+            # We generate a random operation
 
             operation = random.choice(self.operations)
             node = gen_operation(operation_conf=operation, father=father)
 
-            # Recursive call to populate the operands of the new OperationNode
-            if depth == -1:
-                new_depth = -1
-            else:
-                new_depth = depth - 1
+            new_depth = -1 if depth == -1 else depth - 1
 
             for i in range(node.arity):
                 if operation == OPERATOR_POW and i == 1:
+                    # In case of the power operator, the second operand must be a constant
+                    # We do not want to generate a tree for the second operand otherwise it may
+                    # generate an unrealistic mathematical model
                     force_constant = True
+
                 node.add_operand(
                     self._generate_tree(depth=new_depth,
                                         father=node,
@@ -352,41 +347,46 @@ class Program:
                                         force_constant=force_constant))
             force_constant = False
 
-        else:  # Generate a FeatureNode
-            ''' The probability to get a feature from the training data is
-            (n-1) / n where n is the number of features.
-            Otherwise a constant value will be generated.
-            '''
+        else:
+            # We generate a random feature
+
+            # The probability to get a feature from the training data is
+            # (n-1) / n where n is the number of features.
+            # Otherwise a constant value will be generated.
 
             if random.random() > (1 / len(self.features)) and not force_constant:
                 # A Feature from the dataset
 
                 feature = random.choice(self.features)
 
-                node = gen_feature(feature=feature,
-                                   father=father,
-                                   is_constant=False)
+                node = gen_feature(feature=feature, father=father, is_constant=False)
 
             else:
                 # Generate a constant
 
-                feature = random.uniform(self.const_range[0],
-                                         self.const_range[1])
+                feature = random.uniform(
+                    self.const_range[0], self.const_range[1])
 
                 # Arbitrary rounding of the generated constant
-                feature = round(feature, 2)
 
-                node = gen_feature(feature=feature,
-                                   father=father,
-                                   is_constant=True)
+                node = gen_feature(
+                    feature=feature, father=father, is_constant=True)
 
         return node
 
     def get_constants(self):
-        """ This method allow to get all constants used in a tree.
+        """
+        This method allow to get all constants used in a tree.
 
         The constants are used for the neuronal-based constants optimizer; it requires
         all constants to be in a fixed order explored by a DFS descent of the tree.
+
+        Args:
+            - None
+
+        Returns:
+            - List[FeatureNode]
+                A list of FeatureNode objects representing the constants used in the tree.
         """
         to_return = None
         if isinstance(self.program, OperationNode):
@@ -406,7 +406,17 @@ class Program:
         return to_return
 
     def get_features(self, return_objects: bool = False):
-        """ This method recursively explore the tree and return a list of unique features used.
+        """
+        This method recursively explore the tree and return a list of unique features used.
+
+        Args:
+            - return_objects: bool  (default=False)
+                If True, the method will return a list of FeatureNode objects instead of a list of
+                feature names.
+
+        Returns:
+            - List[str] or List[FeatureNode]
+                A list of unique features used in the tree.
         """
         if isinstance(self.program, OperationNode):
             return self.program._get_features(features_list=[],
@@ -416,12 +426,24 @@ class Program:
         elif not self.program.is_constant:
             return [self.program]
 
-        # Only one constant FeatureNode
+        # Case for programs of only one constant FeatureNode.
         # Use get_constants() to have a list of all constant FeatureNode objects
         return []
 
     @property
     def hash(self):
+        """ This method return the hash of the program
+
+        The hash is a list of unique ideantifiers of the nodes of the tree.
+        It is used to compare two programs.
+
+        Args:
+            - None
+
+        Returns:
+            - List[int]
+                A list of unique identifiers of the nodes of the tree.
+        """
         if not self._hash:
             self._hash = self.program.hash(hash_list=[])
 
@@ -429,10 +451,20 @@ class Program:
 
     @property
     def hypervolume(self) -> float:
-        """ This method return the hypervolume of the program
+        """
+        This method return the hypervolume of the program
 
         The hypervolume is the volume occupied by the fitness space by the program.
-        It can be of any dimension.
+        It can be of any dimension. We allow to compute the hypervolume only if the
+        fitness functions are set to be minimized, otherwise we assume that the fitness
+        are computed only for comparison purposes and not for optimization.
+
+        Args:
+            - None
+            
+        Returns:
+            - float
+                The hypervolume of the program.
         """
 
         if not self.program.is_valid:
@@ -455,20 +487,21 @@ class Program:
         return self.program_hypervolume
 
     def init_program(self) -> None:
-        """ This method initialize a new program calling the recursive generation function.
+        """
+        This method initialize a new program calling the recursive generation function.
 
         The generation of a program follows a genetic algorithm in which the choice on how to
         progress in the generation randomly choose whether to put anothe operation (deepening
         the program) or to put a terminal node (a feature from the dataset or a constant)
 
         Args:
-            parsimony: The ratio with which to choose operations among terminal nodes
-            parsimony_decay: The ratio with which the parsimony decreases to prevent infinite programs
+            - None
+
+        Returns:
+            - None
         """
 
-        logging.debug(
-            f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}'
-        )
+        logging.debug(f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}')
 
         # Father=None is used to identify the root node of the program
         self.program = self._generate_tree(
@@ -510,7 +543,7 @@ class Program:
         return self.program.is_valid
 
     def optimize(self,
-                 data: pd.DataFrame,
+                 data: Union[dict, pd.Series, pd.DataFrame],
                  target: str,
                  weights: str,
                  constants_optimization: str,
@@ -545,11 +578,11 @@ class Program:
                 f_opt = SGD
                 self.to_affine(data=data, target=target, inplace=True)
 
-            if constants_optimization == 'ADAM':
+            elif constants_optimization == 'ADAM':
                 f_opt = ADAM
                 self.to_affine(data=data, target=target, inplace=True)
 
-            if constants_optimization == 'ADAM2FOLD':
+            elif constants_optimization == 'ADAM2FOLD':
                 # Here there can be more than one target so need the index
                 f_opt = ADAM2FOLD
                 self.to_affine(data=data, target=target[0], inplace=True)
@@ -651,7 +684,7 @@ class Program:
         to_return._hash = None
         return to_return
 
-    def to_affine(self, data: pd.DataFrame, target: str, inplace: bool = False):
+    def to_affine(self, data: Union[dict, pd.Series, pd.DataFrame], target: str, inplace: bool = False):
         """ This function create an affine version of the program between the target maximum and minimum
         """
 
