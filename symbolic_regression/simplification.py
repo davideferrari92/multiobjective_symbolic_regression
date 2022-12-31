@@ -23,7 +23,7 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
     current_operation = None
 
     """ Here we allow the use of the following operators:
-        - power: ** or ^ (x**2 or x^2)
+        - power: ** (x**2)
         - addition: + (x + y)
         - multiplication: * (x * y)
         - division: / (x / y)

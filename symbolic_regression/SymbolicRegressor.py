@@ -79,16 +79,16 @@ class SymbolicRegressor:
 
         # Training Configuration
         self.best_program = None
-        self.best_programs_history: List = []
+        self.best_programs_history: List = list()
         self.converged_generation: int = None
         self.fitness_functions: List[BaseFitness] = None
-        self.first_pareto_front_history: List = []
+        self.first_pareto_front_history: List = list()
         self.fpf_hypervolume: float = None
-        self.fpf_hypervolume_history: List = []
+        self.fpf_hypervolume_history: List = list()
         self.generations_to_train: int = None
         self.generation: int = 0
         self.genetic_operators_frequency: dict = genetic_operators_frequency
-        self.population: List = None
+        self.population: List[Program] = list()
         self.status: str = "Uninitialized"
         self.training_duration: int = 0
 
@@ -116,10 +116,10 @@ class SymbolicRegressor:
         Returns:
             - best_history: pd.DataFrame
         """
-        istances = []
+        istances = list()
 
         for index, p in enumerate(self.best_programs_history):
-            row = {}
+            row = dict()
             row['generation'] = index + 1
             row['program'] = p.program
             row['complexity'] = p.complexity
@@ -141,7 +141,7 @@ class SymbolicRegressor:
                 The data on which the performance is computed
         """
         for p in self.population:
-            p.evaluate_fitness(self.fitness_functions, data)
+            p.compute_fitness(self.fitness_functions, data)
 
     def _create_pareto_front(self):
         """
@@ -153,7 +153,7 @@ class SymbolicRegressor:
         We use the first pareto fron to identify the most optimal programs the crowding distance to identify the most
         diverse programs.
         """
-        pareto_front = []
+        pareto_front = list()
 
         # Loop over the entire matrix, can be optimised to do only the triangular matrix
         for p1 in self.population:
@@ -161,8 +161,8 @@ class SymbolicRegressor:
 
             if not p1.is_valid:
                 continue
-            p1.programs_dominates = []
-            p1.programs_dominated_by = []
+            p1.programs_dominates = list()
+            p1.programs_dominated_by = list()
 
             for p2 in self.population:
                 if p1 == p2 or not p2.is_valid:
@@ -182,7 +182,7 @@ class SymbolicRegressor:
         # Set the belonging pareto front to every element of the population
 
         while pareto_front:
-            next_pareto_front = []
+            next_pareto_front = list()
 
             for p1 in pareto_front:
                 if not p1.is_valid:
@@ -340,7 +340,7 @@ class SymbolicRegressor:
             - pareto_front: List
                 The list of programs in the pareto front of the specified rank
         """
-        pareto_front = []
+        pareto_front = list()
         for p in self.population:
             if p and p.rank == rank:
                 pareto_front.append(p)
@@ -491,24 +491,28 @@ class SymbolicRegressor:
 
             self.status = "Generating offspring"
 
-            offsprings = []
+            offsprings = list()
             m_workers = self.n_jobs if self.n_jobs > 0 else os.cpu_count()
 
-            executor = get_reusable_executor(max_workers=m_workers)
-            offsprings = list(set(executor.map(
-                self._get_offspring, timeout=120,
-                initargs=(
-                    self.population,
-                    self.fitness_functions,
-                    self.generation,
-                    self.tournament_size,
-                    self.genetic_operators_frequency
-                ))))
+            offsprings = Parallel(
+                n_jobs=self.n_jobs,
+                backend=backend_parallel)(delayed(self._get_offspring)() for _ in range(self.population_size))
 
+            # executor = get_reusable_executor(max_workers=m_workers)
+            # offsprings = list(set(executor.map(
+            #     self._get_offspring, timeout=120,
+            #     initargs=(
+            #         self.population,
+            #         self.fitness_functions,
+            #         self.generation,
+            #         self.tournament_size,
+            #         self.genetic_operators_frequency
+            #     ))))
+
+            logging.debug(f"Offsprings generated: {len(offsprings)}")
             self.population += offsprings
 
             # Removes all non valid programs in the population
-            logging.debug(f"Removing duplicates")
             before_cleaning = len(self.population)
 
             self.drop_duplicates(inplace=True)
@@ -522,8 +526,7 @@ class SymbolicRegressor:
             after_cleaning = len(self.population)
             if before_cleaning != after_cleaning:
                 logging.debug(
-                    f"{after_drop_duplicates-after_cleaning}/{after_drop_duplicates} invalid programs removed"
-                )
+                    f"{after_drop_duplicates-after_cleaning}/{after_drop_duplicates} invalid programs removed")
 
             # Integrate population in case of too many invalid programs
             if len(self.population) < self.population_size * 2:
@@ -610,7 +613,7 @@ class SymbolicRegressor:
 
         Args:
             - data: Union[dict, pd.DataFrame, pd.Series]
-                The data on which the performance are evaluated. We could use evaluate_fitness
+                The data on which the performance are evaluated. We could use compute_fitness
                 later, but we need to evaluate the fitness here to compute it in the
                 parallel initialization.
             - features: List[str]
@@ -636,17 +639,26 @@ class SymbolicRegressor:
                 The generated program
 
         """
-        p = Program(
-            features=features,
-            operations=operations,
-            const_range=const_range,
-            parsimony=parsimony,
-            parsimony_decay=parsimony_decay
-        )
 
-        p.init_program()
+        p = Program(features=features, operations=operations, const_range=const_range,
+                    parsimony=parsimony, parsimony_decay=parsimony_decay)
 
-        p.compute_fitness(fitness_functions=fitness_functions, data=data)
+        attempts = 0
+        max_attempts = 100
+
+        while not p.is_valid and attempts < max_attempts:
+            attempts += 1
+
+            p = Program(features=features, operations=operations, const_range=const_range,
+                        parsimony=parsimony, parsimony_decay=parsimony_decay)
+            p.init_program()
+            p.compute_fitness(fitness_functions=fitness_functions, data=data)
+
+            if p.has_valid_fitness:
+                for individual in self.population:
+                    if p.is_duplicate(individual):
+                        p._override_is_valid = False
+                        break
 
         return p
 
@@ -696,9 +708,7 @@ class SymbolicRegressor:
             ops += [op] * freq
         gen_op = random.choice(ops)
 
-        program1 = self._tournament_selection(population=self.population,
-                                              tournament_size=self.tournament_size,
-                                              generation=self.generation)
+        program1 = self._tournament_selection()
 
         if program1 is None or not program1.is_valid:
             # If the program is not valid, we return a the same program without any alteration
@@ -709,9 +719,7 @@ class SymbolicRegressor:
         _offspring: Program = None
 
         if gen_op == 'crossover':
-            program2 = self._tournament_selection(population=self.population,
-                                                  tournament_size=self.tournament_size,
-                                                  generation=self.generation)
+            program2 = self._tournament_selection()
             if program2 is None or not program2.is_valid:
                 return program1
             _offspring = program1.cross_over(other=program2, inplace=False)
@@ -750,8 +758,7 @@ class SymbolicRegressor:
             return program1
 
         # Add the fitness to the object after the cross_over or mutation
-        _offspring.evaluate_fitness(
-            fitness_functions=self.fitness_functions, data=self.data)
+        _offspring.compute_fitness(fitness_functions=self.fitness_functions, data=self.data)
 
         # Reset the hash to force the re-computation
         _offspring._hash = None
@@ -786,7 +793,7 @@ class SymbolicRegressor:
                 The hypervolume of the current population
         """
 
-        fitness_to_hypervolume = []
+        fitness_to_hypervolume = list()
         for fitness in self.fitness_functions:
             if fitness.hypervolume_reference and fitness.minimize:
                 fitness_to_hypervolume.append(fitness)
@@ -797,8 +804,8 @@ class SymbolicRegressor:
                   for p in self.first_pareto_front]
 
         try:
-            for index, p_list in enumerate(points):
-                for p_i, r_i in zip(p_list, references):
+            for p_list in points:
+                for index, (p_i, r_i) in enumerate(zip(p_list, references)):
                     if p_i > r_i and not p_i == float('inf'):
                         logging.warning(
                             f"Point {p_i} is outside of the reference {r_i}. Reference point will be set to {p_i + 1e-1}")
@@ -829,15 +836,14 @@ class SymbolicRegressor:
                 f"Population of {len(self.population)} elements and average complexity of {self.average_complexity} and 1PF hypervolume of {self.hypervolume}\n")
             print(f"\tBest individual(s) in the first Pareto Front")
             for index, p in enumerate(self.first_pareto_front):
-                print(f'{index})\n\t{p.program}')
+                print(f'{index})\t{p.program}')
                 print()
                 print(f'\t{p.fitness}')
                 print()
 
     @property
     def summary(self):
-        """
-        Summary
+        """ Summary of the evolutionary process
 
         This method returns a summary of the evolutionary process.
 
@@ -846,10 +852,10 @@ class SymbolicRegressor:
         Returns:
             - summary: pd.DataFrame
         """
-        istances = []
+        istances = list()
 
         for index, p in enumerate(self.population):
-            row = {}
+            row = dict()
             row['index'] = index + 1
             row['program'] = p.program
             row['complexity'] = p.complexity

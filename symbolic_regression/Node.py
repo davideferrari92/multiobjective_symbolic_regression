@@ -504,6 +504,21 @@ class FeatureNode(Node):
         """
         return base_complexity + 1
 
+    def _get_constants(self, constants: List = list) -> List:
+        """ This method returns a list of all the constants in the program
+
+        This is a FeatureNode, the end of a branch of a tree, so it returns an empty list.
+
+        Args:
+            - constants: List  (default: list)
+                The list of all the constants in the program
+
+        Returns:
+            - constants: List
+                The list of all the constants in the program
+        """
+        return constants
+
     def _get_depth(self, base_depth: int = 0) -> int:
         """ This method returns the depth of the FeatureNode
 
@@ -521,6 +536,21 @@ class FeatureNode(Node):
 
     def _get_features(self, features_list: list = list):
         return features_list
+
+    def _get_operations_used(self, operations_used: List = list) -> List:
+        """ This method returns a list of all the operations used in the program
+
+        This is a FeatureNode, the end of a branch of a tree, so it returns an empty list.
+
+        Args:
+            - operations_used: List  (default: list)
+                The list of all the operations used in the program
+
+        Returns:
+            - operations_used: List
+                The list of all the operations used in the program
+        """
+        return operations_used
 
     def hash(self, hash_list: list = list) -> int:
         """ This method returns the hash of the FeatureNode
@@ -646,6 +676,36 @@ class InvalidNode(Node):
                 The complexity of the InvalidNode
         """
         return base_complexity + 1
+
+    def _get_constants(self, constants: List['FeatureNode'] = list) -> List['FeatureNode']:
+        """ This method returns a list of all the constants in the program
+
+        This is an InvalidNode, the end of a branch of a tree, so it returns the same list it received.
+
+        Args:
+            - constants: List['FeatureNode']  (default: list)
+                The list of all the constants in the program
+
+        Returns:
+            - constants: List['FeatureNode']
+                The list of all the constants in the program
+        """
+        return constants
+
+    def _get_depth(self, base_depth: int = 0) -> int:
+        """ This method returns the depth of the InvalidNode
+
+        This is an InvalidNode, the end of a branch of a tree, so it returns the base depth plus 1.
+
+        Args:
+            = base_depth: int  (default: 0)
+                The depth of the program
+
+        Returns:
+            = base_depth + 1: int
+                The depth of the InvalidNode
+        """
+        return base_depth + 1
 
     def _get_operations_used(self, base_operations_used: Dict = dict) -> Dict:
         """ This method returns the operations used in the program

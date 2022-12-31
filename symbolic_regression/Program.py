@@ -118,7 +118,7 @@ class Program:
             self.program: Node = InvalidNode()
             self.fitness: Dict = dict()
             self.fitness_functions: List[BaseFitness] = list()
-            self.is_fitness_to_minimize: Dict[bool] = dict()
+            self.is_fitness_to_minimize: Dict = dict()
 
     def __copy__(self):
         cls = self.__class__
@@ -139,7 +139,7 @@ class Program:
                 f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}'
             )
 
-    def __lt__(self, other: 'Program'):
+    def __lt__(self, other: 'Program') -> bool:
         """
         Overload of the less than operator. It is used to compare two programs.
 
@@ -154,10 +154,16 @@ class Program:
                 True if the program is less than the other program, False otherwise
         """
 
-        return self.rank <= other.rank and self.crowding_distance >= other.crowding_distance
+        rank_dominance = self.rank <= other.rank
+        crowding_distance_dominance = self.crowding_distance >= other.crowding_distance
+            
+        return rank_dominance and crowding_distance_dominance
+
+    def __len__(self) -> int:
+        return self.complexity
 
     @property
-    def complexity(self):
+    def complexity(self) -> int:
         """ The complexity of a program is the number of nodes (OperationNodes or FeatureNodes)
         """
         return self._complexity
@@ -206,12 +212,6 @@ class Program:
     def features_used(self):
         return self.program._get_features(features_list=[])
 
-    @property
-    def is_valid(self):
-        """ The validity of a program represent its executability and absence of errors or inconsistencies
-        """
-        return self.program.is_valid() and self._override_is_valid
-
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
         """ This function evaluate the program on the given data.
         The data can be a dictionary, a pandas Series or a pandas DataFrame.
@@ -243,7 +243,7 @@ class Program:
             - None
         """
 
-        # We need to store the fitness functions in the program
+        # We store the fitness functions in the program object
         # as we need them in other parts of the code (e.g. in the hypervolume computation)
         self.fitness_functions = fitness_functions
         self.fitness = dict()
@@ -255,11 +255,12 @@ class Program:
             self._override_is_valid = False
             return None
 
-        _converged = []
+        _converged = list()
 
         for ftn in self.fitness_functions:
             if ftn.label in self.fitness:
-                raise ValueError(f"Fitness function {ftn.label} already used")
+                raise ValueError(f"Fitness function with label {ftn.label} already used")
+            
             fitness_value = ftn.evaluate(program=self, data=data)
 
             convergence_threshold = ftn.convergence_threshold
@@ -271,7 +272,7 @@ class Program:
             self.fitness[ftn.label] = fitness_value
             self.is_fitness_to_minimize[ftn.label] = ftn.minimize
 
-            if convergence_threshold and fitness_value <= convergence_threshold:
+            if ftn.minimize and convergence_threshold and fitness_value <= convergence_threshold:
                 _converged.append(True)
 
         # Only if all the fitness functions have converged, then the program has converged
@@ -324,7 +325,8 @@ class Program:
         if not parsimony_decay:
             parsimony_decay = self.parsimony_decay
 
-        if ((random.random() < parsimony and depth == -1) or (depth > 0)) and not force_constant:
+        selector_operation = random.random()
+        if ((selector_operation < parsimony and depth == -1) or (depth > 0)) and not force_constant:
             # We generate a random operation
 
             operation = random.choice(self.operations)
@@ -354,12 +356,14 @@ class Program:
             # (n-1) / n where n is the number of features.
             # Otherwise a constant value will be generated.
 
-            if random.random() > (1 / len(self.features)) and not force_constant:
+            selector_feature = random.random()
+            if selector_feature > (1 / len(self.features)) and not force_constant:
                 # A Feature from the dataset
 
                 feature = random.choice(self.features)
 
-                node = gen_feature(feature=feature, father=father, is_constant=False)
+                node = gen_feature(
+                    feature=feature, father=father, is_constant=False)
 
             else:
                 # Generate a constant
@@ -398,7 +402,7 @@ class Program:
 
         else:
             # Only one non-constant FeatureNode
-            to_return = []
+            to_return = list()
 
         for index, constant in enumerate(to_return):
             self._set_constants_index(constant=constant, index=index)
@@ -450,6 +454,23 @@ class Program:
         return self._hash
 
     @property
+    def has_valid_fitness(self) -> bool:
+        """
+        This method return True if the program has a valid fitness.
+
+        Args:
+            - None
+
+        Returns:
+            - bool
+                True if the program has a valid fitness.
+        """
+        for label, value in self.fitness.items():
+            if np.isnan(value) or np.isinf(value):
+                return False
+        return True
+
+    @property
     def hypervolume(self) -> float:
         """
         This method return the hypervolume of the program
@@ -461,7 +482,7 @@ class Program:
 
         Args:
             - None
-            
+
         Returns:
             - float
                 The hypervolume of the program.
@@ -470,7 +491,7 @@ class Program:
         if not self.program.is_valid:
             return np.nan
 
-        fitness_to_hypervolume = []
+        fitness_to_hypervolume = list()
         for fitness in self.fitness_functions:
             if fitness.hypervolume_reference and fitness.minimize:
                 fitness_to_hypervolume.append(fitness)
@@ -501,7 +522,8 @@ class Program:
             - None
         """
 
-        logging.debug(f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}')
+        logging.debug(
+            f'Generating a tree with parsimony={self.parsimony} and parsimony_decay={self.parsimony_decay}')
 
         # Father=None is used to identify the root node of the program
         self.program = self._generate_tree(
@@ -517,16 +539,25 @@ class Program:
         # Reset the hash to force the re-computation
         self._hash = None
 
-    def is_duplicate(self, other):
+    def is_duplicate(self, other: 'Program') -> bool:
         """ Determines whether two programs are equivalent based on equal fitnesses
 
         If the fitness of two programs are identical, we assume they are equivalent to each other.
+        We round to the 5th decimal to state whether the fitness are equal.
+
+        Args:
+            - other: Program
+                The other program to compare to
+
+        Returns:
+            - bool
+                True if the two programs are equivalent, False otherwise.
         """
         for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
                                                       other.fitness.items()):
             # One difference is enough for them not to be identical
 
-            if round(a_fit, 1) != round(b_fit, 1):
+            if round(a_fit, 5) != round(b_fit, 5):
                 return False
 
         return True
@@ -537,10 +568,19 @@ class Program:
         return isinstance(self.program, FeatureNode) and self.program.is_constant
 
     @property
-    def is_valid(self):
+    def is_valid(self) -> bool:
         """ This method return True if the program is valid, False otherwise.
+
+        A program is valid if:
+            - It is a valid tree
+            - It has a valid fitness
+
+        Returns:
+            - bool (default=True)
+                True if the program is valid, False otherwise.    
         """
-        return self.program.is_valid
+
+        return self.program.is_valid and self._override_is_valid and self.has_valid_fitness
 
     def optimize(self,
                  data: Union[dict, pd.Series, pd.DataFrame],
@@ -548,10 +588,10 @@ class Program:
                  weights: str,
                  constants_optimization: str,
                  constants_optimization_conf: dict,
-                 inplace: bool = False):
+                 inplace: bool = False) -> 'Program':
 
         if not constants_optimization or not self.is_valid:
-            return
+            return False
 
         task = constants_optimization_conf['task']
 
@@ -617,21 +657,47 @@ class Program:
         except IndexError:  # When the root is also a FeatureNode or an InvalidNode
             return None
 
-    def set_constants(self, new):
+    def set_constants(self, new: List[float]) -> None:
         """ This method allow to overwrite the value of constants after the neuron-based optimization
+
+        Args:
+            - new: list
+                The new values of the constants
+
+        Returns:
+            - None
         """
         for constant, new_value in zip(self.get_constants(), new):
             constant.feature = new_value
 
     @staticmethod
-    def _set_constants_index(constant, index):
+    def _set_constants_index(constant, index) -> None:
+        """ This method allow to overwrite the index of a constant
+
+        Args:
+            - constant: ConstantNode
+                The constant to modify
+
+            - index: int
+                The new index of the constant
+
+        Returns:
+            - None
+        """
         constant.index = index
 
-    def simplify(self, inplace: bool = False, inject: Union[str, None] = None):
+    def simplify(self, inplace: bool = False, inject: Union[str, None] = None) -> 'Program':
         """ This method allow to simplify the structure of a program using a SymPy backend
 
         Args:
-            inplace: set to True to overwrite the current program with the simplified one
+            - inplace: bool (default=False)
+                If True, the program is simplified in place. If False, a new Program object is returned.
+            - inject: Union[str, None] (default=None)
+                If not None, the program is simplified using the inject string as a root node.
+
+        Returns:
+            - Program
+                The simplified program
         """
         from symbolic_regression.simplification import extract_operation
 
@@ -684,8 +750,34 @@ class Program:
         to_return._hash = None
         return to_return
 
-    def to_affine(self, data: Union[dict, pd.Series, pd.DataFrame], target: str, inplace: bool = False):
+    def to_affine(self, data: Union[dict, pd.Series, pd.DataFrame], target: str, inplace: bool = False) -> 'Program':
         """ This function create an affine version of the program between the target maximum and minimum
+
+        The affine of a program is defined as:
+
+        .. math::
+
+            \\hat{y} = \\frac{y_{max} - y_{min}}{\\hat{y}_{max} - \\hat{y}_{min}} \\hat{y} + \\frac{y_{min} \\hat{y}_{max} - y_{max} \\hat{y}_{min}}{\\hat{y}_{max} - \\hat{y}_{min}}
+
+        Where:
+
+        - :math:`\\hat{y}` is the output of the program
+        - :math:`y_{min}` and :math:`y_{max}` are the minimum and maximum of the target
+        - :math:`\\hat{y}_{min}` and :math:`\\hat{y}_{max}` are the minimum and maximum of the output of the program
+
+        Args:
+            - data: Union[dict, pd.Series, pd.DataFrame]
+                The data used to evaluate the program
+
+            - target: str
+                The target of the program
+
+            - inplace: bool (default=False)
+                If True, the program is simplified in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The affine program
         """
 
         if not self.is_valid:
@@ -745,7 +837,19 @@ class Program:
         self._hash = None
         return prog
 
-    def to_logistic(self, inplace: bool = False):
+    def to_logistic(self, inplace: bool = False) -> 'Program':
+        """ This function create a logistic version of the program
+
+        The logistic of a program defined as the program between the sigmoid function.
+
+        Args:
+            - inplace: bool (default=False)
+                If True, the program is simplified in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The logistic program
+        """
         from symbolic_regression.operators import OPERATOR_SIGMOID
         logistic_node = OperationNode(
             operation=OPERATOR_SIGMOID['func'],
@@ -783,7 +887,7 @@ class Program:
 
     # GENETIC OPERATIONS
 
-    def cross_over(self, other=None, inplace: bool = False) -> None:
+    def cross_over(self, other: 'Program' = None, inplace: bool = False) -> None:
         """ This module perform a cross-over between this program and another from the population
 
         A cross-over is the switch between sub-trees from two different programs.
@@ -797,8 +901,14 @@ class Program:
         equivalent to the current one after the cross-over is applied.
 
         Args:
-            other: the program from which to extract a sub-tree
-            inplace: to replace the program in the current object or to return a new one
+            - other: Program (default=None)
+                The other program to cross-over with. If None, a new program is created and used.
+            - inplace: bool (default=False)
+                If True, the cross-over is performed in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The new program after the cross-over is applied
         """
 
         if not other:
@@ -830,13 +940,13 @@ class Program:
 
         offspring = deepcopy(self.program)
 
-        cross_over_point1 = self._select_random_node(root_node=offspring)
+        cross_over_point1 = self._select_random_node()
 
         if not cross_over_point1:
             return self
 
         cross_over_point2 = deepcopy(
-            self._select_random_node(root_node=other.program))
+            self._select_random_node())
 
         cross_over_point2.father = cross_over_point1.father
 
@@ -860,14 +970,19 @@ class Program:
 
         return new
 
-    def mutate(self, inplace: bool = False):
+    def mutate(self, inplace: bool = False) -> 'Program':
         """ This method perform a mutation on a random node of the current program
 
         A mutation is a random generation of a new sub-tree replacing another random
         sub-tree from the current program.
 
         Args:
-            inplace: to replace the program in the current object or to return a new one
+            - inplace: bool (default=False)
+                If True, the mutation is performed in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The new program after the mutation is applied
         """
 
         if self.program_depth == 0:
@@ -884,8 +999,7 @@ class Program:
 
         offspring = deepcopy(self.program)
 
-        mutate_point = self._select_random_node(root_node=offspring,
-                                                deepness=.3)
+        mutate_point = self._select_random_node()
 
         if not mutate_point:
             mutate_point = offspring
@@ -914,17 +1028,22 @@ class Program:
 
         return new
 
-    def insert_node(self, inplace: bool = False):
+    def insert_node(self, inplace: bool = False) -> 'Program':
         """ This method allow to insert a FeatureNode in a random spot in the program
 
         The insertion of a OperationNode must comply with the arity of the existing
         one and must link to the existing operands.
 
         Args:
-            inplace: to replace the program in the current object or to return a new one
+            - inplace: bool (default=False)
+                If True, the insertion is performed in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The new program after the insertion is applied
         """
         offspring = deepcopy(self.program)
-        mutate_point = self._select_random_node(root_node=offspring)
+        mutate_point = self._select_random_node()
 
         if mutate_point:
             mutate_father = mutate_point.father
@@ -968,17 +1087,22 @@ class Program:
 
         return new
 
-    def delete_node(self, inplace: bool = False):
+    def delete_node(self, inplace: bool = False) -> 'Program':
         """ This method delete a random OperationNode from the program.
 
         It selects a random children of the deleted node to replace itself
         as child of its father.
 
         Args:
-            inplace: to replace the program in the current object or to return a new one
+            - inplace: bool (default=False)
+                If True, the deletion is performed in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The new program after the deletion is applied
         """
         offspring = deepcopy(self.program)
-        mutate_point = self._select_random_node(root_node=offspring)
+        mutate_point = self._select_random_node()
 
         if mutate_point:
             mutate_father = mutate_point.father
@@ -988,18 +1112,11 @@ class Program:
         mutate_child = random.choice(mutate_point.operands)
         mutate_child.father = mutate_father
 
-        try:
-            if mutate_father:  # Can be None if it is the root
-                mutate_father.operands[mutate_father.operands.index(
-                    mutate_point)] = mutate_child
-            else:
-                offspring = mutate_child
-        except AttributeError:
-            print(offspring)
-            print(mutate_point)
-            print(mutate_father)
-            print(mutate_child)
-            print()
+        if mutate_father:  # Can be None if it is the root
+            mutate_father.operands[mutate_father.operands.index(
+                mutate_point)] = mutate_child
+        else:
+            offspring = mutate_child
 
         if inplace:
             self.program = offspring
@@ -1014,13 +1131,18 @@ class Program:
 
         return new
 
-    def mutate_leaf(self, inplace: bool = False):
+    def mutate_leaf(self, inplace: bool = False) -> 'Program':
         """ This method select a random FeatureNode and change the associated feature
 
         The new FeatureNode will replace one random leaf among features and constants.
 
         Args:
-            inplace: to replace the program in the current object or to return a new one
+            - inplace: bool (default=False)
+                If True, the mutation is performed in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The new program after the mutation is applied
         """
         offspring = deepcopy(self)
 
@@ -1045,10 +1167,22 @@ class Program:
 
         return offspring
 
-    def mutate_operator(self, inplace: bool = False):
+    def mutate_operator(self, inplace: bool = False) -> 'Program':
+        """ This method select a random OperationNode and change the associated operation
+
+        The new OperationNode will replace one random leaf among features and constants.
+
+        Args:
+            - inplace: bool (default=False)
+                If True, the mutation is performed in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The new program after the mutation is applied
+        """
         offspring = deepcopy(self.program)
 
-        mutate_point = self._select_random_node(root_node=offspring)
+        mutate_point = self._select_random_node()
 
         if not mutate_point:  # Only a FeatureNode without any OperationNode
             new = Program(program=offspring,
@@ -1084,8 +1218,18 @@ class Program:
 
         return new
 
-    def recalibrate(self, inplace: bool = False):
-        """
+    def recalibrate(self, inplace: bool = False) -> 'Program':
+        """ This method recalibrate the constants of the program
+
+        The new constants will be sampled from a uniform distribution.
+
+        Args:
+            - inplace: bool (default=False)
+                If True, the recalibration is performed in place. If False, a new Program object is returned.
+
+        Returns:
+            - Program
+                The new program after the recalibration is applied
         """
         offspring: Program = deepcopy(self)
 
