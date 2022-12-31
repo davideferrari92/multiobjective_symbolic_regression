@@ -1,18 +1,38 @@
 import sympy
 
-from symbolic_regression.Node import FeatureNode, InvalidNode, OperationNode
+from symbolic_regression.Node import FeatureNode, InvalidNode, Node, OperationNode
 from symbolic_regression.operators import *
 
 
-def extract_operation(element_to_extract, father=None):
-    """ Extract a single operation from the sympy.simplify output
-    It is meant to be used recursively.
+def extract_operation(element_to_extract, father: Node = None) -> Node:
+    """ Extract the operation from the sympy expression and return a tree of OperationNode and FeatureNode.
+
+    Args:
+        - element_to_extract: 
+            The sympy expression to extract the operation from.
+        - father:
+            The father of the node to be created.
+
+    Returns:
+        - Node:
+            The root of the tree of OperationNode and FeatureNode.
     """
 
     element = element_to_extract
 
     current_operation = None
 
+    """ Here we allow the use of the following operators:
+        - power: ** or ^ (x**2 or x^2)
+        - addition: + (x + y)
+        - multiplication: * (x * y)
+        - division: / (x / y)
+        - exponent: exp(x)
+        - logarithm: log(x)
+        - absolute value: abs(x)
+        - minimum: Min(x, y)
+        - maximum: Max(x, y)
+    """
     if element.is_Pow:
         current_operation = OPERATOR_POW
 
@@ -36,8 +56,12 @@ def extract_operation(element_to_extract, father=None):
 
     elif str(element.func) == 'Max':
         current_operation = OPERATOR_MAX
-    
+
     if current_operation:
+        """ Case in which the element is an operation.
+        If the element is an operation, we extract the arguments and we create a new OperationNode.
+        Otherwise we create a FeatureNode.
+        """
         args = list(element._args)
 
         # 1/x is treated as pow(x, -1) which is more unstable.
@@ -65,10 +89,19 @@ def extract_operation(element_to_extract, father=None):
         n_args = len(args)
         if n_args > current_operation['arity']:
 
-            ''' Case in which commutative operation are presented with more than arity operators
-
-            Generate a subtree of the same operation so to have an equivalent
+            ''' Case in which commutative operation are presented with more than arity operators.
+            We receive an operation with n_args > arity and we need to generate a subtree of the same operation so to have an equivalent
             binary tree.
+            For example, if we have an addition with 3 operands, we need to generate a tree like this:
+                +
+                / \
+                +   z
+                / \
+                x   y
+            
+            We do this by popping the first element of the args and adding it as a left child of the new_operation.
+            Then we overwrite the args of the element to extract with the remaining args and we call the function again.
+            This will generate the right child of the new_operation.
             '''
 
             # Left child will be one of the arity+n operands
@@ -91,39 +124,21 @@ def extract_operation(element_to_extract, father=None):
 
         return new_operation
 
-    else:  # Feature
+    else:
+        """ Case in which the element is a feature.
+
+        If the element is a feature, we create a new FeatureNode.
+        Otherwise we create an InvalidNode.
+        """
         new_feature = None
 
-        allowed_numeric_types = [
-            sympy.core.numbers.Float,
-            sympy.core.numbers.Integer,
-            sympy.core.numbers.Rational,
-            sympy.core.numbers.NegativeOne
-        ]
-        for a in allowed_numeric_types:
-            if isinstance(element, a):
-                new_feature = FeatureNode(
-                    feature=float(element),
-                    is_constant=True,
-                    father=father
-                )
-                break
-
         if isinstance(element, sympy.core.symbol.Symbol):
-            new_feature = FeatureNode(
-                feature=str(element),
-                is_constant=False,
-                father=father
-            )
+            new_feature = FeatureNode(feature=str(element), is_constant=False, father=father)
+        
+        if isinstance(element, sympy.core.numbers.Float) or isinstance(element, sympy.core.numbers.Integer) or isinstance(element, sympy.core.numbers.Rational) or isinstance(element, sympy.core.numbers.NegativeOne):
+            new_feature = FeatureNode(feature=float(element), is_constant=True, father=father)
 
-        elif element == sympy.simplify('E'):
-            new_feature = FeatureNode(
-                feature=np.exp(1.),
-                is_constant=True,
-                father=father
-            )
+        if element == sympy.simplify('E'):
+            new_feature = FeatureNode(feature=np.exp(1.), is_constant=True, father=father)
 
-        if new_feature:
-            return new_feature
-
-        return InvalidNode()
+        return new_feature if new_feature else InvalidNode()
