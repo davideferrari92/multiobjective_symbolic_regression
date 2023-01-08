@@ -85,6 +85,8 @@ class SymbolicRegressor:
         self.first_pareto_front_history: List = list()
         self.fpf_hypervolume: float = None
         self.fpf_hypervolume_history: List = list()
+        self.fpf_tree_diversity: float = None
+        self.fpf_tree_diversity_history: List = list()
         self.generations_to_train: int = None
         self.generation: int = 0
         self.genetic_operators_frequency: dict = genetic_operators_frequency
@@ -486,7 +488,8 @@ class SymbolicRegressor:
             timing_str = f"{self.elapsed_time} sec, {seconds_iter} sec/generation"
 
             print("############################################################")
-            print(f"Generation {self.generation}/{self.generations_to_train} - {timing_str}")
+            print(
+                f"Generation {self.generation}/{self.generations_to_train} - {timing_str}")
 
             self.status = "Generating offspring"
 
@@ -745,7 +748,8 @@ class SymbolicRegressor:
             return program1
 
         # Add the fitness to the object after the cross_over or mutation
-        _offspring.compute_fitness(fitness_functions=self.fitness_functions, data=self.data)
+        _offspring.compute_fitness(
+            fitness_functions=self.fitness_functions, data=self.data)
 
         # Reset the hash to force the re-computation
         _offspring._hash = None
@@ -902,3 +906,36 @@ class SymbolicRegressor:
                     best_member = member
 
         return best_member
+
+    def tree_diversity(self) -> float:
+        """
+        This method computes the tree diversity of the current population
+
+        The tree diversity is computed as the average diversity of
+        programs in the population. The diversity is computed as the
+        1 - the similarity between two programs. The similarity is
+        computed as the number of common sub-trees between two programs
+        divided by the total number of sub-trees in the two programs.
+
+        Args:
+            - None
+
+        Returns:
+            - tree_diversity: float
+                The tree diversity of the current population
+        """
+
+        if len(self.first_pareto_front) == 1:
+            self.fpf_tree_diversity = 0
+            self.fpf_tree_diversity_history.append(self.fpf_tree_diversity)
+            return self.fpf_tree_diversity
+
+        diversities = list()
+        for index, program in enumerate(self.first_pareto_front):
+            for other_program in self.first_pareto_front[index + 1:]:
+                diversities.append(program.similarity(other_program))
+
+        self.fpf_tree_diversity = 1 - np.mean(diversities)
+        self.fpf_tree_diversity_history.append(self.fpf_tree_diversity)
+
+        return self.fpf_tree_diversity

@@ -5,13 +5,6 @@ import pandas as pd
 import numpy as np
 
 
-def hash_djb2(s: str) -> int:
-    hash = 5381
-    for x in s:
-        hash = (hash << 5) + hash + ord(x)
-    return hash & 0xFFFFFFFF
-
-
 class Node(ABC):
     """ A node can represent an operation or a feature in a binary tree
     """
@@ -307,7 +300,7 @@ class OperationNode(Node):
 
         return base_operations_used
 
-    def hash(self, hash_list: List = list) -> List:
+    def hash(self, hash_list: List = list) -> List['Hash']:
         """ This method recursively hashes the program
 
         Args:
@@ -315,7 +308,7 @@ class OperationNode(Node):
                 The list of hashes of the program. To be recursively updated.
 
         Returns:
-            = hash_list: List
+            = hash_list: List[Hash]
                 The list of hashes of the program
 
         """
@@ -323,17 +316,23 @@ class OperationNode(Node):
         # Evaluate child hashes to then evaluate the operation one
         child_hash = []
         for child in self.operands:
-            ch = child.hash(hash_list=hash_list)
-            child_hash.append(ch)
+            ch = child.hash(hash_list=[])
+            if isinstance(ch, str):
+                child_hash.append(ch)
+            else:
+                child_hash += ch
 
-        operation_hash = f' {self.symbol} '.join(c for c in child_hash)
+        operation_hash = Hash(''.join([self.symbol, *child_hash[:self.arity]]))
+        operation_hash.ref = self
 
         # Add the operation hash to the list and then the children ones
 
         for child in child_hash:
             if isinstance(child, str):
+                # Keep the insert(0) to keep the order for the operation_hash computation
                 hash_list.insert(0, child)
 
+        # Keep the insert(0) to keep the order for the operation_hash computation
         hash_list.insert(0, operation_hash)
 
         return hash_list
@@ -552,22 +551,28 @@ class FeatureNode(Node):
         """
         return operations_used
 
-    def hash(self, hash_list: list = list) -> int:
+    def hash(self, hash_list: list = list) -> 'Hash':
         """ This method returns the hash of the FeatureNode
 
         This is a FeatureNode, the end of a branch of a tree, so it returns the hash of the feature of this node.
 
         Args:
-            = hash_list: list  (default: list)
+            - hash_list: list  (default: list)
                 The list of all the hashes of the nodes in the program
 
         Returns:
-            = hash_list: list
-                The list of all the hashes of the nodes in the program
+            - Hash(self.render()): 'Hash'
+                The hash of the FeatureNode
         """
+
         if self.is_constant:
-            return 'C'
-        return self.render()
+            h = Hash('C')
+        else:
+            h = Hash(self.render())
+
+        h.ref = self
+
+        return h
 
     @property
     def is_valid(self):
@@ -722,20 +727,22 @@ class InvalidNode(Node):
         """
         return base_operations_used
 
-    def hash(self, hash_list: List = list) -> int:
+    def hash(self, hash_list: List = list) -> 'Hash':
         """ This method returns the hash of the InvalidNode
 
         This is an InvalidNode, the end of a branch of a tree, so it returns the hash of the feature of this node.
 
         Args:
-            = hash_list: List  (default: list)
+            - hash_list: List  (default: list)
                 The list of all the hashes of the nodes in the program
 
         Returns:
-            = hash_list: List
-                The list of all the hashes of the nodes in the program
+            - Hash('InvalidNode'): Hash
+                The hash of the InvalidNode
         """
-        return 'InvalidNode'
+        h = Hash('InvalidNode')
+        h.ref = self
+        return h
 
     @property
     def is_valid(self):
@@ -777,3 +784,25 @@ class InvalidNode(Node):
                 The string representation of this InvalidNode which is independent of the data
         """
         return 'InvalidNode'
+
+
+class Hash(str):
+
+    ref: Node = None
+
+    def __new__(cls, string):
+        """ This method creates a new Hash 
+
+        This method creates a new Hash from a string. The Hash is a string with a reference to the object that created it.
+
+        Args:
+            = string: str
+                The string to be hashed
+
+        Returns:
+            = instance: Hash
+                The Hash of the string
+        """
+        instance = super().__new__(cls, string)
+        instance.ref: Node = None
+        return instance

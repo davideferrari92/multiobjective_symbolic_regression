@@ -449,7 +449,10 @@ class Program:
                 A list of unique identifiers of the nodes of the tree.
         """
         if not self._hash:
-            self._hash = self.program.hash(hash_list=[])
+            if isinstance(self.program, OperationNode):
+                self._hash = sorted(self.program.hash(hash_list=[]))
+            else:
+                self._hash = [self.program.hash(hash_list=[])]
 
         return self._hash
 
@@ -685,6 +688,31 @@ class Program:
             - None
         """
         constant.index = index
+
+    def similarity(self, other: 'Program') -> float:
+        """ This method return the similarity between two programs
+
+        The similarity is computed as the number of common elements between the two programs
+        divided by the total number of elements in the two programs.
+
+        Args:
+            - other: Program
+                The other program to compare to
+
+        Returns:
+            - float
+                The similarity between the two programs
+        """
+        def common_elements(list1, list2):
+            result = []
+            for element in list1:
+                if element in list2:
+                    result.append(element)
+            return result
+
+        c_elements = common_elements(self.hash, other.hash)
+
+        return 2 * len(c_elements) / (len(self.hash) + len(other.hash))
 
     def simplify(self, inplace: bool = False, inject: Union[str, None] = None) -> 'Program':
         """ This method allow to simplify the structure of a program using a SymPy backend
