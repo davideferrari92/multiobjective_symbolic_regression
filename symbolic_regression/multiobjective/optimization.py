@@ -1,78 +1,53 @@
-from typing import Union
 import warnings
+from typing import Union
+
 import numpy as np
 import pandas as pd
 import sympy as sym
-from symbolic_regression.Node import FeatureNode
 from sympy.utilities.lambdify import lambdify
+
+from symbolic_regression.Program import Program
+
 warnings.filterwarnings("ignore")
 
 
-def optimize(program,
-             data: Union[dict, pd.Series, pd.DataFrame, None],
-             target: str,
-             weights: str,
-             constants_optimization_conf: dict,
-             constants_optimization_method: str = 'ADAM',
-             task: str = 'regression:wmse'):
-    """
-    """
-    if task not in ['regression:wmse', 'regression:wrrmse', 'binary:logistic']:
-        raise AttributeError(
-            f'Task supported are regression:wmse, regression:wrrmse or binary:logistic')
-
-    n_constants = len(program.get_constants())
-    n_features_used = len(program.features_used)
-    '''
-    not isinstance(program.program, FeatureNode)
-        programs with only a FeatureNode are not acceptable anyway
-
-    n_constants > 0
-        as the optimization algorithm optimize only constants
-
-    n_features_used > 0
-        as it is a constant program anyway and the optimized won't work with this configuration
-    '''
-    if not isinstance(program.program,
-                      FeatureNode) and n_constants > 0 and n_features_used > 0:
-
-        if constants_optimization_method == 'SGD':
-            f_opt = SGD
-            program.to_affine(data=data, target=target, inplace=True)
-
-        if constants_optimization_method == 'ADAM':
-            f_opt = ADAM
-            program.to_affine(data=data, target=target, inplace=True)
-
-        if constants_optimization_method == 'ADAM2FOLD':
-            f_opt = ADAM2FOLD
-            # Here there can be more than one target so need the index
-            program.to_affine(data=data, target=target[0], inplace=True)
-
-        program.simplify(inplace=True)
-
-        final_parameters, _, _ = f_opt(
-            program=program,
-            data=data,
-            target=target,
-            weights=weights,
-            constants_optimization_conf=constants_optimization_conf,
-            task=task
-        )
-        if len(final_parameters) > 0:
-            program.set_constants(new=final_parameters)
-
-    return program
-
-
-def SGD(program,
-        data: Union[dict, pd.Series, pd.DataFrame],
-        target: str,
-        weights: str,
-        constants_optimization_conf: dict,
-        task: str):
+def SGD(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str):
     '''
     Stochastic Gradient Descent with analytic derivatives
+
+    Args:
+        - program: Program
+            Program to be optimized
+        - data: dict, pd.Series, pd.DataFrame
+            Data to be used for optimization
+        - target: str
+            Name of the target column
+        - weights: str
+            Name of the weights column
+        - constants_optimization_conf: dict
+            Dictionary with the following
+            - learning_rate: float
+                Learning rate for the optimization
+            - batch_size: int
+                Batch size for the optimization
+            - epochs: int
+                Number of epochs for the optimization
+            - gradient_clip: float
+                Gradient clipping value
+            - l1_param: float
+                L1 regularization parameter
+            - l2_param: float
+                L2 regularization parameter
+        - task: str
+            Task to be performed. Can be 'regression' or 'classification'
+
+    Returns:
+        - list
+            List of the optimized constants
+        - list
+            List of the loss values
+        - list
+            List of the accuracy values
     '''
     learning_rate = constants_optimization_conf['learning_rate']
     batch_size = constants_optimization_conf['batch_size']
@@ -191,17 +166,49 @@ def SGD(program,
     return constants, loss, log
 
 
-def ADAM(program,
-         data: Union[dict, pd.Series, pd.DataFrame],
-         target: str,
-         weights: str,
-         constants_optimization_conf: dict,
-         task: str):
-    '''
-    ADAM with analytic derivatives
-    beta_1: float = 0.9, 
-    beta_2: float = 0.999, 
-    epsilon: float = 1e-07,
+def ADAM(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str):
+    ''' ADAM with analytic derivatives
+
+    Args:
+        - program: Program
+            The program to optimize
+        - data: dict, pd.Series, pd.DataFrame
+            The data to fit the program
+        - target: str
+            The target column name
+        - weights: str
+            The weights column name
+        - constants_optimization_conf: dict
+            Dictionary with the following
+            - learning_rate: float
+                The learning rate
+            - batch_size: int
+                The batch size
+            - epochs: int
+                The number of epochs
+            - gradient_clip: bool
+                Whether to clip the gradients
+            - beta_1: float
+                The beta 1 parameter for ADAM
+            - beta_2: float
+                The beta 2 parameter for ADAM
+            - epsilon: float
+                The epsilon parameter for ADAM
+            - l1_param: float
+                The l1 regularization parameter
+            - l2_param: float
+                The l2 regularization parameter
+            
+        - task: str
+            The task to optimize
+
+    Returns:
+        - constants: np.array
+            The optimized constants
+        - loss: list
+            The loss at each epoch
+        - log: list
+            The constants at each epoch
     '''
 
     learning_rate = constants_optimization_conf['learning_rate']
@@ -338,17 +345,44 @@ def ADAM(program,
     return constants, loss, log
 
 
-def ADAM2FOLD(program,
-              data: Union[dict, pd.Series, pd.DataFrame],
-              target: list,
-              weights: list,
-              constants_optimization_conf: dict,
-              task: str):
-    '''
-    ADAM with analytic derivatives
-    beta_1: float = 0.9, 
-    beta_2: float = 0.999, 
-    epsilon: float = 1e-07,
+def ADAM2FOLD(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: list, weights: list, constants_optimization_conf: dict, task: str):
+    ''' ADAM with analytic derivatives for 2-fold programs
+
+    Args:
+        -program: Program
+            The program to optimize
+        -data: dict, pd.Series, pd.DataFrame
+            The data to fit
+        -target: list
+            The targets to fit
+        -weights: list
+            The weights to fit
+        -constants_optimization_conf: dict
+            Dictionary with the following
+            - learning_rate: float
+                The learning rate
+            - batch_size: int
+                The batch size
+            - epochs: int
+                The number of epochs
+            - gradient_clip: bool
+                Whether to clip the gradients
+            - beta_1: float
+                The beta_1 parameter for Adam
+            - beta_2: float
+                The beta_2 parameter for Adam
+            - epsilon: float
+                The epsilon parameter for Adam
+        -task: str
+            The task to optimize
+
+    Returns:
+        -constants: list
+            The optimized constants
+        -loss: list
+            The loss at each epoch
+        -log: list
+            The constants at each epoch
     '''
     #print('using ADAM2FOLD')
     learning_rate = constants_optimization_conf['learning_rate']
