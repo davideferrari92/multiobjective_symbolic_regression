@@ -15,6 +15,7 @@ def _protected_mul(x1, x2):
     with np.errstate(over='ignore', under='ignore'):
         return np.multiply(x1, x2)
 
+
 def _protected_division(x1, x2):
     """Closure of division (x1/x2) for zero denominator."""
     with np.errstate(divide='ignore', invalid='ignore'):

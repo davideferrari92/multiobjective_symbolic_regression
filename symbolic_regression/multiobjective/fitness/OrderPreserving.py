@@ -1,8 +1,9 @@
-from symbolic_regression.Program import Program
-from symbolic_regression.multiobjective.fitness.Base import BaseFitness
-import pandas as pd
 import numpy as np
+import pandas as pd
 from astropy import stats
+
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.Program import Program
 
 
 class Wasserstein(BaseFitness):
@@ -20,10 +21,10 @@ class Wasserstein(BaseFitness):
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
 
         self.optimize(program=program, data=data)
-        
+
         F_y = self._get_cumulant_hist(
             data=data, target=self.target, bins=self.bins)
-        
+
         data[self.weights] = self._create_regression_weights(
             data=data, target=self.target, bins=self.bins)
 

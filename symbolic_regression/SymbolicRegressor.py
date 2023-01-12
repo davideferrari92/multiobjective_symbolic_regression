@@ -8,10 +8,9 @@ import numpy as np
 import pandas as pd
 import pygmo as pg
 from joblib.parallel import Parallel, delayed
-from symbolic_regression.Program import Program
-from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 
-from loky import get_reusable_executor
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.Program import Program
 
 backend_parallel = 'loky'
 

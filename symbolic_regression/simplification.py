@@ -1,6 +1,7 @@
 import sympy
 
-from symbolic_regression.Node import FeatureNode, InvalidNode, Node, OperationNode
+from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
+                                      OperationNode)
 from symbolic_regression.operators import *
 
 
@@ -72,7 +73,7 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
 
         # sqrt(x) is treated as pow(x, .5) which is more unstable.
         # We convert it to an actual sqrt(x)
-        if element.is_Pow and len(args) == 2 and args[1] == sympy.parse_expr('1/2'):            
+        if element.is_Pow and len(args) == 2 and args[1] == sympy.parse_expr('1/2'):
             current_operation = OPERATOR_SQRT
             args = [args[0]]
 
@@ -82,10 +83,11 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
             format_str=current_operation['format_str'],
             format_tf=current_operation['format_tf'],
             symbol=current_operation['symbol'],
-            format_diff=current_operation.get('format_diff', current_operation['format_str']),
+            format_diff=current_operation.get(
+                'format_diff', current_operation['format_str']),
             father=father
         )
-        
+
         n_args = len(args)
         if n_args > current_operation['arity']:
 
@@ -98,7 +100,7 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
                 +   z
                 / \
                 x   y
-            
+
             We do this by popping the first element of the args and adding it as a left child of the new_operation.
             Then we overwrite the args of the element to extract with the remaining args and we call the function again.
             This will generate the right child of the new_operation.
@@ -106,7 +108,8 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
 
             # Left child will be one of the arity+n operands
             left_child = args.pop(0)
-            n_op = extract_operation(element_to_extract=left_child, father=new_operation)
+            n_op = extract_operation(
+                element_to_extract=left_child, father=new_operation)
             new_operation.add_operand(n_op)
 
             # args now has one element removed and need to be overwritten to converge the recursion.
@@ -114,12 +117,14 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
 
             # Right child will be again the same element (same operation and one less of the args)
             # until n_args == arity.
-            n_op = extract_operation(element_to_extract=element, father=new_operation)
+            n_op = extract_operation(
+                element_to_extract=element, father=new_operation)
             new_operation.add_operand(n_op)
         else:
             # When n_args == arity, just loop on the remaining args and add as terminal children
             for op in args:
-                n_op = extract_operation(element_to_extract=op, father=new_operation)
+                n_op = extract_operation(
+                    element_to_extract=op, father=new_operation)
                 new_operation.add_operand(n_op)
 
         return new_operation
@@ -133,12 +138,15 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
         new_feature = None
 
         if isinstance(element, sympy.core.symbol.Symbol):
-            new_feature = FeatureNode(feature=str(element), is_constant=False, father=father)
-        
+            new_feature = FeatureNode(feature=str(
+                element), is_constant=False, father=father)
+
         if isinstance(element, sympy.core.numbers.Float) or isinstance(element, sympy.core.numbers.Integer) or isinstance(element, sympy.core.numbers.Rational) or isinstance(element, sympy.core.numbers.NegativeOne):
-            new_feature = FeatureNode(feature=float(element), is_constant=True, father=father)
+            new_feature = FeatureNode(feature=float(
+                element), is_constant=True, father=father)
 
         if element == sympy.simplify('E'):
-            new_feature = FeatureNode(feature=np.exp(1.), is_constant=True, father=father)
+            new_feature = FeatureNode(feature=np.exp(
+                1.), is_constant=True, father=father)
 
         return new_feature if new_feature else InvalidNode()

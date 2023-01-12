@@ -198,7 +198,7 @@ def ADAM(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: s
                 The l1 regularization parameter
             - l2_param: float
                 The l2 regularization parameter
-            
+
         - task: str
             The task to optimize
 

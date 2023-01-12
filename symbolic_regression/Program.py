@@ -9,11 +9,13 @@ import pygmo as pg
 import sympy
 from sympy.parsing.sympy_parser import parse_expr
 
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.multiobjective.optimization import (ADAM, ADAM2FOLD,
+                                                             SGD)
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
-from symbolic_regression.operators import OPERATOR_ADD, OPERATOR_MUL, OPERATOR_POW
-from symbolic_regression.multiobjective.optimization import SGD, ADAM, ADAM2FOLD
-from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.operators import (OPERATOR_ADD, OPERATOR_MUL,
+                                           OPERATOR_POW)
 
 
 class Program:
@@ -156,7 +158,7 @@ class Program:
 
         rank_dominance = self.rank <= other.rank
         crowding_distance_dominance = self.crowding_distance >= other.crowding_distance
-            
+
         return rank_dominance and crowding_distance_dominance
 
     def __len__(self) -> int:
@@ -259,8 +261,9 @@ class Program:
 
         for ftn in self.fitness_functions:
             if ftn.label in self.fitness:
-                raise ValueError(f"Fitness function with label {ftn.label} already used")
-            
+                raise ValueError(
+                    f"Fitness function with label {ftn.label} already used")
+
             fitness_value = ftn.evaluate(program=self, data=data)
 
             convergence_threshold = ftn.convergence_threshold

@@ -1,18 +1,18 @@
-from symbolic_regression.Program import Program
-from symbolic_regression.multiobjective.fitness.Base import BaseFitness
-import pandas as pd
 import numpy as np
-
+import pandas as pd
 from sklearn.metrics import (accuracy_score, average_precision_score, f1_score,
                              log_loss, precision_score, recall_score,
                              roc_auc_score, roc_curve)
+
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.Program import Program
 
 
 class BaseClassification(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
         """ This fitness requires the following arguments:
-        
+
         - target: str
         - weights: str
         - threshold: float 
@@ -22,7 +22,7 @@ class BaseClassification(BaseFitness):
         self.classification_metric = None
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
-        
+
         self.optimize(program=program, data=data)
 
         if not self.classification_metric:
@@ -43,7 +43,7 @@ class BaseClassification(BaseFitness):
             metric = self.classification_metric(ground_truth, pred)
         except ValueError:
             metric = np.nan
-            
+
         if self.one_minus:
             return 1 - metric
         return metric
@@ -53,7 +53,7 @@ class BinaryCrossentropy(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
         """ This fitness requires the following arguments:
-        
+
         - target: str
         - weights: str
         - logistic: bool
@@ -62,7 +62,7 @@ class BinaryCrossentropy(BaseFitness):
         super().__init__(**kwargs)
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
-        
+
         self.optimize(program=program, data=data)
 
         if self.logistic:
@@ -118,7 +118,7 @@ class AUC(BaseClassification):
         self.classification_metric = roc_auc_score
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
-        
+
         self.optimize(program=program, data=data)
 
         if not self.classification_metric:
@@ -133,7 +133,7 @@ class AUC(BaseClassification):
             return np.nan
 
         ground_truth = data[self.target].astype('int')
-        
+
         if pred.size == 1:
             pred = np.repeat(pred, ground_truth.shape[0])
 
@@ -145,6 +145,7 @@ class AUC(BaseClassification):
         if self.one_minus:
             return 1 - metric
         return metric
+
 
 class AveragePrecision(BaseClassification):
 

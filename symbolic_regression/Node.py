@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Union
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 class Node(ABC):

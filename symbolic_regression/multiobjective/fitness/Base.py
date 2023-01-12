@@ -1,7 +1,8 @@
 from abc import abstractmethod
-from astropy import stats
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+from astropy import stats
 
 
 class BaseFitness:

@@ -1,9 +1,9 @@
-from symbolic_regression.Program import Program
-from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 import numpy as np
 import pandas as pd
+from scipy.stats import kendalltau, pearsonr, spearmanr
 
-from scipy.stats import spearmanr, pearsonr, kendalltau
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.Program import Program
 
 
 class BaseCorrelation(BaseFitness):

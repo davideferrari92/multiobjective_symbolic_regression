@@ -1,9 +1,9 @@
-from symbolic_regression.Program import Program
-from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+import numpy as np
+import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
-import pandas as pd
-import numpy as np
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.Program import Program
 
 
 class WeightedMeanSquaredError(BaseFitness):
@@ -129,7 +129,7 @@ class MeanAveragePercentageError(BaseFitness):
         super().__init__(**kwargs)
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
-        
+
         self.optimize(program=program, data=data)
 
         if not program.is_valid:
@@ -149,14 +149,14 @@ class MeanAveragePercentageError(BaseFitness):
             because the MAPE is not scale invariant.
             """
             if isinstance(pred, float):
-                pred = np.full(shape=len(data[self.target]),fill_value=pred)
-            
+                pred = np.full(shape=len(data[self.target]), fill_value=pred)
+
             scaler = MinMaxScaler()
             target = np.array(data[self.target]).reshape(-1, 1)
             scaler.fit(target)
 
             pred = scaler.transform(np.array(pred).reshape(-1, 1))
-            
+
             mape = np.mean(np.abs((pred - target) / target))
             return mape
         except TypeError:
