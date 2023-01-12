@@ -6,7 +6,6 @@ from typing import List, Union
 
 import numpy as np
 import pandas as pd
-import pygmo as pg
 from joblib.parallel import Parallel, delayed
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
