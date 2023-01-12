@@ -6,12 +6,10 @@ import pandas as pd
 import sympy as sym
 from sympy.utilities.lambdify import lambdify
 
-from symbolic_regression.Program import Program
-
 warnings.filterwarnings("ignore")
 
 
-def SGD(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str):
+def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str):
     '''
     Stochastic Gradient Descent with analytic derivatives
 
@@ -166,7 +164,7 @@ def SGD(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: st
     return constants, loss, log
 
 
-def ADAM(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str):
+def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str):
     ''' ADAM with analytic derivatives
 
     Args:
@@ -345,7 +343,7 @@ def ADAM(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: s
     return constants, loss, log
 
 
-def ADAM2FOLD(program: Program, data: Union[dict, pd.Series, pd.DataFrame], target: list, weights: list, constants_optimization_conf: dict, task: str):
+def ADAM2FOLD(program, data: Union[dict, pd.Series, pd.DataFrame], target: list, weights: list, constants_optimization_conf: dict, task: str):
     ''' ADAM with analytic derivatives for 2-fold programs
 
     Args:
