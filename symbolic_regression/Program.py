@@ -5,11 +5,11 @@ from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
-import pygmo as pg
 import sympy
 from sympy.parsing.sympy_parser import parse_expr
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.multiobjective.hypervolume import _HyperVolume
 from symbolic_regression.multiobjective.optimization import (ADAM, ADAM2FOLD,
                                                              SGD)
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
@@ -505,11 +505,13 @@ class Program:
         if not fitness_to_hypervolume:
             return np.nan
 
-        points = [[self.fitness[ftn.label] for ftn in fitness_to_hypervolume]]
-        references = [
-            ftn.hypervolume_reference for ftn in fitness_to_hypervolume]
+        points = [np.array([self.fitness[ftn.label]
+                            for ftn in fitness_to_hypervolume])]
+        references = np.array(
+            [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
 
-        self.program_hypervolume = pg.hypervolume(points).compute(references)
+        hv = _HyperVolume(references)
+        self.program_hypervolume = hv.compute(points)
 
         return self.program_hypervolume
 
