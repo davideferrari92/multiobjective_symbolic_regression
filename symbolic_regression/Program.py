@@ -497,7 +497,7 @@ class Program:
         if not self.program.is_valid:
             return np.nan
 
-        fitness_to_hypervolume = list()
+        fitness_to_hypervolume: List[BaseFitness] = list()
         for fitness in self.fitness_functions:
             if fitness.hypervolume_reference and fitness.minimize:
                 fitness_to_hypervolume.append(fitness)
@@ -510,8 +510,7 @@ class Program:
         references = np.array(
             [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
 
-        hv = _HyperVolume(references)
-        self.program_hypervolume = hv.compute(points)
+        self.program_hypervolume = _HyperVolume(references).compute(points)
 
         return self.program_hypervolume
 
