@@ -126,6 +126,9 @@ class Program:
         cls = self.__class__
         result = cls.__new__(cls)
         result.__dict__.update(self.__dict__)
+
+        result.program_hypervolume = np.nan
+
         return result
 
     def __deepcopy__(self, memo):
@@ -135,6 +138,8 @@ class Program:
             memo[id(self)] = result
             for k, v in self.__dict__.items():
                 setattr(result, k, deepcopy(v, memo))
+
+            result.program_hypervolume = np.nan
             return result
         except RecursionError:
             logging.warning(
@@ -214,23 +219,6 @@ class Program:
     def features_used(self):
         return self.program._get_features(features_list=[])
 
-    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
-        """ This function evaluate the program on the given data.
-        The data can be a dictionary, a pandas Series or a pandas DataFrame.
-
-        Args:
-            - data: dict, pd.Series, pd.DataFrame
-                The data on which the program will be evaluated
-
-        Returns:
-            - int, float
-                The result of the evaluation
-        """
-        if not self.is_valid:
-            return np.nan
-
-        return self.program.evaluate(data=data)
-
     def compute_fitness(self, fitness_functions: List[BaseFitness], data: Union[dict, pd.Series, pd.DataFrame]) -> None:
         """ This function evaluate the fitness of the program on the given data.
         The data can be a dictionary, a pandas Series or a pandas DataFrame.
@@ -280,6 +268,60 @@ class Program:
 
         # Only if all the fitness functions have converged, then the program has converged
         self.converged = all(_converged) if len(_converged) > 0 else False
+
+        self._compute_hypervolume()
+
+    def _compute_hypervolume(self) -> float:
+        """
+        This method return the hypervolume of the program
+
+        The hypervolume is the volume occupied by the fitness space by the program.
+        It can be of any dimension. We allow to compute the hypervolume only if the
+        fitness functions are set to be minimized, otherwise we assume that the fitness
+        are computed only for comparison purposes and not for optimization.
+
+        Args:
+            - None
+
+        Returns:
+            - float
+                The hypervolume of the program.
+        """
+
+        if not self.program.is_valid:
+            return np.nan
+
+        fitness_to_hypervolume: List[BaseFitness] = list()
+        for fitness in self.fitness_functions:
+            if fitness.hypervolume_reference and fitness.minimize:
+                fitness_to_hypervolume.append(fitness)
+
+        if not fitness_to_hypervolume:
+            return np.nan
+
+        points = [np.array([self.fitness[ftn.label]
+                            for ftn in fitness_to_hypervolume])]
+        references = np.array(
+            [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
+
+        self.program_hypervolume = _HyperVolume(references).compute(points)
+
+    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+        """ This function evaluate the program on the given data.
+        The data can be a dictionary, a pandas Series or a pandas DataFrame.
+
+        Args:
+            - data: dict, pd.Series, pd.DataFrame
+                The data on which the program will be evaluated
+
+        Returns:
+            - int, float
+                The result of the evaluation
+        """
+        if not self.is_valid:
+            return np.nan
+
+        return self.program.evaluate(data=data)
 
     def _generate_tree(self, depth=-1, parsimony: float = .8, parsimony_decay: float = .85, father: Union[Node, None] = None, force_constant: bool = False) -> Node:
         """ This function generate a tree of a given depth.
@@ -476,41 +518,9 @@ class Program:
                 return False
         return True
 
-    @property
     def hypervolume(self) -> float:
-        """
-        This method return the hypervolume of the program
-
-        The hypervolume is the volume occupied by the fitness space by the program.
-        It can be of any dimension. We allow to compute the hypervolume only if the
-        fitness functions are set to be minimized, otherwise we assume that the fitness
-        are computed only for comparison purposes and not for optimization.
-
-        Args:
-            - None
-
-        Returns:
-            - float
-                The hypervolume of the program.
-        """
-
-        if not self.program.is_valid:
-            return np.nan
-
-        fitness_to_hypervolume: List[BaseFitness] = list()
-        for fitness in self.fitness_functions:
-            if fitness.hypervolume_reference and fitness.minimize:
-                fitness_to_hypervolume.append(fitness)
-
-        if not fitness_to_hypervolume:
-            return np.nan
-
-        points = [np.array([self.fitness[ftn.label]
-                            for ftn in fitness_to_hypervolume])]
-        references = np.array(
-            [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
-
-        self.program_hypervolume = _HyperVolume(references).compute(points)
+        if not self.program_hypervolume:
+            self._compute_hypervolume()
 
         return self.program_hypervolume
 
@@ -564,7 +574,7 @@ class Program:
                                                       other.fitness.items()):
             # One difference is enough for them not to be identical
 
-            if round(a_fit, 5) != round(b_fit, 5):
+            if round(a_fit, 3) != round(b_fit, 3):
                 return False
 
         return True
@@ -826,6 +836,9 @@ class Program:
         y_pred_max = max(y_pred)
         target_min = data[target].min()
         target_max = data[target].max()
+
+        if y_pred_min == y_pred_max:
+            return prog
 
         alpha = target_max + (target_max - target_min) * \
             y_pred_max / (y_pred_min - y_pred_max)

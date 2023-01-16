@@ -10,6 +10,7 @@ from joblib.parallel import Parallel, delayed
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.Program import Program
+from symbolic_regression.multiobjective.hypervolume import _HyperVolume
 
 backend_parallel = 'loky'
 
@@ -558,6 +559,8 @@ class SymbolicRegressor:
             self.average_complexity = np.mean(
                 [p.complexity for p in self.population])
 
+            self.compute_hypervolume()
+
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front()
 
@@ -754,8 +757,7 @@ class SymbolicRegressor:
 
         return _offspring
 
-    @property
-    def hypervolume(self):
+    def compute_hypervolume(self):
         """
         This method computes the hypervolume of the current population
 
@@ -787,26 +789,24 @@ class SymbolicRegressor:
             if fitness.hypervolume_reference and fitness.minimize:
                 fitness_to_hypervolume.append(fitness)
 
-        references = [
-            fitness.hypervolume_reference for fitness in fitness_to_hypervolume]
-        points = [[p.fitness[ftn.label] for ftn in fitness_to_hypervolume]
+        points = [np.array([p.fitness[ftn.label] for ftn in fitness_to_hypervolume])
                   for p in self.first_pareto_front]
+
+        references = np.array(
+            [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
 
         try:
             for p_list in points:
                 for index, (p_i, r_i) in enumerate(zip(p_list, references)):
                     if p_i > r_i and not p_i == float('inf'):
-                        logging.warning(
-                            f"Point {p_i} is outside of the reference {r_i}. Reference point will be set to {p_i + 1e-1}")
                         references[index] = p_i + 1e-1
-            self.fpf_hypervolume = pg.hypervolume(points).compute(references)
+
+            self.fpf_hypervolume = _HyperVolume(references).compute(points)
             self.fpf_hypervolume_history.append(self.fpf_hypervolume)
 
         except ValueError:
-            self.fpf_hypervolume = 0
-            self.fpf_hypervolume_history.append(0)
-
-        return self.fpf_hypervolume
+            self.fpf_hypervolume = np.nan
+            self.fpf_hypervolume_history.append(self.fpf_hypervolume)
 
     def _print_first_pareto_front(self):
         """
@@ -822,7 +822,7 @@ class SymbolicRegressor:
         if self.verbose > 0:
             print()
             print(
-                f"Population of {len(self.population)} elements and average complexity of {self.average_complexity} and 1PF hypervolume of {self.hypervolume}\n")
+                f"Population of {len(self.population)} elements and average complexity of {self.average_complexity} and 1PF hypervolume of {self.fpf_hypervolume}\n")
             print(f"\tBest individual(s) in the first Pareto Front")
             for index, p in enumerate(self.first_pareto_front):
                 print(f'{index})\t{p.program}')
