@@ -64,7 +64,7 @@ class SymbolicRegressor:
         self.client_name: str = client_name
         self.checkpoint_file: str = checkpoint_file
         self.checkpoint_frequency: int = checkpoint_frequency
-        self.elapsed_time: list = [0]
+        self.elapsed_time: list = []
         self.features: List = None
         self.operations: List = None
         self.population_size: int = population_size
@@ -90,8 +90,9 @@ class SymbolicRegressor:
         self.generation: int = 0
         self.genetic_operators_frequency: dict = genetic_operators_frequency
         self.population: List[Program] = list()
-        self.status: str = "Uninitialized"
         self.training_duration: int = 0
+
+        self.times = pd.DataFrame()
 
     def save_model(self, file: str):
         import pickle
@@ -455,11 +456,11 @@ class SymbolicRegressor:
         """
 
         if not self.population:
+            before = time.perf_counter()
             logging.info(f"Initializing population")
             self.status = "Generating population"
             self.population = Parallel(
                 n_jobs=self.n_jobs,
-                batch_size=int(self.population_size / (os.cpu_count()-1)),
                 backend=backend_parallel)(delayed(self.generate_individual)(
                     data=self.data,
                     features=self.features,
@@ -470,6 +471,7 @@ class SymbolicRegressor:
                     parsimony_decay=self.parsimony_decay,
                 ) for _ in range(self.population_size))
 
+            self.times.loc[self.generation+1, "initialization"] = time.perf_counter() - before
         else:
             logging.info("Fitting with existing population")
 
@@ -483,18 +485,20 @@ class SymbolicRegressor:
             start_time_generation = time.perf_counter()
 
             if self.generation > 0:
+                seconds_total = round(np.sum(self.elapsed_time), 1)
                 seconds_iter = round(
-                    np.mean(self.elapsed_time[1:]), 1) if self.generation else 0
+                    np.mean(self.elapsed_time), 1)
                 seconds_iter_std = round(
-                    np.std(self.elapsed_time[1:]), 1) if self.generation else 0
+                    np.std(self.elapsed_time), 1)
                 expected_time = round(seconds_iter *
                                       (self.generations_to_train - self.generation)/60)
             else:
+                seconds_total = 0
                 seconds_iter = 0
                 seconds_iter_std = 0
                 expected_time = 'Unknown'
 
-            timing_str = f"{round(np.sum(self.elapsed_time), 2)} sec - {seconds_iter} ± {seconds_iter_std} sec/generation - Time to completion: {expected_time} min"
+            timing_str = f"{seconds_total} sec - {seconds_iter} ± {seconds_iter_std} sec/generation - Time to completion: {expected_time} mins"
 
             self.generation += 1
 
@@ -502,39 +506,45 @@ class SymbolicRegressor:
             print(
                 f"Generation {self.generation}/{self.generations_to_train} - {timing_str}")
 
-            self.status = "Generating offspring"
-
+            ################################################ Generates the offsprings
+            before = time.perf_counter()
             offsprings: List[Program] = Parallel(
                 n_jobs=self.n_jobs,
-                batch_size=int(self.population_size / (os.cpu_count()-1)),
                 backend=backend_parallel)(
                     delayed(self._get_offspring)(
                         self.data, self.genetic_operators_frequency, self.fitness_functions, self.population, self.tournament_size, self.generation
                     ) for _ in range(self.population_size)
             )
+            self.times.loc[self.generation, "offsprings_generation"] = time.perf_counter() - before
 
             logging.info(f"Offsprings generated: {len(offsprings)}")
             self.population += offsprings
 
-            # Removes all non valid programs in the population
+            ################################################ Removes all duplicated programs in the population
             before_cleaning = len(self.population)
 
+            before = time.perf_counter()
             self.drop_duplicates(inplace=True)
+            self.times.loc[self.generation, "duplicates_removal"] = time.perf_counter() - before
 
             after_drop_duplicates = len(self.population)
             logging.debug(
                 f"{before_cleaning-after_drop_duplicates}/{before_cleaning} duplicates programs removed")
 
+            ################################################ Removes all non valid programs in the population
+            before = time.perf_counter()
             self.drop_invalids(inplace=True)
+            self.times.loc[self.generation, "invalids_removal"] = time.perf_counter() - before
 
             after_cleaning = len(self.population)
             if before_cleaning != after_cleaning:
                 logging.debug(
                     f"{after_drop_duplicates-after_cleaning}/{after_drop_duplicates} invalid programs removed")
 
-            # Integrate population in case of too many invalid programs
+            ################################################ Integrate population in case of too many invalid programs
+            self.times.loc[self.generation, "invalids_removal"] = 0
             if len(self.population) < self.population_size * 2:
-                self.status = "Refilling population"
+                before = time.perf_counter()
                 missing_elements = 2*self.population_size - \
                     len(self.population)
 
@@ -543,7 +553,6 @@ class SymbolicRegressor:
 
                 refill = Parallel(
                     n_jobs=self.n_jobs,
-                    batch_size=int(missing_elements / (os.cpu_count()-1)),
                     backend=backend_parallel)(delayed(self.generate_individual)(
                         data=self.data,
                         features=self.features,
@@ -555,12 +564,19 @@ class SymbolicRegressor:
                     ) for _ in range(missing_elements))
 
                 self.population += refill
+                self.times.loc[self.generation, "refill_invalid"] = time.perf_counter() - before
 
-            self.status = "Creating pareto front"
+                self.times.loc[self.generation, "invalids_removal"] = missing_elements
+
+            ################################################ Calculates the Pareto front
+            before = time.perf_counter()
             self._create_pareto_front()
+            self.times.loc[self.generation, "pareto_front_computation"] = time.perf_counter() - before
 
-            self.status = "Creating crowding distance"
+            ################################################ Calculates the crowding distance
+            before = time.perf_counter()
             self._crowding_distance()
+            self.times.loc[self.generation, "crowding_distance_computation"] = time.perf_counter() - before
 
             self.population.sort(
                 key=lambda p: p.crowding_distance, reverse=True)
@@ -575,13 +591,15 @@ class SymbolicRegressor:
             self.average_complexity = np.mean(
                 [p.complexity for p in self.population])
 
+            ################################################ Calculates the hypervolume
+            before = time.perf_counter()
             self.compute_hypervolume()
+            self.times.loc[self.generation, "hypervolume_computation"] = time.perf_counter() - before
 
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front()
 
             if self.best_program.converged:
-                converged_time = time.perf_counter()
                 if not self.converged_generation:
                     self.converged_generation = self.generation
                 logging.info(
@@ -607,6 +625,8 @@ class SymbolicRegressor:
 
             self.elapsed_time.append(
                 end_time_generation - start_time_generation)
+
+            self.times.loc[self.generation, "generation_time"] = end_time_generation - start_time_generation
 
     def generate_individual(self,
                             data: Union[dict, pd.DataFrame, pd.Series],
