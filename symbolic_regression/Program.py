@@ -132,19 +132,34 @@ class Program:
         return result
 
     def __deepcopy__(self, memo):
-        try:
-            cls = self.__class__
-            result = cls.__new__(cls)
-            memo[id(self)] = result
-            for k, v in self.__dict__.items():
-                setattr(result, k, deepcopy(v, memo))
+        
+        if not self.is_valid:
+            return self
 
-            result.program_hypervolume = np.nan
-            return result
-        except RecursionError:
-            logging.warning(
-                f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}'
-            )
+        new = Program(
+            operations=self.operations,
+            features=self.features,
+            const_range=self.const_range,
+            parsimony=self.parsimony,
+            parsimony_decay=self.parsimony_decay
+        )
+
+        new.simplify(inplace=True, inject=self.program.render())
+        return new
+
+        # try:
+        #     cls = self.__class__
+        #     result = cls.__new__(cls)
+        #     memo[id(self)] = result
+        #     for k, v in self.__dict__.items():
+        #         setattr(result, k, deepcopy(v, memo))
+
+        #     result.program_hypervolume = np.nan
+        #     return result
+        # except RecursionError:
+        #     logging.warning(
+        #         f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}'
+        #     )
 
     def __lt__(self, other: 'Program') -> bool:
         """
@@ -570,12 +585,19 @@ class Program:
             - bool
                 True if the two programs are equivalent, False otherwise.
         """
-        for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
-                                                      other.fitness.items()):
-            # One difference is enough for them not to be identical
+        # for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
+        #                                               other.fitness.items()):
+        #     # One difference is enough for them not to be identical
 
-            if round(a_fit, 3) != round(b_fit, 3):
-                return False
+        #     if round(a_fit, 3) != round(b_fit, 3):
+        #         return False
+
+        a_hash: List = self.hash
+        b_hash: List = other.hash
+
+        # If the element-wise comparison of the hash is not equal, the programs are not identical
+        if not np.array_equal(a_hash, b_hash):
+            return False
 
         return True
 

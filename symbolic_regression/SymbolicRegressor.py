@@ -2,7 +2,7 @@ import logging
 import os
 import random
 import time
-from typing import List, Union
+from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
@@ -64,7 +64,7 @@ class SymbolicRegressor:
         self.client_name: str = client_name
         self.checkpoint_file: str = checkpoint_file
         self.checkpoint_frequency: int = checkpoint_frequency
-        self.elapsed_time: int = 0
+        self.elapsed_time: list = [0]
         self.features: List = None
         self.operations: List = None
         self.population_size: int = population_size
@@ -453,11 +453,13 @@ class SymbolicRegressor:
             - None
 
         """
+
         if not self.population:
             logging.info(f"Initializing population")
             self.status = "Generating population"
             self.population = Parallel(
                 n_jobs=self.n_jobs,
+                batch_size=int(self.population_size / (os.cpu_count()-1)),
                 backend=backend_parallel)(delayed(self.generate_individual)(
                     data=self.data,
                     features=self.features,
@@ -478,13 +480,23 @@ class SymbolicRegressor:
                 self.status = "Terminated: generations completed"
                 return
 
-            self.generation += 1
-
             start_time_generation = time.perf_counter()
 
-            seconds_iter = round(self.elapsed_time /
-                                 self.generation, 1) if self.generation else 0
-            timing_str = f"{self.elapsed_time} sec, {seconds_iter} sec/generation"
+            if self.generation > 0:
+                seconds_iter = round(
+                    np.mean(self.elapsed_time[1:]), 1) if self.generation else 0
+                seconds_iter_std = round(
+                    np.std(self.elapsed_time[1:]), 1) if self.generation else 0
+                expected_time = round(seconds_iter *
+                                      (self.generations_to_train - self.generation)/60)
+            else:
+                seconds_iter = 0
+                seconds_iter_std = 0
+                expected_time = 'Unknown'
+
+            timing_str = f"{round(np.sum(self.elapsed_time), 2)} sec - {seconds_iter} ± {seconds_iter_std} sec/generation - Time to completion: {expected_time} min"
+
+            self.generation += 1
 
             print("############################################################")
             print(
@@ -492,13 +504,16 @@ class SymbolicRegressor:
 
             self.status = "Generating offspring"
 
-            offsprings = list()
-
-            offsprings = Parallel(
+            offsprings: List[Program] = Parallel(
                 n_jobs=self.n_jobs,
-                backend=backend_parallel)(delayed(self._get_offspring)() for _ in range(self.population_size))
+                batch_size=int(self.population_size / (os.cpu_count()-1)),
+                backend=backend_parallel)(
+                    delayed(self._get_offspring)(
+                        self.data, self.genetic_operators_frequency, self.fitness_functions, self.population, self.tournament_size, self.generation
+                    ) for _ in range(self.population_size)
+            )
 
-            logging.debug(f"Offsprings generated: {len(offsprings)}")
+            logging.info(f"Offsprings generated: {len(offsprings)}")
             self.population += offsprings
 
             # Removes all non valid programs in the population
@@ -526,19 +541,20 @@ class SymbolicRegressor:
                 logging.info(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements")
 
-            batch_size = self.n_jobs if self.n_jobs > 0 else os.cpu_count()
-            refill = Parallel(
-                n_jobs=self.n_jobs, batch_size=batch_size, backend=backend_parallel)(delayed(self.generate_individual)(
-                    data=self.data,
-                    features=self.features,
-                    operations=self.operations,
-                    const_range=self.const_range,
-                    fitness_functions=self.fitness_functions,
-                    parsimony=self.parsimony,
-                    parsimony_decay=self.parsimony_decay,
-                ) for _ in range(missing_elements))
+                refill = Parallel(
+                    n_jobs=self.n_jobs,
+                    batch_size=int(missing_elements / (os.cpu_count()-1)),
+                    backend=backend_parallel)(delayed(self.generate_individual)(
+                        data=self.data,
+                        features=self.features,
+                        operations=self.operations,
+                        const_range=self.const_range,
+                        fitness_functions=self.fitness_functions,
+                        parsimony=self.parsimony,
+                        parsimony_decay=self.parsimony_decay,
+                    ) for _ in range(missing_elements))
 
-            self.population += refill
+                self.population += refill
 
             self.status = "Creating pareto front"
             self._create_pareto_front()
@@ -589,7 +605,8 @@ class SymbolicRegressor:
                 self.status = "Terminated: generations completed"
                 return
 
-            self.elapsed_time += end_time_generation - start_time_generation
+            self.elapsed_time.append(
+                end_time_generation - start_time_generation)
 
     def generate_individual(self,
                             data: Union[dict, pd.DataFrame, pd.Series],
@@ -630,30 +647,15 @@ class SymbolicRegressor:
                 The generated program
 
         """
-
-        p = Program(features=features, operations=operations, const_range=const_range,
-                    parsimony=parsimony, parsimony_decay=parsimony_decay)
-
-        attempts = 0
-        max_attempts = 100
-
-        while not p.is_valid and attempts < max_attempts:
-            attempts += 1
-
-            p = Program(features=features, operations=operations, const_range=const_range,
+        new_p = Program(features=features, operations=operations, const_range=const_range,
                         parsimony=parsimony, parsimony_decay=parsimony_decay)
-            p.init_program()
-            p.compute_fitness(fitness_functions=fitness_functions, data=data)
+        new_p.init_program()
+        new_p.compute_fitness(fitness_functions=fitness_functions, data=data)
 
-            if p.has_valid_fitness:
-                for individual in self.population:
-                    if p.is_duplicate(individual):
-                        p._override_is_valid = False
-                        break
+        return new_p
 
-        return p
-
-    def _get_offspring(self):
+    @staticmethod
+    def _get_offspring(data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: List[Program], tournament_size: int, generation: int) -> Program:
         """
         This method generates an offspring of a program from the current population
 
@@ -681,7 +683,21 @@ class SymbolicRegressor:
         that identify the best program among a random selection of k programs from the population.
 
         Args:
-            - None
+            - data: Union[dict, pd.DataFrame, pd.Series]
+                The data on which the performance are evaluated. We could use compute_fitness
+                later, but we need to evaluate the fitness here to compute it in the
+                parallel initialization.
+            - genetic_operators_frequency: Dict[str, float]
+                The dictionary of the genetic operators and their frequency
+            - fitness_functions: List[BaseFitness]
+                The list of fitness functions to be used in the generation
+            - population: List[Program]
+                The current population from which to choose the program to which apply the genetic
+                operator
+            - tournament_size: int
+                The size of the tournament selection
+            - generation: int
+                The current generation
 
         Returns:
             - _offspring: Program
@@ -691,15 +707,69 @@ class SymbolicRegressor:
                 The program from which the offspring is generated
         """
 
+        def _tournament_selection(population: List[Program], tournament_size: int, generation: int) -> Program:
+            """
+            Tournament selection
+
+            This method selects the best program from a random sample of the population.
+            It is used to apply the genetic operators during the generation of the
+            offsprings.
+
+            We firstly chose a random set of K programs from the population. Then we
+            select the best program from this set. If the generation is 0, we use the
+            program's complexity to select the best program. In the other generations
+            we use the pareto front rank and the crowding distance.
+
+            Args:
+                - population: List[Program]
+                    The population of programs
+                - tournament_size: int
+                    The size of the tournament
+                - generation: int
+                    The current generation
+
+            Returns:
+                - best_member: Program
+                    The best program selected by the tournament selection
+            """
+
+            tournament_members = random.choices(
+                population, k=tournament_size)
+
+            best_member = tournament_members[0]
+
+            for member in tournament_members:
+                if member is None or not member.is_valid:
+                    continue
+
+                if generation == 0:
+                    try:
+                        if best_member > member:
+                            best_member = member
+                    except IndexError:
+                        pass  # TODO fix
+
+                else:
+
+                    # In the other generations use the pareto front rank and the crowding distance
+                    if best_member == None or \
+                            member.rank < best_member.rank or \
+                            (member.rank == best_member.rank and
+                                member.crowding_distance > best_member.crowding_distance):
+                        best_member = member
+
+            return best_member
+
         # Select the genetic operation to apply
         # The frequency of each operation is determined by the dictionary
         # genetic_operators_frequency. The higher the number the likelier the operation will be chosen.
         ops = list()
-        for op, freq in self.genetic_operators_frequency.items():
+        for op, freq in genetic_operators_frequency.items():
             ops += [op] * freq
         gen_op = random.choice(ops)
 
-        program1 = self._tournament_selection()
+        program1 = _tournament_selection(
+            population=population, tournament_size=tournament_size, generation=generation)
 
         if program1 is None or not program1.is_valid:
             # If the program is not valid, we return a the same program without any alteration
@@ -710,7 +780,8 @@ class SymbolicRegressor:
         _offspring: Program = None
 
         if gen_op == 'crossover':
-            program2 = self._tournament_selection()
+            program2 = _tournament_selection(
+                population=population, tournament_size=tournament_size, generation=generation)
             if program2 is None or not program2.is_valid:
                 return program1
             _offspring = program1.cross_over(other=program2, inplace=False)
@@ -750,7 +821,7 @@ class SymbolicRegressor:
 
         # Add the fitness to the object after the cross_over or mutation
         _offspring.compute_fitness(
-            fitness_functions=self.fitness_functions, data=self.data)
+            fitness_functions=fitness_functions, data=data)
 
         # Reset the hash to force the re-computation
         _offspring._hash = None
@@ -856,54 +927,6 @@ class SymbolicRegressor:
             istances.append(row)
 
         return pd.DataFrame(istances)
-
-    def _tournament_selection(self):
-        """
-        Tournament selection
-
-        This method selects the best program from a random sample of the population.
-        It is used to apply the genetic operators during the generation of the
-        offsprings.
-
-        We firstly chose a random set of K programs from the population. Then we
-        select the best program from this set. If the generation is 0, we use the
-        program's complexity to select the best program. In the other generations
-        we use the pareto front rank and the crowding distance.
-
-        Args:
-            - None
-
-        Returns:
-            - best_member: Program
-                The best program selected by the tournament selection
-        """
-
-        tournament_members = random.choices(
-            self.population, k=self.tournament_size)
-
-        best_member = tournament_members[0]
-
-        for member in tournament_members:
-            if member is None or not member.is_valid:
-                continue
-
-            if self.generation == 0:
-                try:
-                    if best_member > member:
-                        best_member = member
-                except IndexError:
-                    pass  # TODO fix
-
-            else:
-
-                # In the other generations use the pareto front rank and the crowding distance
-                if best_member == None or \
-                        member.rank < best_member.rank or \
-                        (member.rank == best_member.rank and
-                            member.crowding_distance > best_member.crowding_distance):
-                    best_member = member
-
-        return best_member
 
     def tree_diversity(self) -> float:
         """
