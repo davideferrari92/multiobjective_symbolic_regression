@@ -775,21 +775,15 @@ class Program:
 
             """
             try:
-                logging.debug(f'Simplifying program {program}')
-
                 try:
                     simplified = parse_expr(program, evaluate=True)
                 except ValueError:
                     return False
                 except TypeError:
                     return False
-                logging.debug(
-                    f'Extracting the program tree from the simplified')
 
                 new_program = extract_operation(element_to_extract=simplified,
                                                 father=None)
-
-                logging.debug(f'Simplified program {new_program}')
 
                 return new_program
 
