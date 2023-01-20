@@ -1,128 +1,220 @@
 import logging
-from multiprocessing.connection import Client, Listener
+from multiprocessing.connection import Listener
+from typing import List
 
 import pandas as pd
-from symbolic_regression.SymbolicRegressor import SymbolicRegressor
-from symbolic_regression.federated.Communication import FederatedDataCommunication
+
+from symbolic_regression.federated.Agent import FederatedAgent
+from symbolic_regression.federated.Communication import \
+    FederatedDataCommunication
+from symbolic_regression.federated.strategies.BaseStrategy import BaseStrategy
 
 
-class FederatedSRClient():
+class FederatedSRClient(FederatedAgent):
 
-    def __init__(self,
-                 name: str,
-                 address: str,
-                 port: int,
-                 server_address: str,
-                 server_port: int,
-                 data_path: str) -> None:
+    def __init__(self, name: str, address: str, port: int, orchestrator_address: str, orchestrator_port: int) -> None:
+        """ This class implement a Federated Symbolic Regression Client
+
+        A client is an agent that implements the training side of the
+        Federated Learning algorithm. It receives the training configuration from the
+        orchestrator, trains the model and sends the model update back so that it can be
+        aggregated by the server.
+        The client is developed to support the following communications from the orchestrator:
+        
+            - RegisterClient
+                return the confirmation by the orchestrator of sucessful registration
+            - SendAggregationStrategy
+                this message is sent by the orchestrator to server and clients to pass the aggregation strategy to be used
+            - SendTrainingConfiguration
+                this message is sent by the orchestrator to server and clients to pass the training configuration to be used
+            - SyncRegisteredAgents
+                this message is sent by the orchestrator to server and clients to sync the list of registered agents every time
+                a new agent is registered or unregistered
+            - Terminate
+                this message is sent by the orchestrator to server and clients to trigger the termination of the server.
+            - TriggerAggregation
+                this message is sent by the orchestrator to server and clients to trigger the aggregation of the models
+                It has effect only on the server. Clients use TriggerTraining
+            - TriggerTraining
+                this message is sent by the orchestrator to server and clients to trigger the training of the models.
+                In case of the server, it has no effect.
+
+        Args:
+            - name: str
+                Name of the client
+            - address: str
+                Address of the client
+            - port: int
+                Port of the client
+            - orchestrator_address: str
+                Address of the orchestrator
+            - orchestrator_port: int
+                Port of the orchestrator
+
+        Returns:
+            - None
         """
-        This class implement a Federated Symbolic Regression Client
-        """
+        super().__init__(name=name, address=address, port=port, orchestrator_address=orchestrator_address,
+                         orchestrator_port=orchestrator_port)
 
-        self.name: str = name
-        self.address: str = address
-        self.port: int = port
-        self.server_address: str = server_address
-        self.server_port: int = server_port
-        self.data_path: str = data_path
+        self.mode: str = 'client'
 
         self.data: pd.DataFrame = None
 
-        self.is_registered: bool = False
-        self.is_data_loaded: bool = False
-        self.training_configuration: bool = None
+    def load_data(self, data_path: str):
+        """ Load data from a file
 
-        self.symbolic_regressor: SymbolicRegressor = None
+        Args:
+            - data_path: str
+                Path to the data file
 
-    def features_alignment(self):
-        # if not self.is_data_loaded:
-        #    raise AttributeError(
-        #        f'Data was never never loaded for this client')
+        Returns:
+            - None
+        """
+        if data_path.endswith('csv'):
+            self.data = pd.read_csv(data_path)
 
-        conn = Client((self.server_address, int(self.server_port)))
+        elif data_path.endswith('pkl'):
+            self.data = pd.read_pickle(data_path)
 
-        conn.send({'object': FederatedDataCommunication(
-            sender_name=self.name,
-            sender_address=self.address,
-            sender_port=self.port,
-            comm_type='FeaturesAlignment',
-            payload=[1, 2, 3]  # self.data.columns
-        )})
-
-        conn.close()
-
-        listener = Listener((self.address, int(self.port)))
-
-        conn = listener.accept()
-        msg = conn.recv()
-        comm_object = msg['object']
-
-        if comm_object.payload == True:
-            logging.info(f'Feature alignment succeded')
-            self.is_features_aligned = True
-        else:
-            logging.error(f'Features alignment failed')
-            self.is_features_aligned = False
-
-    def load_data(self):
-        if self.data_path.endswith('csv'):
-            self.data = pd.read_csv(self.data_path)
-
-        elif self.data_path.endswith('pkl'):
-            self.data = pd.read_pickle(self.data_path)
-
-        elif self.data_path.endswith('xlsx') or self.data_path.endswith('xls'):
-            self.data = pd.read_excel(self.data_path)
+        elif data_path.endswith('xlsx') or data_path.endswith('xls'):
+            self.data = pd.read_excel(data_path)
 
         else:
-            raise RuntimeError(f"File format not supported: {self.data_path}")
-
-        self.is_data_loaded = True
-
-    def receive_training_configuration(self):
-        listener = Listener((self.address, self.port))
-
-        conn = listener.accept()
-        msg = conn.recv()
-        comm_object = msg['object']
-
-        if not comm_object.comm_type == 'TrainingConfiguration':
-            raise RuntimeError(
-                f'At this stage only FeaturesAlignment communications are allowed: {comm_object.comm_type}')
-
-        self.training_configuration = comm_object.payload
-
-    def send_dataset_metadata(self):
-        pass
-
-    def _send_to_server(self, comm_type: str, payload: object = None):
-        conn = Client((self.server_address, int(self.server_port)))
-        conn.send({'object': FederatedDataCommunication(
-            sender_name=self.name,
-            sender_address=self.address,
-            sender_port=self.port,
-            comm_type=comm_type,
-            payload=payload
-        )})
-
-        conn.close()
+            raise RuntimeError(f"File format not supported: {data_path}")
 
     def register(self) -> bool:
-        self._send_to_server(
-            comm_type='FederatedRegistration',
-            payload=None
-        )
+        """ Register the client to the orchestrator and start the client.
+        It will automatically start the client listener loop to wait for messages from the orchestrator.
+
+        Returns:
+            - None
+        """
+        self.send_to_orchestrator(
+            comm_type='RegisterClient', payload=self.name)
+
+        try:
+            self.run_client()
+        except KeyboardInterrupt:
+            logging.info('Client stopped by user')
+            self.send_to_orchestrator(
+                comm_type='UnregisterClient', payload=self.name)
+
+    def run_client(self) -> None:
+        """ Run the client
+
+        It will start the listener and wait for messages from the orchestrator
+
+        Returns:
+            - None
+        """
+        if not self.orchestrator_address or not self.orchestrator_port:
+            raise AttributeError(
+                'Orchestrator address and port not set for this server')
 
         listener = Listener((self.address, self.port))
 
-        conn = listener.accept()
-        msg = conn.recv()
-        comm_object = msg['object']
+        logging.info(
+            f'Client {self.name} listening on {self.address}:{self.port}...')
 
-        if not comm_object.comm_type == 'RegistrationConfirmation':
-            raise RuntimeError(
-                f'At this stage only RegistrationConfirmation communications are allowed: {comm_object.comm_type}')
+        while True:
+            """ Wait for a message from a client or a server
 
-        logging.info(f'Client is now registered')
+            For a better execution flow, we recommend to invoke any sender method
+            as last instruction of each branch of the if statement.
+            This will allow the listener to immediately be ready to receive
+            the next message.
+            """
+            conn = listener.accept()
+            msg: FederatedDataCommunication = conn.recv()
 
-        self.is_registered = True
+            if msg.comm_type == 'RegisterClient':
+                """
+                From 1 Orchestrator
+                To None
+                """
+                if msg.payload is True:
+                    self.is_registered = True
+                    self.status = 'idle'
+                    logging.info(f'Client {self.name} registered')
+                else:
+                    self.is_registered = False
+                    logging.warning(f'Client {self.name} already registered')
+
+            elif msg.comm_type == 'SendAggregationStrategy':
+                """
+                From 1 Orchestrator
+                To None
+                """
+                self.federated_aggregation_strategy = msg.payload
+                logging.debug(
+                    f'Aggregation strategy received.')
+
+            elif msg.comm_type == 'SendTrainingConfiguration':
+                """
+                From 1 Orchestrator
+                To None
+                """
+                self.training_configuration = msg.payload
+                logging.debug(
+                    f'Training configuration received.')
+
+            elif msg.comm_type == 'SyncRegisteredAgents':
+                """
+                From 1 Orchestrator
+                To None
+                """
+                self.clients = msg.payload['clients']
+                self.servers = msg.payload['servers']
+
+            elif msg.comm_type == 'Terminate':
+                """
+                From 1 Orchestrator
+                To None
+                """
+                logging.debug(f'Termination requested')
+                server_strategy: BaseStrategy = msg.payload['server']
+                client_strategies: List[BaseStrategy] = msg.payload['clients']
+
+                logging.debug(
+                    f'Computing performance on {len(client_strategies)} clients strategies')
+
+                server_strategy.regressor.compute_performance(data=self.data)
+
+                for client_name, client_strategy in client_strategies.items():
+                    client_strategy.regressor.compute_performance(
+                        data=self.data)
+
+                self.send_to_orchestrator(
+                    comm_type='TerminationValidation', payload={
+                        'server': server_strategy,
+                        'clients': client_strategies
+                    }
+                )
+                self.status = 'terminated'
+                logging.info(f'Final validation completed')
+                return
+
+            elif msg.comm_type == 'TriggerAggregation':
+                """
+                From 1 Orchestrator
+                To None
+                """
+                logging.info(f'Server aggregation triggered')
+
+            elif msg.comm_type == 'TriggerTraining':
+                """
+                From 1 Orchestrator
+                To None
+                """
+                self.status = 'training'
+
+                self.federated_aggregation_strategy.execute(data=self.data)
+
+                self.send_to_orchestrator(
+                    comm_type='ToOrchestratorAggregationStrategy', payload=self.federated_aggregation_strategy)
+
+                self.status = 'trained_completed'
+
+            else:
+                logging.warning(f'Unknown message type: {msg.comm_type}')
