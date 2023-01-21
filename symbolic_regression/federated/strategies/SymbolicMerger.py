@@ -37,8 +37,6 @@ class SymbolicMerger(BaseStrategy):
             The regressors of clients who submitted for the aggregation strategy
         - symbolic_regressor_configuration: Dict
             The configuration of the symbolic regressor
-        - data: pd.DataFrame
-            The data of the client for the training of the local regressor
         
     """
 
@@ -50,8 +48,7 @@ class SymbolicMerger(BaseStrategy):
             self.regressors = regressors
 
         elif self.mode == 'client':
-            self.data = data
-
+            
             if not self.regressor:
                 self.regressor: SymbolicRegressor = SymbolicRegressor(
                     client_name=self.name,
@@ -67,7 +64,7 @@ class SymbolicMerger(BaseStrategy):
                     tournament_size=self.symbolic_regressor_configuration['tournament_size'],
                 )
 
-    def aggregation(self, **kwargs):
+    def aggregation(self, data: pd.DataFrame = None, **kwargs):
         '''
         This method implements the aggregation function of the strategy for both
         server and client. Depending on the mode, it executes different branches 
@@ -115,7 +112,7 @@ class SymbolicMerger(BaseStrategy):
 
         elif self.mode == 'client':
             self.regressor.fit(
-                data=self.data,
+                data=data,
                 features=self.training_configuration['features'],
                 operations=self.training_configuration['operations'],
                 fitness_functions=self.training_configuration['fitness_functions'],
