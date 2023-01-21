@@ -8,7 +8,7 @@ from symbolic_regression.SymbolicRegressor import SymbolicRegressor
 from symbolic_regression.federated.strategies.BaseStrategy import BaseStrategy
 
 
-class SymbolicMerger(BaseStrategy):
+class FedNSGAII(BaseStrategy):
     """ 
     This class implements the Symbolic Merger strategy. It is a federated strategy
     that aggregates the best programs of clients and merges them into a single

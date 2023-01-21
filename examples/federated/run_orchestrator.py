@@ -4,8 +4,8 @@ import sys
 sys.path.append('../../')
 
 from symbolic_regression.federated.Orchestrator import Orchestrator
-from symbolic_regression.federated.strategies.SymbolicMerger import \
-    SymbolicMerger
+from symbolic_regression.federated.strategies.FedNSGAII import \
+    FedNSGAII
 from symbolic_regression.multiobjective.fitness.Classification import (
     AUC, BinaryCrossentropy)
 from symbolic_regression.multiobjective.fitness.Regression import NotConstant
@@ -107,8 +107,8 @@ orchestrator = Orchestrator(
     save_path='federatedSR_banknotes.orchestrator'
 )
 
-orchestrator.federated_aggregation_strategy = SymbolicMerger(
-    name='SymbolicFedAvg',
+orchestrator.federated_aggregation_strategy = FedNSGAII(
+    name='FedNSGAII',
     mode='orchestrator',
     configuration=configuration,
 )
