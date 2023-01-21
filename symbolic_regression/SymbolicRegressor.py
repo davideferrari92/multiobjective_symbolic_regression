@@ -407,7 +407,6 @@ class SymbolicRegressor:
         Returns:
             - None
         """
-        self.data = data
         self.features = features
         self.operations = operations
         self.fitness_functions = fitness_functions
@@ -418,7 +417,7 @@ class SymbolicRegressor:
 
         start = time.perf_counter()
         try:
-            self._fit()
+            self._fit(data=data)
         except KeyboardInterrupt:
             self.generation -= 1  # The increment is applied even if the generation is interrupted
             self.status = "Interrupted by KeyboardInterrupt"
@@ -427,7 +426,7 @@ class SymbolicRegressor:
         stop = time.perf_counter()
         self.training_duration += stop - start
 
-    def _fit(self):
+    def _fit(self, data: Union[dict, pd.DataFrame, pd.Series]) -> None:
         """
         This method is the main loop of the genetic programming algorithm.
 
@@ -448,7 +447,8 @@ class SymbolicRegressor:
         with less than N individuals, we generate new individuals to fill the population.
 
         Args:
-            - None
+            - data: Union[dict, pd.DataFrame, pd.Series]
+                The data on which the training is performed
 
         Returns:
             - None
@@ -462,7 +462,7 @@ class SymbolicRegressor:
             self.population = Parallel(
                 n_jobs=self.n_jobs,
                 backend=backend_parallel)(delayed(self.generate_individual)(
-                    data=self.data,
+                    data=data,
                     features=self.features,
                     operations=self.operations,
                     const_range=self.const_range,
@@ -512,7 +512,7 @@ class SymbolicRegressor:
                 n_jobs=self.n_jobs,
                 backend=backend_parallel)(
                     delayed(self._get_offspring)(
-                        self.data, self.genetic_operators_frequency, self.fitness_functions, self.population, self.tournament_size, self.generation
+                        data, self.genetic_operators_frequency, self.fitness_functions, self.population, self.tournament_size, self.generation
                     ) for _ in range(self.population_size)
             )
             self.times.loc[self.generation, "offsprings_generation"] = time.perf_counter() - before
@@ -554,7 +554,7 @@ class SymbolicRegressor:
                 refill = Parallel(
                     n_jobs=self.n_jobs,
                     backend=backend_parallel)(delayed(self.generate_individual)(
-                        data=self.data,
+                        data=data,
                         features=self.features,
                         operations=self.operations,
                         const_range=self.const_range,
