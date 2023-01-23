@@ -15,7 +15,7 @@ class BaseFitness:
                  logistic: bool = False,
                  one_minus: bool = False,
                  minimize: bool = True,
-                 convergence_threshold: float = 0.01,
+                 convergence_threshold: float = None,
                  constants_optimization: str = None,
                  constants_optimization_conf: dict = None,
                  **kwargs
