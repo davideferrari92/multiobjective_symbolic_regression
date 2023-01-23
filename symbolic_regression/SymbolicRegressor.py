@@ -454,6 +454,8 @@ class SymbolicRegressor:
             - None
 
         """
+        batch_size = self.n_jobs if self.n_jobs > 0 else 1
+        total_generation_time = 0
 
         if not self.population:
             before = time.perf_counter()
@@ -461,6 +463,7 @@ class SymbolicRegressor:
             self.status = "Generating population"
             self.population = Parallel(
                 n_jobs=self.n_jobs,
+                batch_size=batch_size,
                 backend=backend_parallel)(delayed(self.generate_individual)(
                     data=data,
                     features=self.features,
@@ -498,7 +501,7 @@ class SymbolicRegressor:
                 seconds_iter_std = 0
                 expected_time = 'Unknown'
 
-            timing_str = f"{seconds_total} sec - {seconds_iter} ± {seconds_iter_std} sec/generation - Time to completion: {expected_time} mins"
+            timing_str = f"Generation: {total_generation_time} sec - Total: {seconds_total} sec - Average time per generation: {seconds_iter} ± {seconds_iter_std} sec - Time to completion: {expected_time} mins"
 
             self.generation += 1
 
@@ -510,6 +513,7 @@ class SymbolicRegressor:
             before = time.perf_counter()
             offsprings: List[Program] = Parallel(
                 n_jobs=self.n_jobs,
+                batch_size=batch_size,
                 backend=backend_parallel)(
                     delayed(self._get_offspring)(
                         data, self.genetic_operators_frequency, self.fitness_functions, self.population, self.tournament_size, self.generation
@@ -525,16 +529,19 @@ class SymbolicRegressor:
 
             before = time.perf_counter()
             self.drop_duplicates(inplace=True)
-            self.times.loc[self.generation, "duplicates_removal"] = time.perf_counter() - before
+            self.times.loc[self.generation, "duplicated_drop"] = time.perf_counter() - before
 
             after_drop_duplicates = len(self.population)
             logging.debug(
                 f"{before_cleaning-after_drop_duplicates}/{before_cleaning} duplicates programs removed")
+            
+            self.times.loc[self.generation, "duplicated_elements_count"] = before_cleaning-after_drop_duplicates
+            self.times.loc[self.generation, "duplicated_elements_ration"] = (before_cleaning-after_drop_duplicates)/before_cleaning
 
             ################################################ Removes all non valid programs in the population
             before = time.perf_counter()
             self.drop_invalids(inplace=True)
-            self.times.loc[self.generation, "invalids_removal"] = time.perf_counter() - before
+            self.times.loc[self.generation, "invalids_drop"] = time.perf_counter() - before
 
             after_cleaning = len(self.population)
             if before_cleaning != after_cleaning:
@@ -542,7 +549,7 @@ class SymbolicRegressor:
                     f"{after_drop_duplicates-after_cleaning}/{after_drop_duplicates} invalid programs removed")
 
             ################################################ Integrate population in case of too many invalid programs
-            self.times.loc[self.generation, "invalids_removal"] = 0
+            self.times.loc[self.generation, "invalid_elements"] = 0
             if len(self.population) < self.population_size * 2:
                 before = time.perf_counter()
                 missing_elements = 2*self.population_size - \
@@ -553,6 +560,7 @@ class SymbolicRegressor:
 
                 refill = Parallel(
                     n_jobs=self.n_jobs,
+                    batch_size=batch_size,
                     backend=backend_parallel)(delayed(self.generate_individual)(
                         data=data,
                         features=self.features,
@@ -565,8 +573,9 @@ class SymbolicRegressor:
 
                 self.population += refill
                 self.times.loc[self.generation, "refill_invalid"] = time.perf_counter() - before
-
-                self.times.loc[self.generation, "invalids_removal"] = missing_elements
+                
+                self.times.loc[self.generation, "invalid_elements_count"] = missing_elements
+                self.times.loc[self.generation, "invalid_elements_ratio"] = missing_elements / len(self.population)
 
             ################################################ Calculates the Pareto front
             before = time.perf_counter()
@@ -623,10 +632,10 @@ class SymbolicRegressor:
                 self.status = "Terminated: generations completed"
                 return
 
-            self.elapsed_time.append(
-                end_time_generation - start_time_generation)
+            total_generation_time = end_time_generation - start_time_generation
+            self.elapsed_time.append(total_generation_time)
 
-            self.times.loc[self.generation, "generation_time"] = end_time_generation - start_time_generation
+            self.times.loc[self.generation, "generation_time"] = total_generation_time
 
     def generate_individual(self,
                             data: Union[dict, pd.DataFrame, pd.Series],
@@ -913,7 +922,7 @@ class SymbolicRegressor:
         if self.verbose > 0:
             print()
             print(
-                f"Population of {len(self.population)} elements and average complexity of {self.average_complexity} and 1PF hypervolume of {self.fpf_hypervolume}\n")
+                f"Population of {len(self.population)} elements and average complexity of {round(self.average_complexity,1)} and 1PF hypervolume of {round(self.fpf_hypervolume, 3)}\n")
             print(f"\tBest individual(s) in the first Pareto Front")
             for index, p in enumerate(self.first_pareto_front):
                 print(f'{index})\t{p.program}')
