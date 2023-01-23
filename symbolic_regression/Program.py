@@ -250,9 +250,9 @@ class Program:
 
         # We store the fitness functions in the program object
         # as we need them in other parts of the code (e.g. in the hypervolume computation)
-        self.fitness_functions = fitness_functions
-        self.fitness = dict()
-        self.is_fitness_to_minimize = dict()
+        self.fitness_functions: List[BaseFitness] = fitness_functions
+        self.fitness: Dict[str, float] = dict()
+        self.is_fitness_to_minimize: Dict[str, bool] = dict()
 
         try:
             self.simplify(inplace=True)
@@ -260,7 +260,7 @@ class Program:
             self._override_is_valid = False
             return None
 
-        _converged = list()
+        _converged: List[bool] = list()
 
         for ftn in self.fitness_functions:
             if ftn.label in self.fitness:
@@ -269,8 +269,6 @@ class Program:
 
             fitness_value = ftn.evaluate(program=self, data=data)
 
-            convergence_threshold = ftn.convergence_threshold
-
             if pd.isna(fitness_value):
                 fitness_value = np.inf
                 self._override_is_valid = False
@@ -278,8 +276,11 @@ class Program:
             self.fitness[ftn.label] = fitness_value
             self.is_fitness_to_minimize[ftn.label] = ftn.minimize
 
-            if ftn.minimize and convergence_threshold and fitness_value <= convergence_threshold:
-                _converged.append(True)
+            if ftn.minimize and isinstance(ftn.convergence_threshold, (int, float)):
+                if fitness_value <= ftn.convergence_threshold:
+                    _converged.append(True)
+                else:
+                    _converged.append(False)
 
         # Only if all the fitness functions have converged, then the program has converged
         self.converged = all(_converged) if len(_converged) > 0 else False

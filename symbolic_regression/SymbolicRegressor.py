@@ -70,6 +70,7 @@ class SymbolicRegressor:
         self.population_size: int = population_size
 
         # Population Configuration
+        self.population: List[Program] = list()
         self.average_complexity: float = None
         self.const_range: tuple = const_range
         self.parsimony: float = parsimony
@@ -304,7 +305,7 @@ class SymbolicRegressor:
                         p_confront._is_duplicated = True  # Makes p.is_valid = False
 
         if inplace:
-            self.population = list(
+            self.population: List[Program] = list(
                 filter(lambda p: p._is_duplicated == False, self.population))
             return self.population
 
@@ -323,7 +324,7 @@ class SymbolicRegressor:
                 If True the population is updated, if False a new list is returned
         """
         if inplace:
-            self.population = list(
+            self.population: List[Program] = list(
                 filter(lambda p: p.is_valid == True, self.population))
             return self.population
 
@@ -454,16 +455,14 @@ class SymbolicRegressor:
             - None
 
         """
-        batch_size = self.n_jobs if self.n_jobs > 0 else 1
         total_generation_time = 0
 
         if not self.population:
             before = time.perf_counter()
             logging.info(f"Initializing population")
             self.status = "Generating population"
-            self.population = Parallel(
+            self.population: List[Program] = Parallel(
                 n_jobs=self.n_jobs,
-                batch_size=batch_size,
                 backend=backend_parallel)(delayed(self.generate_individual)(
                     data=data,
                     features=self.features,
@@ -506,14 +505,15 @@ class SymbolicRegressor:
             self.generation += 1
 
             print("############################################################")
+            print(timing_str)
+            print("############################################################")
             print(
-                f"Generation {self.generation}/{self.generations_to_train} - {timing_str}")
+                f"Generation {self.generation}/{self.generations_to_train}")
 
             ################################################ Generates the offsprings
             before = time.perf_counter()
             offsprings: List[Program] = Parallel(
                 n_jobs=self.n_jobs,
-                batch_size=batch_size,
                 backend=backend_parallel)(
                     delayed(self._get_offspring)(
                         data, self.genetic_operators_frequency, self.fitness_functions, self.population, self.tournament_size, self.generation
@@ -536,7 +536,7 @@ class SymbolicRegressor:
                 f"{before_cleaning-after_drop_duplicates}/{before_cleaning} duplicates programs removed")
             
             self.times.loc[self.generation, "duplicated_elements_count"] = before_cleaning-after_drop_duplicates
-            self.times.loc[self.generation, "duplicated_elements_ration"] = (before_cleaning-after_drop_duplicates)/before_cleaning
+            self.times.loc[self.generation, "duplicated_elements_ratio"] = (before_cleaning-after_drop_duplicates)/before_cleaning
 
             ################################################ Removes all non valid programs in the population
             before = time.perf_counter()
@@ -560,7 +560,6 @@ class SymbolicRegressor:
 
                 refill = Parallel(
                     n_jobs=self.n_jobs,
-                    batch_size=batch_size,
                     backend=backend_parallel)(delayed(self.generate_individual)(
                         data=data,
                         features=self.features,
@@ -608,15 +607,16 @@ class SymbolicRegressor:
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front()
 
-            if self.best_program.converged:
+            if any(p.converged for p in self.population):
                 if not self.converged_generation:
                     self.converged_generation = self.generation
                 logging.info(
                     f"Training converged after {self.converged_generation} generations.")
                 if self.stop_at_convergence:
-                    self.drop_duplicates(inplace=True)
-                    self.status = "Terminated: converged"
+                    print(
+                        f"Training converged after {self.converged_generation} generations.")
                     return
+            
             if self.checkpoint_file and self.checkpoint_frequency > 0 and self.generation % self.checkpoint_frequency == 0:
                 try:
                     self.save_model(file=self.checkpoint_file)
@@ -628,11 +628,9 @@ class SymbolicRegressor:
             if self.generations_to_train > 0 and self.generation == self.generations_to_train:
                 logging.info(
                     f"Training terminated after {self.generation} generations")
-                self.drop_duplicates(inplace=True)
-                self.status = "Terminated: generations completed"
                 return
 
-            total_generation_time = end_time_generation - start_time_generation
+            total_generation_time = round(end_time_generation - start_time_generation, 1)
             self.elapsed_time.append(total_generation_time)
 
             self.times.loc[self.generation, "generation_time"] = total_generation_time
