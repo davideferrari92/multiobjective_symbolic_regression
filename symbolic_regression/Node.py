@@ -1,3 +1,4 @@
+import copy
 from abc import ABC, abstractmethod
 from typing import Dict, List, Union
 
@@ -11,6 +12,15 @@ class Node(ABC):
 
     def __init__(self, father=None) -> None:
         self.father = father
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, copy.deepcopy(v, memo))
+
+        return result
 
     @abstractmethod
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:

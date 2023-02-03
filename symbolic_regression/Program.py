@@ -1,6 +1,6 @@
+import copy
 import logging
 import random
-from copy import deepcopy
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
@@ -122,44 +122,15 @@ class Program:
             self.fitness_functions: List[BaseFitness] = list()
             self.is_fitness_to_minimize: Dict = dict()
 
-    def __copy__(self):
+    def __deepcopy__(self, memo):
         cls = self.__class__
         result = cls.__new__(cls)
-        result.__dict__.update(self.__dict__)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, copy.deepcopy(v, memo))
 
         result.program_hypervolume = np.nan
-
         return result
-
-    def __deepcopy__(self, memo):
-        
-        if not self.is_valid:
-            return self
-
-        new = Program(
-            operations=self.operations,
-            features=self.features,
-            const_range=self.const_range,
-            parsimony=self.parsimony,
-            parsimony_decay=self.parsimony_decay
-        )
-
-        new.simplify(inplace=True, inject=self.program.render())
-        return new
-
-        # try:
-        #     cls = self.__class__
-        #     result = cls.__new__(cls)
-        #     memo[id(self)] = result
-        #     for k, v in self.__dict__.items():
-        #         setattr(result, k, deepcopy(v, memo))
-
-        #     result.program_hypervolume = np.nan
-        #     return result
-        # except RecursionError:
-        #     logging.warning(
-        #         f'RecursionError raised on program {self}(depth={self.program_depth}): {self.program}'
-        #     )
 
     def __lt__(self, other: 'Program') -> bool:
         """
@@ -266,8 +237,11 @@ class Program:
             if ftn.label in self.fitness:
                 raise ValueError(
                     f"Fitness function with label {ftn.label} already used")
-
-            fitness_value = ftn.evaluate(program=self, data=data)
+            try:
+                fitness_value = ftn.evaluate(program=self, data=data)
+            except KeyError:
+                fitness_value = np.inf
+                self._override_is_valid = False
 
             if pd.isna(fitness_value):
                 fitness_value = np.inf
@@ -670,18 +644,21 @@ class Program:
                 raise AttributeError(
                     f'Constants optimization method {constants_optimization} not supported')
 
-            to_optimize = self if inplace else deepcopy(self)
+            to_optimize = self if inplace else copy.deepcopy(self)
 
             to_optimize.simplify(inplace=True)
 
-            final_parameters, _, _ = f_opt(
-                program=to_optimize,
-                data=data,
-                target=target,
-                weights=weights,
-                constants_optimization_conf=constants_optimization_conf,
-                task=task
-            )
+            try:
+                final_parameters, _, _ = f_opt(
+                    program=to_optimize,
+                    data=data,
+                    target=target,
+                    weights=weights,
+                    constants_optimization_conf=constants_optimization_conf,
+                    task=task
+                )
+            except NameError:
+                return to_optimize
 
             if len(final_parameters) > 0:
                 to_optimize.set_constants(new=final_parameters)
@@ -776,25 +753,24 @@ class Program:
 
             """
             try:
-                try:
-                    simplified = parse_expr(program, evaluate=True)
-                except ValueError:
-                    return False
-                except TypeError:
-                    return False
+                simplified = parse_expr(program, evaluate=True)
 
                 new_program = extract_operation(element_to_extract=simplified,
                                                 father=None)
 
                 return new_program
 
+            except ValueError:
+                return False
+            except TypeError:
+                return False
             except UnboundLocalError:
                 return program
 
         if inplace:
             to_return = self
         else:
-            to_return = deepcopy(self)
+            to_return = copy.deepcopy(self)
 
         if inject:
             simp = simplify_program(inject)
@@ -845,7 +821,7 @@ class Program:
         if inplace:
             prog = self
         else:
-            prog = deepcopy(self)
+            prog = copy.deepcopy(self)
 
         y_pred = prog.evaluate(data=data)
 
@@ -927,7 +903,7 @@ class Program:
         if inplace:
             program_to_logistic = self
         else:
-            program_to_logistic = deepcopy(self)
+            program_to_logistic = copy.deepcopy(self)
 
         logistic_node.operands.append(program_to_logistic.program)
         program_to_logistic.program.father = logistic_node
@@ -983,7 +959,7 @@ class Program:
             other.init_program()
 
         if self.complexity == 1 or other.complexity == 1:
-            new = deepcopy(self)
+            new = copy.deepcopy(self)
             new.mutate(inplace=True)
             return new
 
@@ -1000,14 +976,14 @@ class Program:
             raise AttributeError(
                 f'The two programs must have the same operations')
 
-        offspring = deepcopy(self.program)
+        offspring = copy.deepcopy(self.program)
 
         cross_over_point1 = self._select_random_node()
 
         if not cross_over_point1:
             return self
 
-        cross_over_point2 = deepcopy(
+        cross_over_point2 = copy.deepcopy(
             self._select_random_node())
 
         cross_over_point2.father = cross_over_point1.father
@@ -1059,7 +1035,7 @@ class Program:
             new.init_program()
             return new
 
-        offspring = deepcopy(self.program)
+        offspring = copy.deepcopy(self.program)
 
         mutate_point = self._select_random_node()
 
@@ -1104,7 +1080,7 @@ class Program:
             - Program
                 The new program after the insertion is applied
         """
-        offspring = deepcopy(self.program)
+        offspring = copy.deepcopy(self.program)
         mutate_point = self._select_random_node()
 
         if mutate_point:
@@ -1163,7 +1139,7 @@ class Program:
             - Program
                 The new program after the deletion is applied
         """
-        offspring = deepcopy(self.program)
+        offspring = copy.deepcopy(self.program)
         mutate_point = self._select_random_node()
 
         if mutate_point:
@@ -1206,7 +1182,7 @@ class Program:
             - Program
                 The new program after the mutation is applied
         """
-        offspring = deepcopy(self)
+        offspring = copy.deepcopy(self)
 
         leaves = offspring.get_features(
             return_objects=True) + offspring.get_constants()
@@ -1242,7 +1218,7 @@ class Program:
             - Program
                 The new program after the mutation is applied
         """
-        offspring = deepcopy(self.program)
+        offspring = copy.deepcopy(self.program)
 
         mutate_point = self._select_random_node()
 
@@ -1293,7 +1269,7 @@ class Program:
             - Program
                 The new program after the recalibration is applied
         """
-        offspring: Program = deepcopy(self)
+        offspring: Program = copy.deepcopy(self)
 
         offspring.set_constants(
             new=list(np.random.uniform(
