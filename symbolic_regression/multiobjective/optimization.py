@@ -1,4 +1,3 @@
-import time
 import warnings
 from typing import Union
 
