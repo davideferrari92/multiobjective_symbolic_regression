@@ -90,7 +90,7 @@ Feel free to get in touch writing to [davide.ferrari@kcl.ac.uk](mailto:davide.fe
 # Citations
 
 ## The methodology, code, and applications
-Davide Ferrari, Veronica Guidetti, Federica Mandreoli: Multi-Objective Symbolic Regression for Data-Driven Scoring System Management. IEEE International Conference on Data Mining (ICDM), Orlando (FL), Dec. 2022; - See more at: [https://www.isgroup.unimore.it/members-federica.html#sthash.FgZR93je.dpuf](https://www.isgroup.unimore.it/members-federica.html#sthash.FgZR93je.dpuf)
+Davide Ferrari, Veronica Guidetti, Federica Mandreoli: Multi-Objective Symbolic Regression for Data-Driven Scoring System Management. 2022 IEEE International Conference on Data Mining (ICDM), Orlando, FL, USA; - See more on [10.1109/ICDM54844.2022.00112](https://doi.org/10.1109/ICDM54844.2022.00112)
 
 
 ## A clinical benchmark
