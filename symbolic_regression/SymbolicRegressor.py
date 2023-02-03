@@ -1,5 +1,4 @@
 import logging
-import os
 import random
 import time
 from typing import Dict, List, Union
@@ -9,8 +8,8 @@ import pandas as pd
 from joblib.parallel import Parallel, delayed
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
-from symbolic_regression.Program import Program
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
+from symbolic_regression.Program import Program
 
 backend_parallel = 'loky'
 
@@ -366,16 +365,7 @@ class SymbolicRegressor:
         """
         return [p for p in self.population if p.rank == 1]
 
-    def fit(self,
-            data: Union[dict, pd.DataFrame, pd.Series],
-            features: List[str],
-            operations: List[dict],
-            fitness_functions:
-            List[BaseFitness],
-            generations_to_train: int,
-            n_jobs: int = -1,
-            stop_at_convergence: bool = False,
-            verbose: int = 0) -> None:
+    def fit(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], generations_to_train: int, n_jobs: int = -1, stop_at_convergence: bool = False, verbose: int = 0) -> None:
         """
         This method trains the population.
 
@@ -473,7 +463,8 @@ class SymbolicRegressor:
                     parsimony_decay=self.parsimony_decay,
                 ) for _ in range(self.population_size))
 
-            self.times.loc[self.generation+1, "initialization"] = time.perf_counter() - before
+            self.times.loc[self.generation+1,
+                           "initialization"] = time.perf_counter() - before
         else:
             logging.info("Fitting with existing population")
 
@@ -484,10 +475,18 @@ class SymbolicRegressor:
                 self.status = "Terminated: generations completed"
                 return
 
+            for p in self.population:
+                p.programs_dominates: List[Program] = list()
+                p.programs_dominated_by: List[Program] = list()
+
             start_time_generation = time.perf_counter()
 
             if self.generation > 0:
-                seconds_total = round(np.sum(self.elapsed_time), 1)
+                minutes_total = round(np.sum(self.elapsed_time)/60)
+                if minutes_total >= 60:
+                    time_total = f"{round(minutes_total/60)}:{round(minutes_total%60):02d} hours"
+                else:
+                    time_total = f"{minutes_total} mins"
                 seconds_iter = round(
                     np.mean(self.elapsed_time), 1)
                 seconds_iter_std = round(
@@ -500,7 +499,7 @@ class SymbolicRegressor:
                 seconds_iter_std = 0
                 expected_time = 'Unknown'
 
-            timing_str = f"Generation: {total_generation_time} sec - Total: {seconds_total} sec - Average time per generation: {seconds_iter} ± {seconds_iter_std} sec - Time to completion: {expected_time} mins"
+            timing_str = f"Generation: {total_generation_time} sec - Average time per generation: {seconds_iter} ± {seconds_iter_std} sec - Total: {time_total} - Time to completion: {expected_time} mins"
 
             self.generation += 1
 
@@ -510,7 +509,7 @@ class SymbolicRegressor:
             print(
                 f"Generation {self.generation}/{self.generations_to_train}")
 
-            ################################################ Generates the offsprings
+            # Generates the offsprings
             before = time.perf_counter()
             offsprings: List[Program] = Parallel(
                 n_jobs=self.n_jobs,
@@ -519,36 +518,41 @@ class SymbolicRegressor:
                         data, self.genetic_operators_frequency, self.fitness_functions, self.population, self.tournament_size, self.generation
                     ) for _ in range(self.population_size)
             )
-            self.times.loc[self.generation, "offsprings_generation"] = time.perf_counter() - before
+            self.times.loc[self.generation,
+                           "offsprings_generation"] = time.perf_counter() - before
 
             logging.info(f"Offsprings generated: {len(offsprings)}")
             self.population += offsprings
 
-            ################################################ Removes all duplicated programs in the population
+            # Removes all duplicated programs in the population
             before_cleaning = len(self.population)
 
             before = time.perf_counter()
             self.drop_duplicates(inplace=True)
-            self.times.loc[self.generation, "duplicated_drop"] = time.perf_counter() - before
+            self.times.loc[self.generation,
+                           "duplicated_drop"] = time.perf_counter() - before
 
             after_drop_duplicates = len(self.population)
             logging.debug(
                 f"{before_cleaning-after_drop_duplicates}/{before_cleaning} duplicates programs removed")
-            
-            self.times.loc[self.generation, "duplicated_elements_count"] = before_cleaning-after_drop_duplicates
-            self.times.loc[self.generation, "duplicated_elements_ratio"] = (before_cleaning-after_drop_duplicates)/before_cleaning
 
-            ################################################ Removes all non valid programs in the population
+            self.times.loc[self.generation,
+                           "duplicated_elements_count"] = before_cleaning-after_drop_duplicates
+            self.times.loc[self.generation, "duplicated_elements_ratio"] = (
+                before_cleaning-after_drop_duplicates)/before_cleaning
+
+            # Removes all non valid programs in the population
             before = time.perf_counter()
             self.drop_invalids(inplace=True)
-            self.times.loc[self.generation, "invalids_drop"] = time.perf_counter() - before
+            self.times.loc[self.generation,
+                           "invalids_drop"] = time.perf_counter() - before
 
             after_cleaning = len(self.population)
             if before_cleaning != after_cleaning:
                 logging.debug(
                     f"{after_drop_duplicates-after_cleaning}/{after_drop_duplicates} invalid programs removed")
 
-            ################################################ Integrate population in case of too many invalid programs
+            # Integrate population in case of too many invalid programs
             self.times.loc[self.generation, "invalid_elements"] = 0
             if len(self.population) < self.population_size * 2:
                 before = time.perf_counter()
@@ -571,20 +575,25 @@ class SymbolicRegressor:
                     ) for _ in range(missing_elements))
 
                 self.population += refill
-                self.times.loc[self.generation, "refill_invalid"] = time.perf_counter() - before
-                
-                self.times.loc[self.generation, "invalid_elements_count"] = missing_elements
-                self.times.loc[self.generation, "invalid_elements_ratio"] = missing_elements / len(self.population)
+                self.times.loc[self.generation,
+                               "refill_invalid"] = time.perf_counter() - before
 
-            ################################################ Calculates the Pareto front
+                self.times.loc[self.generation,
+                               "invalid_elements_count"] = missing_elements
+                self.times.loc[self.generation,
+                               "invalid_elements_ratio"] = missing_elements / len(self.population)
+
+            # Calculates the Pareto front
             before = time.perf_counter()
             self._create_pareto_front()
-            self.times.loc[self.generation, "pareto_front_computation"] = time.perf_counter() - before
+            self.times.loc[self.generation,
+                           "pareto_front_computation"] = time.perf_counter() - before
 
-            ################################################ Calculates the crowding distance
+            # Calculates the crowding distance
             before = time.perf_counter()
             self._crowding_distance()
-            self.times.loc[self.generation, "crowding_distance_computation"] = time.perf_counter() - before
+            self.times.loc[self.generation,
+                           "crowding_distance_computation"] = time.perf_counter() - before
 
             self.population.sort(
                 key=lambda p: p.crowding_distance, reverse=True)
@@ -599,10 +608,11 @@ class SymbolicRegressor:
             self.average_complexity = np.mean(
                 [p.complexity for p in self.population])
 
-            ################################################ Calculates the hypervolume
+            # Calculates the hypervolume
             before = time.perf_counter()
             self.compute_hypervolume()
-            self.times.loc[self.generation, "hypervolume_computation"] = time.perf_counter() - before
+            self.times.loc[self.generation,
+                           "hypervolume_computation"] = time.perf_counter() - before
 
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front()
@@ -616,7 +626,7 @@ class SymbolicRegressor:
                     print(
                         f"Training converged after {self.converged_generation} generations.")
                     return
-            
+
             if self.checkpoint_file and self.checkpoint_frequency > 0 and self.generation % self.checkpoint_frequency == 0:
                 try:
                     self.save_model(file=self.checkpoint_file)
@@ -630,19 +640,14 @@ class SymbolicRegressor:
                     f"Training terminated after {self.generation} generations")
                 return
 
-            total_generation_time = round(end_time_generation - start_time_generation, 1)
+            total_generation_time = round(
+                end_time_generation - start_time_generation, 1)
             self.elapsed_time.append(total_generation_time)
 
-            self.times.loc[self.generation, "generation_time"] = total_generation_time
+            self.times.loc[self.generation,
+                           "generation_time"] = total_generation_time
 
-    def generate_individual(self,
-                            data: Union[dict, pd.DataFrame, pd.Series],
-                            features: List[str],
-                            operations: List[dict],
-                            fitness_functions: List[BaseFitness],
-                            const_range: tuple = (0, 1),
-                            parsimony: float = 0.8,
-                            parsimony_decay: float = 0.85) -> Program:
+    def generate_individual(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85) -> Program:
         """
         This method generates a new individual for the population
 
@@ -802,6 +807,9 @@ class SymbolicRegressor:
             # If the program is not valid, we return a the same program without any alteration
             # because it would be unlikely to generate a valid offspring.
             # This program will be removed from the population later.
+            program1.init_program()
+            program1.compute_fitness(
+                fitness_functions=fitness_functions, data=data)
             return program1
 
         _offspring: Program = None
