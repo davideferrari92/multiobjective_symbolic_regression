@@ -90,8 +90,19 @@ Feel free to get in touch writing to [davide.ferrari@kcl.ac.uk](mailto:davide.fe
 # Citations
 
 ## The methodology, code, and applications
-Davide Ferrari, Veronica Guidetti, Federica Mandreoli: Multi-Objective Symbolic Regression for Data-Driven Scoring System Management. 2022 IEEE International Conference on Data Mining (ICDM), Orlando, FL, USA; - See more on [10.1109/ICDM54844.2022.00112](https://doi.org/10.1109/ICDM54844.2022.00112)
+
+**Davide Ferrari, Veronica Guidetti, Federica Mandreoli**:
+*Multi-Objective Symbolic Regression for Data-Driven Scoring System Management*
+
+2022 IEEE International Conference on Data Mining (ICDM), Orlando, FL, USA
+
+See more on [10.1109/ICDM54844.2022.00112](https://doi.org/10.1109/ICDM54844.2022.00112)
 
 
 ## A clinical benchmark
-Davide Ferrari, Veronica Guidetti, Yanzhong Wang, Vasa Curcin: Multi-objective Symbolic Regression to Generate Data-driven, Non-fixed Structure and Intelligible Mortality Predictors using EHR: Binary Classification Methodology and Comparison with State-of-the-art. Proceedings of the American Medical Informatics (AMIA) Annual Symposium, Washington DC, Nov. 2022; - See more at: [https://scholar.google.it/citations?view_op=view_citation&hl=en&user=5zwLd3IAAAAJ&citation_for_view=5zwLd3IAAAAJ:W7OEmFMy1HYC](https://scholar.google.it/citations?view_op=view_citation&hl=en&user=5zwLd3IAAAAJ&citation_for_view=5zwLd3IAAAAJ:W7OEmFMy1HYC)
+**Davide Ferrari, Veronica Guidetti, Yanzhong Wang, Vasa Curcin**:
+*Multi-objective Symbolic Regression to Generate Data-driven, Non-fixed Structure and Intelligible Mortality Predictors using EHR: Binary Classification Methodology and Comparison with State-of-the-art*
+
+Proceedings of the American Medical Informatics (AMIA) Annual Symposium, Washington DC, Nov. 2022
+
+See more at: [https://scholar.google.it/citations?view_op=view_citation&hl=en&user=5zwLd3IAAAAJ&citation_for_view=5zwLd3IAAAAJ:W7OEmFMy1HYC](https://scholar.google.it/citations?view_op=view_citation&hl=en&user=5zwLd3IAAAAJ&citation_for_view=5zwLd3IAAAAJ:W7OEmFMy1HYC)
