@@ -1,3 +1,4 @@
+import time
 import warnings
 from typing import Union
 
@@ -281,8 +282,11 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
                 constants*np.ones_like(y_batch[i]), n_constants, 1)
 
             # Define current batch weights, and compute numerical values of pyf_grad pyf_prog
-            y_pred = pyf_prog(tuple(split_X_batch), tuple(split_c_batch))
-            num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
+            try:
+                y_pred = pyf_prog(tuple(split_X_batch), tuple(split_c_batch))
+                num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
+            except KeyError:
+                return [], [], []
 
             if task == 'regression:wmse':
                 av_loss = np.nanmean(w_batch[i] * (y_pred - y_batch[i])**2)
