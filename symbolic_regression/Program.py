@@ -238,7 +238,7 @@ class Program:
                 raise ValueError(
                     f"Fitness function with label {ftn.label} already used")
             try:
-                fitness_value = ftn.evaluate(program=self, data=data)
+                fitness_value = round(ftn.evaluate(program=self, data=data), 5)
             except KeyError:
                 fitness_value = np.inf
                 self._override_is_valid = False
