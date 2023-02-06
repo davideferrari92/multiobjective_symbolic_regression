@@ -485,8 +485,10 @@ class SymbolicRegressor:
                 minutes_total = round(np.sum(self.elapsed_time)/60)
                 if minutes_total >= 60:
                     time_total = f"{round(minutes_total/60)}:{round(minutes_total%60):02d} hours"
-                else:
+                elif np.sum(self.elapsed_time) > 60:
                     time_total = f"{minutes_total} mins"
+                else:
+                    time_total = f"{round(np.sum(self.elapsed_time))} secs"
 
                 seconds_iter = np.mean(self.elapsed_time)
                 if seconds_iter >= 60:
@@ -500,11 +502,16 @@ class SymbolicRegressor:
                 else:
                     expected_time = f"{round(expected_time)}:{round((expected_time%1)*60):02d} mins"
             else:
-                time_total = f"0 mins"
+                time_total = f"0 secs"
                 seconds_iter = f"0 secs ± 0 secs"
                 expected_time = 'Unknown'
 
-            timing_str = f"Generation: {total_generation_time} sec - Average time per generation: {seconds_iter} - Total: {time_total} - Time to completion: {expected_time}"
+            if total_generation_time >= 60:
+                generation_time = f"{round(total_generation_time/60)}:{round(total_generation_time%60):02d} mins"
+            else:
+                generation_time = f"{round(total_generation_time)} secs"
+
+            timing_str = f"Generation: {generation_time} - Average time per generation: {seconds_iter} - Total: {time_total} - Time to completion: {expected_time}"
 
             self.generation += 1
 
