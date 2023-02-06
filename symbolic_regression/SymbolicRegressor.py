@@ -487,19 +487,24 @@ class SymbolicRegressor:
                     time_total = f"{round(minutes_total/60)}:{round(minutes_total%60):02d} hours"
                 else:
                     time_total = f"{minutes_total} mins"
-                seconds_iter = round(
-                    np.mean(self.elapsed_time), 1)
-                seconds_iter_std = round(
-                    np.std(self.elapsed_time), 1)
-                expected_time = round(seconds_iter *
-                                      (self.generations_to_train - self.generation)/60)
+
+                seconds_iter = np.mean(self.elapsed_time)
+                if seconds_iter >= 60:
+                    seconds_iter = f"{round(seconds_iter/60)}:{round(seconds_iter%60):02d} ± {round(np.std(self.elapsed_time)/60)}:{round(np.std(self.elapsed_time)%60):02d} mins"
+                else:
+                    seconds_iter = f"{round(seconds_iter, 2)} ± {round(np.std(self.elapsed_time), 1)} secs"
+
+                expected_time = np.mean(self.elapsed_time) * (self.generations_to_train - self.generation)/60
+                if expected_time >= 60:
+                    expected_time = f"{round(expected_time/60)}:{round(expected_time%60):02d} hours"
+                else:
+                    expected_time = f"{round(expected_time)}:{round((expected_time%1)*60):02d} mins"
             else:
                 time_total = f"0 mins"
-                seconds_iter = 0
-                seconds_iter_std = 0
+                seconds_iter = f"0 secs ± 0 secs"
                 expected_time = 'Unknown'
 
-            timing_str = f"Generation: {total_generation_time} sec - Average time per generation: {seconds_iter} ± {seconds_iter_std} sec - Total: {time_total} - Time to completion: {expected_time} mins"
+            timing_str = f"Generation: {total_generation_time} sec - Average time per generation: {seconds_iter} - Total: {time_total} - Time to completion: {expected_time}"
 
             self.generation += 1
 
