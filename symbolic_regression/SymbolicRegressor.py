@@ -494,7 +494,7 @@ class SymbolicRegressor:
                 expected_time = round(seconds_iter *
                                       (self.generations_to_train - self.generation)/60)
             else:
-                time_total = 0
+                time_total = f"0 mins"
                 seconds_iter = 0
                 seconds_iter_std = 0
                 expected_time = 'Unknown'
