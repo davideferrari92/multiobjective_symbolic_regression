@@ -1,7 +1,7 @@
 import logging
 import random
 import time
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
@@ -9,6 +9,7 @@ from joblib.parallel import Parallel, delayed
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
+from symbolic_regression.Population import Population
 from symbolic_regression.Program import Program
 
 backend_parallel = 'loky'
@@ -69,7 +70,6 @@ class SymbolicRegressor:
         self.population_size: int = population_size
 
         # Population Configuration
-        self.population: List[Program] = list()
         self.average_complexity: float = None
         self.const_range: tuple = const_range
         self.parsimony: float = parsimony
@@ -89,22 +89,33 @@ class SymbolicRegressor:
         self.generations_to_train: int = None
         self.generation: int = 0
         self.genetic_operators_frequency: dict = genetic_operators_frequency
-        self.population: List[Program] = list()
+        self.population: Population = Population()
         self.training_duration: int = 0
 
         self.times = pd.DataFrame()
 
     def save_model(self, file: str):
+        import json
         import pickle
 
+        # Dump this object in a pickle file
         with open(file, "wb") as f:
+            for p in self.population:
+                p.programs_dominated_by: List[Program] = list()
+                p.programs_dominates: List[Program] = list()
             pickle.dump(self, f)
+
+        # Dump the self.metadata in a json file
+        with open(file + ".metadata.json", "w") as f:
+            json.dump(self.metadata, f)
 
     def load_model(self, file: str):
         import pickle
 
         with open(file, "rb") as f:
-            return pickle.load(f)
+            sr: SymbolicRegressor = pickle.load(f)
+
+        return sr
 
     @property
     def best_history(self):
@@ -304,7 +315,7 @@ class SymbolicRegressor:
                         p_confront._is_duplicated = True  # Makes p.is_valid = False
 
         if inplace:
-            self.population: List[Program] = list(
+            self.population: Population = Population(
                 filter(lambda p: p._is_duplicated == False, self.population))
             return self.population
 
@@ -323,7 +334,7 @@ class SymbolicRegressor:
                 If True the population is updated, if False a new list is returned
         """
         if inplace:
-            self.population: List[Program] = list(
+            self.population: Population = Population(
                 filter(lambda p: p.is_valid == True, self.population))
             return self.population
 
@@ -451,7 +462,7 @@ class SymbolicRegressor:
             before = time.perf_counter()
             logging.info(f"Initializing population")
             self.status = "Generating population"
-            self.population: List[Program] = Parallel(
+            self.population: Population = Population(Parallel(
                 n_jobs=self.n_jobs,
                 backend=backend_parallel)(delayed(self.generate_individual)(
                     data=data,
@@ -461,7 +472,7 @@ class SymbolicRegressor:
                     fitness_functions=self.fitness_functions,
                     parsimony=self.parsimony,
                     parsimony_decay=self.parsimony_decay,
-                ) for _ in range(self.population_size))
+                ) for _ in range(self.population_size)))
 
             self.times.loc[self.generation+1,
                            "initialization"] = time.perf_counter() - before
@@ -496,7 +507,8 @@ class SymbolicRegressor:
                 else:
                     seconds_iter = f"{round(seconds_iter, 2)} ± {round(np.std(self.elapsed_time), 1)} secs"
 
-                expected_time = np.mean(self.elapsed_time) * (self.generations_to_train - self.generation)/60
+                expected_time = np.mean(
+                    self.elapsed_time) * (self.generations_to_train - self.generation)/60
                 if expected_time >= 60:
                     expected_time = f"{round(expected_time/60)}:{round(expected_time%60):02d} hours"
                 else:
@@ -523,18 +535,19 @@ class SymbolicRegressor:
 
             # Generates the offsprings
             before = time.perf_counter()
-            offsprings: List[Program] = Parallel(
+            offsprings: Population = Population(Parallel(
                 n_jobs=self.n_jobs,
                 backend=backend_parallel)(
                     delayed(self._get_offspring)(
-                        data, self.genetic_operators_frequency, self.fitness_functions, self.population, self.tournament_size, self.generation
-                    ) for _ in range(self.population_size)
-            )
+                        data, self.genetic_operators_frequency, self.fitness_functions, self.population.as_binary(
+                        ), self.tournament_size, self.generation
+                    ) for _ in range(self.population_size)))
+
             self.times.loc[self.generation,
                            "offsprings_generation"] = time.perf_counter() - before
 
             logging.info(f"Offsprings generated: {len(offsprings)}")
-            self.population += offsprings
+            self.population = Population(self.population + offsprings)
 
             # Removes all duplicated programs in the population
             before_cleaning = len(self.population)
@@ -574,7 +587,7 @@ class SymbolicRegressor:
                 logging.info(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements")
 
-                refill = Parallel(
+                refill = Population(Parallel(
                     n_jobs=self.n_jobs,
                     backend=backend_parallel)(delayed(self.generate_individual)(
                         data=data,
@@ -584,9 +597,9 @@ class SymbolicRegressor:
                         fitness_functions=self.fitness_functions,
                         parsimony=self.parsimony,
                         parsimony_decay=self.parsimony_decay,
-                    ) for _ in range(missing_elements))
+                    ) for _ in range(missing_elements)))
 
-                self.population += refill
+                self.population = Population(self.population + refill)
                 self.times.loc[self.generation,
                                "refill_invalid"] = time.perf_counter() - before
 
@@ -610,7 +623,8 @@ class SymbolicRegressor:
             self.population.sort(
                 key=lambda p: p.crowding_distance, reverse=True)
             self.population.sort(key=lambda p: p.rank, reverse=False)
-            self.population = self.population[:self.population_size]
+            self.population = Population(
+                self.population[:self.population_size])
 
             self.best_program = self.population[0]
             self.best_programs_history.append(self.best_program)
@@ -699,7 +713,7 @@ class SymbolicRegressor:
         return new_p
 
     @staticmethod
-    def _get_offspring(data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: List[Program], tournament_size: int, generation: int) -> Program:
+    def _get_offspring(data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: Population, tournament_size: int, generation: int) -> Program:
         """
         This method generates an offspring of a program from the current population
 
@@ -751,7 +765,7 @@ class SymbolicRegressor:
                 The program from which the offspring is generated
         """
 
-        def _tournament_selection(population: List[Program], tournament_size: int, generation: int) -> Program:
+        def _tournament_selection(population: Population, tournament_size: int, generation: int) -> Program:
             """
             Tournament selection
 
@@ -803,6 +817,8 @@ class SymbolicRegressor:
                         best_member = member
 
             return best_member
+
+        population = population.as_program()
 
         # Select the genetic operation to apply
         # The frequency of each operation is determined by the dictionary
@@ -874,6 +890,39 @@ class SymbolicRegressor:
         _offspring._hash = None
 
         return _offspring
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        """
+        This method returns the metadata of the current population
+
+        Args:
+            - None
+
+        Returns:
+            - metadata: Dict[str, Any]
+                The metadata of the current population
+        """
+        metadata = {
+            'average_complexity': self.average_complexity,
+            'checkpoint_file': self.checkpoint_file,
+            'checkpoint_frequency': self.checkpoint_frequency,
+            'client_name': self.client_name,
+            'const_range': self.const_range,
+            'converged_generation': self.converged_generation,
+            'elapsed_time': np.sum(self.elapsed_time),
+            'fpf_hypervolume': self.fpf_hypervolume,
+            'fpf_tree_diversity': self.fpf_tree_diversity,
+            'generation': self.generation,
+            'generations_to_train': self.generations_to_train,
+            'genetic_operators_frequency': self.genetic_operators_frequency,
+            'parsimony_decay': self.parsimony_decay,
+            'parsimony': self.parsimony,
+            'population_size': self.population_size,
+            'tournament_size': self.tournament_size,
+        }
+
+        return metadata
 
     def compute_hypervolume(self):
         """

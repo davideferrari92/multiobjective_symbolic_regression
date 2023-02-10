@@ -281,18 +281,26 @@ class FederatedAgent:
         if not self.orchestrator_address or not self.orchestrator_port:
             raise AttributeError('Orchestrator not set')
 
-        conn = Client((self.orchestrator_address, self.orchestrator_port))
-        conn.send(
-            FederatedDataCommunication(
-                sender_name=self.name,
-                sender_address=self.address,
-                sender_port=self.port,
-                comm_type=comm_type,
-                payload=payload
+        try:
+            conn = Client((self.orchestrator_address, self.orchestrator_port))
+            conn.send(
+                FederatedDataCommunication(
+                    sender_name=self.name,
+                    sender_address=self.address,
+                    sender_port=self.port,
+                    comm_type=comm_type,
+                    payload=payload
+                )
             )
-        )
-
-        conn.close()
+            conn.close()
+        except ConnectionRefusedError:
+            self.log_activity(
+                agent_name=self.name,
+                activity='ConnectionRefusedError',
+                details='ConnectionRefusedError while sending message'
+            )
+            logging.warning(
+                f'Orchestrator is not reachable')
 
         if comm_type == 'SyncStatus':
             logging.debug(
@@ -371,16 +379,25 @@ class FederatedAgent:
                 conn = Client(
                     (self.orchestrator_address, self.orchestrator_port))
 
-            conn.send(
-                FederatedDataCommunication(
-                    sender_name=self.name,
-                    sender_address=self.address,
-                    sender_port=self.port,
-                    comm_type=comm_type,
-                    payload=payload
+            try:
+                conn.send(
+                    FederatedDataCommunication(
+                        sender_name=self.name,
+                        sender_address=self.address,
+                        sender_port=self.port,
+                        comm_type=comm_type,
+                        payload=payload
+                    )
                 )
-            )
-
+            except ConnectionRefusedError:
+                self.log_activity(
+                    agent_name=agent_name,
+                    activity='ConnectionRefusedError',
+                    details='ConnectionRefusedError while sending message'
+                )
+                logging.warning(
+                    f'Agent {agent_name} is not reachable')
+                
             conn.close()
 
             logging.debug(

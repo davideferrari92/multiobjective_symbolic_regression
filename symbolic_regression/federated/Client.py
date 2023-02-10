@@ -1,7 +1,6 @@
 import logging
 from multiprocessing.connection import Listener
 from typing import List
-
 import pandas as pd
 
 from symbolic_regression.federated.Agent import FederatedAgent
@@ -99,6 +98,11 @@ class FederatedSRClient(FederatedAgent):
             logging.info('Client stopped by user')
             self.send_to_orchestrator(
                 comm_type='UnregisterClient', payload=self.name)
+        except Exception as e:
+            logging.error(e)
+            self.status = f'error: {e}'
+            self.send_to_orchestrator(
+                comm_type='UnregisterClient', payload=self.name)
 
     def run_client(self) -> None:
         """ Run the client
@@ -146,7 +150,8 @@ class FederatedSRClient(FederatedAgent):
                 From 1 Orchestrator
                 To None
                 """
-                self.federated_aggregation_strategy = msg.payload
+                self.federated_aggregation_strategy: BaseStrategy = msg.payload
+                self.federated_aggregation_strategy.name = self.name
                 logging.debug(
                     f'Aggregation strategy received.')
 
@@ -179,11 +184,10 @@ class FederatedSRClient(FederatedAgent):
                 logging.debug(
                     f'Computing performance on {len(client_strategies)} clients strategies')
 
-                server_strategy.regressor.compute_performance(data=self.data)
+                server_strategy.on_validation(data=self.data)
 
                 for client_name, client_strategy in client_strategies.items():
-                    client_strategy.regressor.compute_performance(
-                        data=self.data)
+                    client_strategy.on_validation(data=self.data)
 
                 self.send_to_orchestrator(
                     comm_type='TerminationValidation', payload={
@@ -205,7 +209,7 @@ class FederatedSRClient(FederatedAgent):
             elif msg.comm_type == 'TriggerTraining':
                 """
                 From 1 Orchestrator
-                To None
+                To 1 Orchestrator
                 """
                 self.status = 'training'
 

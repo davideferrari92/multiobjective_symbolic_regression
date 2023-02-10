@@ -1,6 +1,7 @@
 import logging
 from abc import abstractmethod
 from typing import Dict
+from symbolic_regression.Population import Population
 
 from symbolic_regression.SymbolicRegressor import SymbolicRegressor
 
@@ -142,6 +143,18 @@ class BaseStrategy:
         '''
         This method is called at the end of the execution of the strategy.
         It is used to finalize the strategy environment and to return the aggregated regressor.
+        '''
+        if self.mode == 'server':
+            raise NotImplementedError
+
+        elif self.mode == 'client':
+            raise NotImplementedError
+
+    @abstractmethod
+    def on_validation(self, **kwargs):
+        '''
+        This method is called at the end of the execution of the strategy.
+        It is used to validat the performance of all the regressors on the local dataset.
         '''
         if self.mode == 'server':
             raise NotImplementedError

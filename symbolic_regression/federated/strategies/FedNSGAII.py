@@ -1,7 +1,9 @@
+import copy
 import logging
 from typing import Dict, List
 
 import pandas as pd
+from symbolic_regression.Population import Population
 from symbolic_regression.Program import Program
 from symbolic_regression.SymbolicRegressor import SymbolicRegressor
 
@@ -46,10 +48,13 @@ class FedNSGAII(BaseStrategy):
     def on_start(self, data: pd.DataFrame = None, regressors: Dict[str, SymbolicRegressor] = None, **kwargs):
         if self.mode == 'server':
             self.regressors = regressors
+            for client_name, client_regressor in self.regressors.items():
+                client_regressor.population: Population = client_regressor.population.as_program()
 
         elif self.mode == 'client':
             
             if not self.regressor:
+                logging.info(f'Initializing the symbolic regressor for {self.name} with size {self.symbolic_regressor_configuration["population_size"]}')
                 self.regressor: SymbolicRegressor = SymbolicRegressor(
                     client_name=self.name,
                     checkpoint_file=self.symbolic_regressor_configuration['checkpoint_file'] + f'.{self.name}',
@@ -63,6 +68,7 @@ class FedNSGAII(BaseStrategy):
                     population_size=self.symbolic_regressor_configuration['population_size'],
                     tournament_size=self.symbolic_regressor_configuration['tournament_size'],
                 )
+            self.regressor.population: Population = self.regressor.population.as_program()
 
     def aggregation(self, data: pd.DataFrame = None, **kwargs):
         '''
@@ -95,12 +101,13 @@ class FedNSGAII(BaseStrategy):
                 population_size=self.symbolic_regressor_configuration['population_size'],
                 tournament_size=self.symbolic_regressor_configuration['tournament_size'],
             )
-            self.regressor.population: List[Program] = list()
+            self.regressor.population: Population = Population()
             for training_variable, value in self.training_configuration.items():
                 setattr(self.regressor, training_variable, value)
 
             for client_name, client_regressor in self.regressors.items():
                 logging.info(f'Incorporating {client_name} regressor population')
+                
                 self.regressor.population.extend(client_regressor.population)
 
             self.regressor._create_pareto_front()
@@ -108,6 +115,9 @@ class FedNSGAII(BaseStrategy):
             self.regressor.population.sort(
                 key=lambda p: p.crowding_distance, reverse=True)
             self.regressor.population.sort(key=lambda p: p.rank, reverse=False)
+            for p in self.regressor.population:
+                p.programs_dominated_by: List = list()
+                p.programs_dominates: List = list()
             self.regressor.population = self.regressor.population[:self.regressor.population_size]
 
         elif self.mode == 'client':
@@ -121,11 +131,21 @@ class FedNSGAII(BaseStrategy):
                 stop_at_convergence=self.training_configuration['stop_at_convergence'],
                 verbose=self.training_configuration['verbose'],
             )
+            
 
     def on_termination(self, **kwargs):
 
         if self.mode == 'server':
+            self.regressor.population = Population(self.regressor.population).as_program()
+
+        elif self.mode == 'client':
+            self.regressor.population: Population = self.regressor.population.as_binary()
+
+    def on_validation(self, data: pd.DataFrame = None, **kwargs):
+        if self.mode == 'server':
             pass
 
         elif self.mode == 'client':
-            pass
+            self.regressor.population: Population = self.regressor.population.as_program()
+            self.regressor.compute_performance(data=data)
+            self.regressor.population: Population = self.regressor.population.as_binary()
