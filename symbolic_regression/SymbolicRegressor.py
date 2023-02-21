@@ -1,11 +1,14 @@
 import logging
+import os
 import random
 import time
+from itertools import repeat
 from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
-from joblib.parallel import Parallel, delayed
+from loky import get_reusable_executor
+from scipy.stats import spearmanr
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
@@ -17,18 +20,7 @@ backend_parallel = 'loky'
 
 class SymbolicRegressor:
 
-    def __init__(
-        self,
-        client_name: str,
-        checkpoint_file: str = None,
-        checkpoint_frequency: int = -1,
-        const_range: tuple = (0, 1),
-        parsimony=0.8,
-        parsimony_decay=0.85,
-        population_size: int = 300,
-        tournament_size: int = 3,
-        genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1},
-    ) -> None:
+    def __init__(self, client_name: str, checkpoint_file: str = None, checkpoint_frequency: int = -1, const_range: tuple = (0, 1), parsimony=0.8, parsimony_decay=0.85, population_size: int = 300, tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1}) -> None:
         """ This class implements the basic features for training a Symbolic Regression algorithm
 
         Args:
@@ -64,7 +56,7 @@ class SymbolicRegressor:
         self.client_name: str = client_name
         self.checkpoint_file: str = checkpoint_file
         self.checkpoint_frequency: int = checkpoint_frequency
-        self.elapsed_time: list = []
+        self.elapsed_time: list = list()
         self.features: List = None
         self.operations: List = None
         self.population_size: int = population_size
@@ -83,16 +75,16 @@ class SymbolicRegressor:
         self.fitness_functions: List[BaseFitness] = None
         self.first_pareto_front_history: List = list()
         self.fpf_hypervolume: float = None
-        self.fpf_hypervolume_history: List = list()
         self.fpf_tree_diversity: float = None
-        self.fpf_tree_diversity_history: List = list()
+        self.fpf_spearman_diversity: float = None
+        self.fpf_stats: pd.DataFrame = pd.DataFrame()
         self.generations_to_train: int = None
         self.generation: int = 0
         self.genetic_operators_frequency: dict = genetic_operators_frequency
         self.population: Population = Population()
         self.training_duration: int = 0
 
-        self.times = pd.DataFrame()
+        self.times: pd.DataFrame = pd.DataFrame()
 
     def save_model(self, file: str):
         import json
@@ -145,16 +137,20 @@ class SymbolicRegressor:
 
         return pd.DataFrame(istances)
 
-    def compute_performance(self, data: Union[dict, pd.DataFrame, pd.Series]):
+    def compute_performance(self, data: Union[dict, pd.DataFrame, pd.Series], fitness_functions: List[BaseFitness] = None):
         """
         This method computes the performance of each program in the population
 
         Args:
             - data: Union[dict, pd.DataFrame, pd.Series]
                 The data on which the performance is computed
+            - fitness_functions: List[BaseFitness] (default: None)
+                The fitness functions to use to compute the performance. Can override by the fitness_functions
+                attribute of the class
         """
         for p in self.population:
-            p.compute_fitness(self.fitness_functions, data)
+            p.compute_fitness(
+                self.fitness_functions if fitness_functions is None else fitness_functions, data)
 
     def _create_pareto_front(self):
         """
@@ -457,22 +453,27 @@ class SymbolicRegressor:
 
         """
         total_generation_time = 0
+        jobs = self.n_jobs if self.n_jobs > 0 else os.cpu_count()
+
+        executor = get_reusable_executor(max_workers=jobs, timeout=100)
 
         if not self.population:
             before = time.perf_counter()
             logging.info(f"Initializing population")
             self.status = "Generating population"
-            self.population: Population = Population(Parallel(
-                n_jobs=self.n_jobs,
-                backend=backend_parallel)(delayed(self.generate_individual)(
-                    data=data,
-                    features=self.features,
-                    operations=self.operations,
-                    const_range=self.const_range,
-                    fitness_functions=self.fitness_functions,
-                    parsimony=self.parsimony,
-                    parsimony_decay=self.parsimony_decay,
-                ) for _ in range(self.population_size)))
+
+            self.population = Population(executor.map(
+                lambda p: self.generate_individual(*p),
+                zip(
+                    repeat(data, self.population_size),
+                    repeat(self.features, self.population_size),
+                    repeat(self.operations, self.population_size),
+                    repeat(self.fitness_functions, self.population_size),
+                    repeat(self.const_range, self.population_size),
+                    repeat(self.parsimony, self.population_size),
+                    repeat(self.parsimony_decay, self.population_size),
+                )
+            ))
 
             self.times.loc[self.generation+1,
                            "initialization"] = time.perf_counter() - before
@@ -486,16 +487,17 @@ class SymbolicRegressor:
                 self.status = "Terminated: generations completed"
                 return
 
+            start_time_generation = time.perf_counter()
+            
             for p in self.population:
                 p.programs_dominates: List[Program] = list()
                 p.programs_dominated_by: List[Program] = list()
 
-            start_time_generation = time.perf_counter()
 
             if self.generation > 0:
                 minutes_total = round(np.sum(self.elapsed_time)/60)
                 if minutes_total >= 60:
-                    time_total = f"{round(np.floor(minutes_total/60))}:{round(minutes_total%60):02d} hours"
+                    time_total = f"{round(minutes_total/60)}:{round(minutes_total%60):02d} hours"
                 elif np.sum(self.elapsed_time) > 60:
                     time_total = f"{minutes_total} mins"
                 else:
@@ -503,14 +505,14 @@ class SymbolicRegressor:
 
                 seconds_iter = np.mean(self.elapsed_time)
                 if seconds_iter >= 60:
-                    seconds_iter = f"{round(np.floor(seconds_iter/60))}:{round(seconds_iter%60):02d} ± {round(np.std(self.elapsed_time)/60)}:{round(np.std(self.elapsed_time)%60):02d} mins"
+                    seconds_iter = f"{round(seconds_iter//60)}:{round(seconds_iter%60):02d} ± {round(np.std(self.elapsed_time)//60)}:{round(np.std(self.elapsed_time)%60):02d} mins"
                 else:
                     seconds_iter = f"{round(seconds_iter, 2)} ± {round(np.std(self.elapsed_time), 1)} secs"
 
                 expected_time = np.mean(
                     self.elapsed_time) * (self.generations_to_train - self.generation)/60
                 if expected_time >= 60:
-                    expected_time = f"{round(np.floor(expected_time/60))}:{round(expected_time%60):02d} hours"
+                    expected_time = f"{round(expected_time//60)}:{round(expected_time%60):02d} hours"
                 else:
                     expected_time = f"{round(expected_time)}:{round((expected_time%1)*60):02d} mins"
             else:
@@ -519,7 +521,7 @@ class SymbolicRegressor:
                 expected_time = 'Unknown'
 
             if total_generation_time >= 60:
-                generation_time = f"{round(np.floor(total_generation_time/60))}:{round(total_generation_time%60):02d} mins"
+                generation_time = f"{round(total_generation_time//60)}:{round(total_generation_time%60):02d} mins"
             else:
                 generation_time = f"{round(total_generation_time)} secs"
 
@@ -527,26 +529,28 @@ class SymbolicRegressor:
 
             self.generation += 1
 
-            print("############################################################")
+            print("#" * len(timing_str))
             print(timing_str)
-            print("############################################################")
-            print(
-                f"Generation {self.generation}/{self.generations_to_train}")
+            print("#" * len(timing_str))
+            print(f"Generation {self.generation}/{self.generations_to_train}")
 
-            # Generates the offsprings
             before = time.perf_counter()
-            offsprings: Population = Population(Parallel(
-                n_jobs=self.n_jobs,
-                backend=backend_parallel)(
-                    delayed(self._get_offspring)(
-                        data, self.genetic_operators_frequency, self.fitness_functions, self.population.as_binary(
-                        ), self.tournament_size, self.generation
-                    ) for _ in range(self.population_size)))
+
+            offsprings = list(executor.map(
+                lambda p: self._get_offspring(*p),
+                zip(
+                    repeat(data, self.population_size),
+                    repeat(self.genetic_operators_frequency, self.population_size),
+                    repeat(self.fitness_functions, self.population_size),
+                    repeat(self.population.as_binary(), self.population_size),
+                    repeat(self.tournament_size, self.population_size),
+                    repeat(self.generation, self.population_size),
+                )
+            ))
 
             self.times.loc[self.generation,
                            "offsprings_generation"] = time.perf_counter() - before
 
-            logging.info(f"Offsprings generated: {len(offsprings)}")
             self.population = Population(self.population + offsprings)
 
             # Removes all duplicated programs in the population
@@ -578,7 +582,6 @@ class SymbolicRegressor:
                     f"{after_drop_duplicates-after_cleaning}/{after_drop_duplicates} invalid programs removed")
 
             # Integrate population in case of too many invalid programs
-            self.times.loc[self.generation, "invalid_elements"] = 0
             if len(self.population) < self.population_size * 2:
                 before = time.perf_counter()
                 missing_elements = 2*self.population_size - \
@@ -587,17 +590,18 @@ class SymbolicRegressor:
                 logging.info(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements")
 
-                refill = Population(Parallel(
-                    n_jobs=self.n_jobs,
-                    backend=backend_parallel)(delayed(self.generate_individual)(
-                        data=data,
-                        features=self.features,
-                        operations=self.operations,
-                        const_range=self.const_range,
-                        fitness_functions=self.fitness_functions,
-                        parsimony=self.parsimony,
-                        parsimony_decay=self.parsimony_decay,
-                    ) for _ in range(missing_elements)))
+                refill = list(executor.map(
+                    lambda p: self.generate_individual(*p),
+                    zip(
+                        repeat(data, missing_elements),
+                        repeat(self.features, missing_elements),
+                        repeat(self.operations, missing_elements),
+                        repeat(self.fitness_functions, missing_elements),
+                        repeat(self.const_range, missing_elements),
+                        repeat(self.parsimony, missing_elements),
+                        repeat(self.parsimony_decay, missing_elements),
+                    )
+                ))
 
                 self.population = Population(self.population + refill)
                 self.times.loc[self.generation,
@@ -637,6 +641,8 @@ class SymbolicRegressor:
             # Calculates the hypervolume
             before = time.perf_counter()
             self.compute_hypervolume()
+            self.tree_diversity()
+            self.spearman_diversity(data=data)
             self.times.loc[self.generation,
                            "hypervolume_computation"] = time.perf_counter() - before
 
@@ -658,7 +664,7 @@ class SymbolicRegressor:
                     self.save_model(file=self.checkpoint_file)
                 except FileNotFoundError:
                     logging.warning(
-                        f'FileNotFoundError raised in checkpoint saving')
+                        f'FileNotFoundError raised in checkpoint saving: {self.checkpoint_file}')
 
             # Use generations = -1 to rely only on convergence (risk of infinite loop)
             if self.generations_to_train > 0 and self.generation == self.generations_to_train:
@@ -709,7 +715,6 @@ class SymbolicRegressor:
                         parsimony=parsimony, parsimony_decay=parsimony_decay)
         new_p.init_program()
         new_p.compute_fitness(fitness_functions=fitness_functions, data=data)
-
         return new_p
 
     @staticmethod
@@ -818,11 +823,28 @@ class SymbolicRegressor:
 
             return best_member
 
+        import signal
+        from contextlib import contextmanager
+
+        class TimeoutException(Exception): pass
+
+        @contextmanager
+        def time_limit(seconds):
+            def signal_handler(signum, frame):
+                raise TimeoutException("Timed out!")
+            signal.signal(signal.SIGALRM, signal_handler)
+            signal.alarm(seconds)
+            try:
+                yield
+            finally:
+                signal.alarm(0)
+
         population = population.as_program()
 
         # Select the genetic operation to apply
         # The frequency of each operation is determined by the dictionary
         # genetic_operators_frequency. The higher the number the likelier the operation will be chosen.
+
         ops = list()
         for op, freq in genetic_operators_frequency.items():
             ops += [op] * freq
@@ -830,66 +852,80 @@ class SymbolicRegressor:
 
         program1 = _tournament_selection(
             population=population, tournament_size=tournament_size, generation=generation)
+        
+        try:
+            with time_limit(20):
+                if program1 is None or not program1.is_valid:
+                    # If the program is not valid, we return a the same program without any alteration
+                    # because it would be unlikely to generate a valid offspring.
+                    # This program will be removed from the population later.
+                    program1.init_program()
+                    program1.compute_fitness(
+                        fitness_functions=fitness_functions, data=data)
+                    return program1
 
-        if program1 is None or not program1.is_valid:
-            # If the program is not valid, we return a the same program without any alteration
-            # because it would be unlikely to generate a valid offspring.
-            # This program will be removed from the population later.
-            program1.init_program()
-            program1.compute_fitness(
-                fitness_functions=fitness_functions, data=data)
+                _offspring: Program = None
+
+                if gen_op == 'crossover':
+                    program2 = _tournament_selection(
+                        population=population, tournament_size=tournament_size, generation=generation)
+                    if program2 is None or not program2.is_valid:
+                        return program1
+                    _offspring = program1.cross_over(other=program2, inplace=False)
+
+                elif gen_op == 'randomize':
+                    # Will generate a new tree as other
+                    _offspring = program1.cross_over(other=None, inplace=False)
+
+                elif gen_op == 'mutation':
+                    _offspring = program1.mutate(inplace=False)
+
+                elif gen_op == 'delete_node':
+                    _offspring = program1.delete_node(inplace=False)
+
+                elif gen_op == 'insert_node':
+                    _offspring = program1.insert_node(inplace=False)
+
+                elif gen_op == 'mutate_operator':
+                    _offspring = program1.mutate_operator(inplace=False)
+
+                elif gen_op == 'mutate_leaf':
+                    _offspring = program1.mutate_leaf(inplace=False)
+
+                elif gen_op == 'simplification':
+                    _offspring = program1.simplify(inplace=False)
+
+                elif gen_op == 'recalibrate':
+                    _offspring = program1.recalibrate(inplace=False)
+
+                elif gen_op == 'do_nothing':
+                    _offspring = program1
+                else:
+                    logging.warning(
+                        f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize'
+                    )
+                    return program1
+
+                # Add the fitness to the object after the cross_over or mutation
+                _offspring.compute_fitness(
+                    fitness_functions=fitness_functions, data=data)
+                # Reset the hash to force the re-computation
+                _offspring._hash = None
+
+                return _offspring
+            
+        except TimeoutException as e:
+            logging.warning(f'Genetic operation {gen_op} timed out')
             return program1
 
-        _offspring: Program = None
 
-        if gen_op == 'crossover':
-            program2 = _tournament_selection(
-                population=population, tournament_size=tournament_size, generation=generation)
-            if program2 is None or not program2.is_valid:
-                return program1
-            _offspring = program1.cross_over(other=program2, inplace=False)
-
-        elif gen_op == 'randomize':
-            # Will generate a new tree as other
-            _offspring = program1.cross_over(other=None, inplace=False)
-
-        elif gen_op == 'mutation':
-            _offspring = program1.mutate(inplace=False)
-
-        elif gen_op == 'delete_node':
-            _offspring = program1.delete_node(inplace=False)
-
-        elif gen_op == 'insert_node':
-            _offspring = program1.insert_node(inplace=False)
-
-        elif gen_op == 'mutate_operator':
-            _offspring = program1.mutate_operator(inplace=False)
-
-        elif gen_op == 'mutate_leaf':
-            _offspring = program1.mutate_leaf(inplace=False)
-
-        elif gen_op == 'simplification':
-            _offspring = program1.simplify(inplace=False)
-
-        elif gen_op == 'recalibrate':
-            _offspring = program1.recalibrate(inplace=False)
-
-        elif gen_op == 'do_nothing':
-            _offspring = program1
-        else:
-            logging.warning(
-                f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize'
-            )
-            return program1
-
-        # Add the fitness to the object after the cross_over or mutation
-        _offspring.compute_fitness(
-            fitness_functions=fitness_functions, data=data)
-
-        # Reset the hash to force the re-computation
-        _offspring._hash = None
-
-        return _offspring
+    def _get_offspring_batch(self, data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: Population, tournament_size: int, generation: int,
+                             batch_size: int) -> Program:
+        offs = list()
+        for _ in range(batch_size):
+            offs.append(self._get_offspring(data=data, genetic_operators_frequency=genetic_operators_frequency,
+                        fitness_functions=fitness_functions, population=population, tournament_size=tournament_size, generation=generation))
+        return offs
 
     @property
     def metadata(self) -> Dict[str, Any]:
@@ -969,11 +1005,14 @@ class SymbolicRegressor:
                         references[index] = p_i + 1e-1
 
             self.fpf_hypervolume = _HyperVolume(references).compute(points)
-            self.fpf_hypervolume_history.append(self.fpf_hypervolume)
 
         except ValueError:
             self.fpf_hypervolume = np.nan
-            self.fpf_hypervolume_history.append(self.fpf_hypervolume)
+
+        self.fpf_stats.loc[self.generation, 'n_individuals'] = len(
+            self.first_pareto_front)
+        self.fpf_stats.loc[self.generation,
+                           'fpf_hypervolume_history'] = self.fpf_hypervolume
 
     def _print_first_pareto_front(self):
         """
@@ -996,6 +1035,37 @@ class SymbolicRegressor:
                 print()
                 print(f'\t{p.fitness}')
                 print()
+
+    def spearman_diversity(self, data: Union[dict, pd.Series, pd.DataFrame]) -> float:
+        """
+        This method computes the diversity of the first pareto front using the spearman correlation
+
+        Args:
+            - None
+
+        Returns:
+            - diversity: float
+                The spearman diversity of the first pareto front
+
+        """
+
+        if len(self.first_pareto_front) == 1:
+            self.fpf_spearman_diversity = 0
+        else:
+            diversities = list()
+            for index, program in enumerate(self.first_pareto_front):
+                for other_program in self.first_pareto_front[index + 1:]:
+                    diversities.append(spearmanr(program.evaluate(
+                        data), other_program.evaluate(data)))
+
+            self.fpf_spearman_diversity = np.mean(1 - np.array(diversities))
+
+        self.fpf_stats.loc[self.generation, 'n_individuals'] = len(
+            self.first_pareto_front)
+        self.fpf_stats.loc[self.generation,
+                           'fpf_spearman_diversity'] = self.fpf_spearman_diversity
+
+        return self.fpf_spearman_diversity
 
     @property
     def summary(self):
@@ -1044,15 +1114,17 @@ class SymbolicRegressor:
 
         if len(self.first_pareto_front) == 1:
             self.fpf_tree_diversity = 0
-            self.fpf_tree_diversity_history.append(self.fpf_tree_diversity)
-            return self.fpf_tree_diversity
+        else:
+            diversities = list()
+            for index, program in enumerate(self.first_pareto_front):
+                for other_program in self.first_pareto_front[index + 1:]:
+                    diversities.append(program.similarity(other_program))
 
-        diversities = list()
-        for index, program in enumerate(self.first_pareto_front):
-            for other_program in self.first_pareto_front[index + 1:]:
-                diversities.append(program.similarity(other_program))
+            self.fpf_tree_diversity = np.mean(1 - np.array(diversities))
 
-        self.fpf_tree_diversity = 1 - np.mean(diversities)
-        self.fpf_tree_diversity_history.append(self.fpf_tree_diversity)
+        self.fpf_stats.loc[self.generation, 'n_individuals'] = len(
+            self.first_pareto_front)
+        self.fpf_stats.loc[self.generation,
+                           'fpf_tree_diversity'] = self.fpf_tree_diversity
 
         return self.fpf_tree_diversity
