@@ -22,7 +22,10 @@ class BaseClassification(BaseFitness):
         self.classification_metric = None
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
-
+        
+        if not program.is_valid:
+            return np.nan
+        
         self.optimize(program=program, data=data)
 
         if not self.classification_metric:

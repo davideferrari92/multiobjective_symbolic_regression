@@ -22,8 +22,6 @@ class BaseCorrelation(BaseFitness):
         if not program.is_valid:
             return np.nan
 
-        self.optimize(program=program, data=data)
-
         if self.logistic:
             program_to_evaluate = program.to_logistic(inplace=False)
             ground_truth = data[self.target].astype('int')

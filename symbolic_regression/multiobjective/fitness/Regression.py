@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from astropy import stats
 from sklearn.preprocessing import MinMaxScaler
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
@@ -19,16 +20,15 @@ class WeightedMeanSquaredError(BaseFitness):
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
 
+        if not program.is_valid:
+            return np.nan
+
         self.optimize(program=program, data=data)
 
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
 
         pred = program_to_evaluate.evaluate(data=data)
-
-        if self.weights not in data.columns:
-            data[self.weights] = self._create_regression_weights(
-                data=data, target=self.target, bins=self.bins)
 
         try:
             wmse = (((pred - data[self.target])**2) * data[self.weights]
@@ -215,3 +215,23 @@ class ValueRange(BaseFitness):
                      self.lower_bound - np.array(pred), 0))
 
         return upper_bound_constraint + lower_bound_constraint
+
+
+def create_regression_weights(data: pd.DataFrame, target: str, bins: int = None):
+
+    y = np.array(data[target])
+
+    if not bins:
+        count, division = stats.histogram(y, bins='knuth', density=True)
+    else:
+        count, division = stats.histogram(y, bins=bins, density=True)
+
+    effective_bins = np.sum((count != 0).astype(int))
+    aw = (np.sum(count)/effective_bins)
+    weights = np.where(count != 0., aw/count, 0.)
+    w_column = np.zeros((y.size,))  # create the weight column
+
+    for i in range(len(count)):
+        w_column += (y >= division[i])*(y <= division[i+1])*weights[i]
+
+    return w_column
