@@ -495,7 +495,7 @@ class SymbolicRegressor:
             if self.generation > 0:
                 minutes_total = round(np.sum(self.elapsed_time)/60)
                 if minutes_total >= 60:
-                    time_total = f"{round(minutes_total/60)}:{round(minutes_total%60):02d} hours"
+                    time_total = f"{round(np.floor(minutes_total/60))}:{round(minutes_total%60):02d} hours"
                 elif np.sum(self.elapsed_time) > 60:
                     time_total = f"{minutes_total} mins"
                 else:
@@ -503,14 +503,14 @@ class SymbolicRegressor:
 
                 seconds_iter = np.mean(self.elapsed_time)
                 if seconds_iter >= 60:
-                    seconds_iter = f"{round(seconds_iter/60)}:{round(seconds_iter%60):02d} ± {round(np.std(self.elapsed_time)/60)}:{round(np.std(self.elapsed_time)%60):02d} mins"
+                    seconds_iter = f"{round(np.floor(seconds_iter/60))}:{round(seconds_iter%60):02d} ± {round(np.std(self.elapsed_time)/60)}:{round(np.std(self.elapsed_time)%60):02d} mins"
                 else:
                     seconds_iter = f"{round(seconds_iter, 2)} ± {round(np.std(self.elapsed_time), 1)} secs"
 
                 expected_time = np.mean(
                     self.elapsed_time) * (self.generations_to_train - self.generation)/60
                 if expected_time >= 60:
-                    expected_time = f"{round(expected_time/60)}:{round(expected_time%60):02d} hours"
+                    expected_time = f"{round(np.floor(expected_time/60))}:{round(expected_time%60):02d} hours"
                 else:
                     expected_time = f"{round(expected_time)}:{round((expected_time%1)*60):02d} mins"
             else:
@@ -519,7 +519,7 @@ class SymbolicRegressor:
                 expected_time = 'Unknown'
 
             if total_generation_time >= 60:
-                generation_time = f"{round(total_generation_time/60)}:{round(total_generation_time%60):02d} mins"
+                generation_time = f"{round(np.floor(total_generation_time/60))}:{round(total_generation_time%60):02d} mins"
             else:
                 generation_time = f"{round(total_generation_time)} secs"
 

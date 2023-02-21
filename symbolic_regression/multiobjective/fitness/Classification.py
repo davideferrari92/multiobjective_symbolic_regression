@@ -46,6 +46,8 @@ class BaseClassification(BaseFitness):
             metric = self.classification_metric(ground_truth, pred)
         except ValueError:
             metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
 
         if self.one_minus:
             return 1 - metric
