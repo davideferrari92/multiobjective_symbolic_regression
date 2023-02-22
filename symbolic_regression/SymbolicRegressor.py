@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import random
@@ -56,7 +57,6 @@ class SymbolicRegressor:
         self.client_name: str = client_name
         self.checkpoint_file: str = checkpoint_file
         self.checkpoint_frequency: int = checkpoint_frequency
-        self.elapsed_time: list = list()
         self.features: List = None
         self.operations: List = None
         self.population_size: int = population_size
@@ -75,6 +75,7 @@ class SymbolicRegressor:
         self.fitness_functions: List[BaseFitness] = None
         self.first_pareto_front_history: List = list()
         self.fpf_hypervolume: float = None
+        self.fpf_hypervolume_reference: float = None
         self.fpf_tree_diversity: float = None
         self.fpf_spearman_diversity: float = None
         self.fpf_stats: pd.DataFrame = pd.DataFrame()
@@ -136,6 +137,62 @@ class SymbolicRegressor:
             istances.append(row)
 
         return pd.DataFrame(istances)
+
+    def compute_hypervolume(self):
+        """
+        This method computes the hypervolume of the current population
+
+        The hypervolume is computed using the hypervolume reference point
+        defined in the fitness functions.
+
+        If the reference point is not defined the hypervolume is computed 
+        using the maximum value of each fitness function as reference point.
+
+        If the reference point is defined but the fitness function is not
+        a minimization problem, the hypervolume is computed using the maximum
+        value of each fitness function as reference point.
+
+        If the reference point is defined but is lower than the maximum value
+        of the fitness function, the hypervolume is computed using the maximum
+        value of each fitness function as reference point and the reference
+        point is updated to the new value.
+
+        Args:
+            - None
+
+        Returns:
+            - hypervolume: float
+                The hypervolume of the current population
+        """
+
+        fitness_to_hypervolume = list()
+        for fitness in self.fitness_functions:
+            if fitness.hypervolume_reference and fitness.minimize:
+                fitness_to_hypervolume.append(fitness)
+
+        points = np.array([np.array([p.fitness[ftn.label] for ftn in fitness_to_hypervolume])
+                           for p in self.first_pareto_front])
+
+        references = np.array(
+            [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
+
+        try:
+            points = points[np.sum((points - references)
+                                   <= 0, axis=1) == points.shape[1]]
+
+            self.fpf_hypervolume = _HyperVolume(references).compute(points)
+
+        except ValueError:
+            self.fpf_hypervolume = np.nan
+
+        self.fpf_stats.loc[self.generation, 'n_individuals'] = len(
+            self.first_pareto_front)
+        self.fpf_stats.loc[self.generation,
+                           'fpf_hypervolume'] = self.fpf_hypervolume
+        self.fpf_stats.loc[self.generation,
+                           'fpf_hypervolume_reference'] = self.fpf_hypervolume_reference
+
+        self.fpf_hypervolume_reference = np.product(references)
 
     def compute_performance(self, data: Union[dict, pd.DataFrame, pd.Series], fitness_functions: List[BaseFitness] = None):
         """
@@ -465,10 +522,11 @@ class SymbolicRegressor:
             self.population = Population(executor.map(
                 lambda p: self.generate_individual(*p),
                 zip(
-                    repeat(data, self.population_size),
+                    repeat(copy.deepcopy(data), self.population_size),
                     repeat(self.features, self.population_size),
                     repeat(self.operations, self.population_size),
-                    repeat(self.fitness_functions, self.population_size),
+                    repeat(copy.deepcopy(self.fitness_functions),
+                           self.population_size),
                     repeat(self.const_range, self.population_size),
                     repeat(self.parsimony, self.population_size),
                     repeat(self.parsimony_decay, self.population_size),
@@ -488,29 +546,28 @@ class SymbolicRegressor:
                 return
 
             start_time_generation = time.perf_counter()
-            
+
             for p in self.population:
                 p.programs_dominates: List[Program] = list()
                 p.programs_dominated_by: List[Program] = list()
 
-
             if self.generation > 0:
-                minutes_total = round(np.sum(self.elapsed_time)/60)
+                minutes_total = round(np.sum(self._total_time)/60)
                 if minutes_total >= 60:
                     time_total = f"{round(minutes_total/60)}:{round(minutes_total%60):02d} hours"
-                elif np.sum(self.elapsed_time) > 60:
+                elif np.sum(self._total_time) > 60:
                     time_total = f"{minutes_total} mins"
                 else:
-                    time_total = f"{round(np.sum(self.elapsed_time))} secs"
+                    time_total = f"{round(np.sum(self._total_time))} secs"
 
-                seconds_iter = np.mean(self.elapsed_time)
+                seconds_iter = np.mean(self._total_time)
                 if seconds_iter >= 60:
-                    seconds_iter = f"{round(seconds_iter//60)}:{round(seconds_iter%60):02d} ± {round(np.std(self.elapsed_time)//60)}:{round(np.std(self.elapsed_time)%60):02d} mins"
+                    seconds_iter = f"{round(seconds_iter//60)}:{round(seconds_iter%60):02d} ± {round(np.std(self._total_time)//60)}:{round(np.std(self._total_time)%60):02d} mins"
                 else:
-                    seconds_iter = f"{round(seconds_iter, 2)} ± {round(np.std(self.elapsed_time), 1)} secs"
+                    seconds_iter = f"{round(seconds_iter, 2)} ± {round(np.std(self._total_time), 1)} secs"
 
                 expected_time = np.mean(
-                    self.elapsed_time) * (self.generations_to_train - self.generation)/60
+                    self._total_time) * (self.generations_to_train - self.generation)/60
                 if expected_time >= 60:
                     expected_time = f"{round(expected_time//60)}:{round(expected_time%60):02d} hours"
                 else:
@@ -539,10 +596,13 @@ class SymbolicRegressor:
             offsprings = list(executor.map(
                 lambda p: self._get_offspring(*p),
                 zip(
-                    repeat(data, self.population_size),
-                    repeat(self.genetic_operators_frequency, self.population_size),
-                    repeat(self.fitness_functions, self.population_size),
-                    repeat(self.population.as_binary(), self.population_size),
+                    repeat(copy.deepcopy(data), self.population_size),
+                    repeat(self.genetic_operators_frequency,
+                           self.population_size),
+                    repeat(copy.deepcopy(self.fitness_functions),
+                           self.population_size),
+                    repeat(copy.deepcopy(self.population.as_binary()),
+                           self.population_size),
                     repeat(self.tournament_size, self.population_size),
                     repeat(self.generation, self.population_size),
                 )
@@ -593,10 +653,11 @@ class SymbolicRegressor:
                 refill = list(executor.map(
                     lambda p: self.generate_individual(*p),
                     zip(
-                        repeat(data, missing_elements),
+                        repeat(copy.deepcopy(data), missing_elements),
                         repeat(self.features, missing_elements),
                         repeat(self.operations, missing_elements),
-                        repeat(self.fitness_functions, missing_elements),
+                        repeat(copy.deepcopy(self.fitness_functions),
+                               missing_elements),
                         repeat(self.const_range, missing_elements),
                         repeat(self.parsimony, missing_elements),
                         repeat(self.parsimony_decay, missing_elements),
@@ -672,12 +733,8 @@ class SymbolicRegressor:
                     f"Training terminated after {self.generation} generations")
                 return
 
-            total_generation_time = round(
-                end_time_generation - start_time_generation, 1)
-            self.elapsed_time.append(total_generation_time)
-
             self.times.loc[self.generation,
-                           "generation_time"] = total_generation_time
+                           "generation_time"] = end_time_generation - start_time_generation
 
     def generate_individual(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85) -> Program:
         """
@@ -784,7 +841,7 @@ class SymbolicRegressor:
             we use the pareto front rank and the crowding distance.
 
             Args:
-                - population: List[Program]
+                - population: Population
                     The population of programs
                 - tournament_size: int
                     The size of the tournament
@@ -826,7 +883,8 @@ class SymbolicRegressor:
         import signal
         from contextlib import contextmanager
 
-        class TimeoutException(Exception): pass
+        class TimeoutException(Exception):
+            pass
 
         @contextmanager
         def time_limit(seconds):
@@ -852,7 +910,7 @@ class SymbolicRegressor:
 
         program1 = _tournament_selection(
             population=population, tournament_size=tournament_size, generation=generation)
-        
+
         try:
             with time_limit(20):
                 if program1 is None or not program1.is_valid:
@@ -871,7 +929,8 @@ class SymbolicRegressor:
                         population=population, tournament_size=tournament_size, generation=generation)
                     if program2 is None or not program2.is_valid:
                         return program1
-                    _offspring = program1.cross_over(other=program2, inplace=False)
+                    _offspring = program1.cross_over(
+                        other=program2, inplace=False)
 
                 elif gen_op == 'randomize':
                     # Will generate a new tree as other
@@ -904,6 +963,7 @@ class SymbolicRegressor:
                     logging.warning(
                         f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize'
                     )
+
                     return program1
 
                 # Add the fitness to the object after the cross_over or mutation
@@ -913,11 +973,10 @@ class SymbolicRegressor:
                 _offspring._hash = None
 
                 return _offspring
-            
+
         except TimeoutException as e:
             logging.warning(f'Genetic operation {gen_op} timed out')
             return program1
-
 
     def _get_offspring_batch(self, data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: Population, tournament_size: int, generation: int,
                              batch_size: int) -> Program:
@@ -946,7 +1005,7 @@ class SymbolicRegressor:
             'client_name': self.client_name,
             'const_range': self.const_range,
             'converged_generation': self.converged_generation,
-            'elapsed_time': np.sum(self.elapsed_time),
+            '_total_time': np.sum(self._total_time),
             'fpf_hypervolume': self.fpf_hypervolume,
             'fpf_tree_diversity': self.fpf_tree_diversity,
             'generation': self.generation,
@@ -959,60 +1018,6 @@ class SymbolicRegressor:
         }
 
         return metadata
-
-    def compute_hypervolume(self):
-        """
-        This method computes the hypervolume of the current population
-
-        The hypervolume is computed using the hypervolume reference point
-        defined in the fitness functions.
-
-        If the reference point is not defined the hypervolume is computed 
-        using the maximum value of each fitness function as reference point.
-
-        If the reference point is defined but the fitness function is not
-        a minimization problem, the hypervolume is computed using the maximum
-        value of each fitness function as reference point.
-
-        If the reference point is defined but is lower than the maximum value
-        of the fitness function, the hypervolume is computed using the maximum
-        value of each fitness function as reference point and the reference
-        point is updated to the new value.
-
-        Args:
-            - None
-
-        Returns:
-            - hypervolume: float
-                The hypervolume of the current population
-        """
-
-        fitness_to_hypervolume = list()
-        for fitness in self.fitness_functions:
-            if fitness.hypervolume_reference and fitness.minimize:
-                fitness_to_hypervolume.append(fitness)
-
-        points = [np.array([p.fitness[ftn.label] for ftn in fitness_to_hypervolume])
-                  for p in self.first_pareto_front]
-
-        references = np.array(
-            [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
-
-        try:
-            for p_list in points:
-                for index, (p_i, r_i) in enumerate(zip(p_list, references)):
-                    if p_i > r_i and not p_i == float('inf'):
-                        references[index] = p_i + 1e-1
-
-            self.fpf_hypervolume = _HyperVolume(references).compute(points)
-
-        except ValueError:
-            self.fpf_hypervolume = np.nan
-
-        self.fpf_stats.loc[self.generation, 'n_individuals'] = len(
-            self.first_pareto_front)
-        self.fpf_stats.loc[self.generation,
-                           'fpf_hypervolume_history'] = self.fpf_hypervolume
 
     def _print_first_pareto_front(self):
         """
@@ -1028,7 +1033,8 @@ class SymbolicRegressor:
         if self.verbose > 0:
             print()
             print(
-                f"Population of {len(self.population)} elements and average complexity of {round(self.average_complexity,1)} and 1PF hypervolume of {round(self.fpf_hypervolume, 3)}\n")
+                f"Population of {len(self.population)} elements and average complexity of {round(self.average_complexity,1)} and 1PF hypervolume of {round(self.fpf_hypervolume, 2)}/{int(self.fpf_hypervolume_reference)}\n")
+        if self.verbose > 1:
             print(f"\tBest individual(s) in the first Pareto Front")
             for index, p in enumerate(self.first_pareto_front):
                 print(f'{index})\t{p.program}')
@@ -1093,6 +1099,13 @@ class SymbolicRegressor:
             istances.append(row)
 
         return pd.DataFrame(istances)
+
+    @property
+    def _total_time(self) -> float:
+        tot = self.times['generation_time'].sum()
+        if pd.isna(tot):
+            return 0
+        return tot
 
     def tree_diversity(self) -> float:
         """

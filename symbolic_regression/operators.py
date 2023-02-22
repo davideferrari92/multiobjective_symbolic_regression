@@ -143,14 +143,14 @@ OPERATOR_SQRT = {
     "format_tf": 'tf.sqrt({})',
     "arity": 1,
     "symbol": "sqrt",
-    "format_str": "sqrt({})"}
+    "format_str": "Sqrt({})"}
 
 OPERATOR_MAX = {
     "func": np.maximum,
     "format_tf": 'tf.maximum({}, {})',
     "arity": 2,
     "symbol": "max",
-    "format_str": "max({}, {})"
+    "format_str": "Max({}, {})"
 }
 
 OPERATOR_MIN = {
@@ -158,7 +158,7 @@ OPERATOR_MIN = {
     "format_tf": 'tf.minimum({}, {})',
     "arity": 2,
     "symbol": "min",
-    "format_str": "min({}, {})"
+    "format_str": "Min({}, {})"
 }
 
 OPERATOR_SIGMOID = {

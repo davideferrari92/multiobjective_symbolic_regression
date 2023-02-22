@@ -1,13 +1,11 @@
 import copy
 import logging
 import random
-import time
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import sympy
-from sympy.parsing.sympy_parser import parse_expr
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
@@ -354,6 +352,8 @@ class Program:
         def gen_feature(feature: str, father: Union[Node, None], is_constant: bool = False):
             return FeatureNode(feature=feature, father=father, is_constant=is_constant)
 
+        self._override_is_valid = True
+
         # We can either pass dedicated parsimony and parsimony_decay values or use the ones
         # defined in the class
         if not parsimony:
@@ -393,7 +393,10 @@ class Program:
             # Otherwise a constant value will be generated.
 
             selector_feature = random.random()
-            if selector_feature > (1 / len(self.features)) and not force_constant:
+            # To prevent constant features to be underrepresented, we set a threshold
+            threshold = max(.1, (1 / len(self.features)))
+
+            if selector_feature > threshold and not force_constant:
                 # A Feature from the dataset
 
                 feature = random.choice(self.features)
@@ -606,7 +609,7 @@ class Program:
                  inplace: bool = False) -> 'Program':
 
         if not constants_optimization or not self.is_valid:
-            return False
+            return self
 
         task = constants_optimization_conf['task']
 
@@ -666,14 +669,39 @@ class Program:
 
             return to_optimize
 
-    def _select_random_node(self) -> Node:
+    def _select_random_node(self, root_node: Union[OperationNode, FeatureNode, InvalidNode], depth: float = .8, only_operations: bool = False) -> Union[OperationNode, FeatureNode]:
         """ This method return a random node of a sub-tree starting from root_node.
+
+        Args:
+            - root_node: OperationNode, FeatureNode, InvalidNode
+                The root node of the sub-tree.
+            - depth: float (default=.8)
+                The depth to which select the node. The value must be between 0 and 1.
+            - only_operations: bool (default=False)
+                If True, the method will return only an OperationNode, otherwise it can return a FeatureNode as well.
+
+        Returns:
+            - OperationNode, FeatureNode
+                The selected node.
         """
 
-        try:
-            return random.choice(self.all_operations)
-        except IndexError:  # When the root is also a FeatureNode or an InvalidNode
+        if isinstance(root_node, InvalidNode):
             return None
+
+        if isinstance(root_node, FeatureNode):
+            if only_operations:
+                return root_node.father
+            return root_node
+
+        if isinstance(root_node, OperationNode):
+
+            if random.random() < depth:
+                # Select a random operand
+                operand = random.choice(root_node.operands)
+
+                return self._select_random_node(root_node=operand, depth=depth * .9, only_operations=only_operations)
+            else:
+                return root_node
 
     def set_constants(self, new: List[float]) -> None:
         """ This method allow to overwrite the value of constants after the neuron-based optimization
@@ -747,26 +775,42 @@ class Program:
         if self._hash:
             return self
 
-        def simplify_program(program: str) -> Program:
+        def simplify_program(program: Union[Program, str]) -> Union[FeatureNode, OperationNode, InvalidNode]:
             """ This function simplify a program using a SymPy backend
 
             try: the root node of the program, not the Program object
 
             """
             try:
-                simplified = parse_expr(program, evaluate=True)
+                if isinstance(program, Program) and isinstance(
+                        program.program, FeatureNode):
+                    return program.program
+
+                logging.debug(f'Simplifying program {program}')
+
+                try:
+                    if isinstance(program, Program):
+                        simplified = sympy.parse_expr(program.program.render())
+                    else:
+                        simplified = sympy.parse_expr(program)
+                except ValueError:
+                    program._override_is_valid = False
+                    return program.program
+                except TypeError:
+                    program._override_is_valid = False
+                    return program.program
+                logging.debug(
+                    f'Extracting the program tree from the simplified')
 
                 new_program = extract_operation(element_to_extract=simplified,
                                                 father=None)
 
+                logging.debug(f'Simplified program {new_program}')
+
                 return new_program
 
-            except ValueError:
-                return False
-            except TypeError:
-                return False
             except UnboundLocalError:
-                return program
+                return program.program
 
         if inplace:
             to_return = self
@@ -776,7 +820,7 @@ class Program:
         if inject:
             simp = simplify_program(inject)
         else:
-            simp = simplify_program(to_return.program.render())
+            simp = simplify_program(to_return)
 
         to_return.program = simp
         if not simp:
@@ -837,6 +881,9 @@ class Program:
         alpha = target_max + (target_max - target_min) * \
             y_pred_max / (y_pred_min - y_pred_max)
         beta = (target_max - target_min) / (y_pred_max - y_pred_min)
+
+        if pd.isna(alpha) or pd.isna(beta):
+            return prog
 
         add_node = OperationNode(
             operation=OPERATOR_ADD['func'],
@@ -979,13 +1026,13 @@ class Program:
 
         offspring = copy.deepcopy(self.program)
 
-        cross_over_point1 = self._select_random_node()
+        cross_over_point1 = self._select_random_node(root_node=offspring)
 
         if not cross_over_point1:
             return self
 
         cross_over_point2 = copy.deepcopy(
-            self._select_random_node())
+            self._select_random_node(root_node=other.program))
 
         cross_over_point2.father = cross_over_point1.father
 
@@ -1038,22 +1085,24 @@ class Program:
 
         offspring = copy.deepcopy(self.program)
 
-        mutate_point = self._select_random_node()
+        mutate_point = self._select_random_node(root_node=offspring)
 
         if not mutate_point:
-            mutate_point = offspring
+            new = Program(operations=self.operations,
+                          features=self.features,
+                          const_range=self.const_range,
+                          parsimony=self.parsimony,
+                          parsimony_decay=self.parsimony_decay)
 
-        try:
-            child_to_mutate = random.randrange(mutate_point.arity)
-            mutated = self._generate_tree(father=mutate_point,
-                                          depth=int(self.program_depth / 2))
-            #logging.debug(f'\n\nMutating this\n\n{mutate_point.operands[child_to_mutate]}\n\nin this\n\n{mutated}\n\n')
+            new.init_program()
+            return new
 
-            mutate_point.operands[child_to_mutate] = mutated
-        except ValueError:  # Case in which the tree has depth 0 with a FeatureNode as root
-            pass
-            #logging.debug(f'No child to mutate found in {mutate_point}')
+        mutated = self._generate_tree(
+            father=mutate_point.father, parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
 
+        if mutate_point.father:
+            mutate_point.father.operands[
+                mutate_point.father.operands.index(mutate_point)] = mutated
         if inplace:
             self.program = offspring
             return self
@@ -1082,11 +1131,9 @@ class Program:
                 The new program after the insertion is applied
         """
         offspring = copy.deepcopy(self.program)
-        mutate_point = self._select_random_node()
+        mutate_point = self._select_random_node(root_node=offspring)
 
-        if mutate_point:
-            mutate_father = mutate_point.father
-        else:  # When the mutate point is None, can happen when program is only a FeatureNode
+        if not mutate_point:
             new = Program(operations=self.operations,
                           features=self.features,
                           const_range=self.const_range,
@@ -1096,11 +1143,11 @@ class Program:
             new.init_program()
             return new
 
-        new_node = self._generate_tree(father=mutate_father, depth=1)
+        new_node = self._generate_tree(father=mutate_point.father, depth=1)
 
-        if mutate_father:  # Can be None if it is the root
+        if mutate_point.father:  # Can be None if it is the root
             # Is a new tree of only one OperationNode
-            mutate_father.operands[mutate_father.operands.index(
+            mutate_point.father.operands[mutate_point.father.operands.index(
                 mutate_point)] = new_node
 
         # Choose a random children to attach the previous mutate_point
@@ -1110,7 +1157,7 @@ class Program:
         mutate_point.father = new_node
 
         # If the new_node is also the new root, offspring need to be updated.
-        if not mutate_father:
+        if not mutate_point.father:
             offspring = new_node
 
         if inplace:
@@ -1141,7 +1188,10 @@ class Program:
                 The new program after the deletion is applied
         """
         offspring = copy.deepcopy(self.program)
-        mutate_point = self._select_random_node()
+        mutate_point = self._select_random_node(root_node=offspring)
+
+        if isinstance(mutate_point, FeatureNode):
+            return self
 
         if mutate_point:
             mutate_father = mutate_point.father
@@ -1221,7 +1271,8 @@ class Program:
         """
         offspring = copy.deepcopy(self.program)
 
-        mutate_point = self._select_random_node()
+        mutate_point = self._select_random_node(
+            root_node=offspring, only_operations=True)
 
         if not mutate_point:  # Only a FeatureNode without any OperationNode
             new = Program(program=offspring,

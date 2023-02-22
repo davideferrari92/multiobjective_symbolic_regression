@@ -1,3 +1,5 @@
+from typing import Union
+
 import sympy
 
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
@@ -5,7 +7,7 @@ from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
 from symbolic_regression.operators import *
 
 
-def extract_operation(element_to_extract, father: Node = None) -> Node:
+def extract_operation(element_to_extract: Union[FeatureNode, OperationNode, InvalidNode], father: Node = None) -> Node:
     """ Extract the operation from the sympy expression and return a tree of OperationNode and FeatureNode.
 
     Args:
@@ -57,6 +59,9 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
 
     elif str(element.func) == 'Max':
         current_operation = OPERATOR_MAX
+
+    elif str(element.func) == 'Sqrt':
+        current_operation = OPERATOR_SQRT
 
     if current_operation:
         """ Case in which the element is an operation.
@@ -141,11 +146,11 @@ def extract_operation(element_to_extract, father: Node = None) -> Node:
             new_feature = FeatureNode(feature=str(
                 element), is_constant=False, father=father)
 
-        if isinstance(element, sympy.core.numbers.Float) or isinstance(element, sympy.core.numbers.Integer) or isinstance(element, sympy.core.numbers.Rational) or isinstance(element, sympy.core.numbers.NegativeOne):
+        elif isinstance(element, sympy.core.numbers.Float) or isinstance(element, sympy.core.numbers.Integer) or isinstance(element, sympy.core.numbers.Rational) or isinstance(element, sympy.core.numbers.NegativeOne):
             new_feature = FeatureNode(feature=float(
                 element), is_constant=True, father=father)
 
-        if element == sympy.simplify('E'):
+        elif element == sympy.simplify('E'):
             new_feature = FeatureNode(feature=np.exp(
                 1.), is_constant=True, father=father)
 

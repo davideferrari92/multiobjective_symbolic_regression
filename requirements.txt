@@ -1,9 +1,7 @@
 astropy
-joblib
 loky
 numpy
 pandas
-pygmo
 scikit-learn
 scipy
 sympy==1.9

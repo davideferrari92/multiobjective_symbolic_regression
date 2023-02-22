@@ -43,15 +43,14 @@ class BaseFitness:
         raise NotImplementedError
 
     def optimize(self, program, data: pd.DataFrame) -> None:
-        if not self.constants_optimization:
-            return
-
-        program.optimize(
-            data=data,
-            target=self.target,
-            weights=self.weights,
-            constants_optimization=self.constants_optimization,
-            constants_optimization_conf=self.constants_optimization_conf,
-            inplace=True
-        )
-
+        if self.constants_optimization:
+            program.optimize(
+                data=data,
+                target=self.target,
+                weights=self.weights,
+                constants_optimization=self.constants_optimization,
+                constants_optimization_conf=self.constants_optimization_conf,
+                inplace=True
+            )
+            
+        return program
