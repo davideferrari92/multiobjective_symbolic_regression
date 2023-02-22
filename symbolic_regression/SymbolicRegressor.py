@@ -552,22 +552,21 @@ class SymbolicRegressor:
                 p.programs_dominated_by: List[Program] = list()
 
             if self.generation > 0:
-                minutes_total = round(np.sum(self._total_time)/60)
+                minutes_total = round(self._total_time/60)
                 if minutes_total >= 60:
                     time_total = f"{round(minutes_total/60)}:{round(minutes_total%60):02d} hours"
-                elif np.sum(self._total_time) > 60:
+                elif self._total_time > 60:
                     time_total = f"{minutes_total} mins"
                 else:
-                    time_total = f"{round(np.sum(self._total_time))} secs"
+                    time_total = f"{round(self._total_time)} secs"
 
-                seconds_iter = np.mean(self._total_time)
+                seconds_iter = self.times['generation_time'].mean()
                 if seconds_iter >= 60:
-                    seconds_iter = f"{round(seconds_iter//60)}:{round(seconds_iter%60):02d} ± {round(np.std(self._total_time)//60)}:{round(np.std(self._total_time)%60):02d} mins"
+                    seconds_iter = f"{round(seconds_iter//60)}:{round(seconds_iter%60):02d} ± {round(self.times['generation_time'].std()//60)}:{round(self.times['generation_time'].std()%60):02d} mins"
                 else:
-                    seconds_iter = f"{round(seconds_iter, 2)} ± {round(np.std(self._total_time), 1)} secs"
+                    seconds_iter = f"{round(seconds_iter, 2)} ± {round(self.times['generation_time'].std(), 1)} secs"
 
-                expected_time = np.mean(
-                    self._total_time) * (self.generations_to_train - self.generation)/60
+                expected_time = self.times['generation_time'].mean() * (self.generations_to_train - self.generation)/60
                 if expected_time >= 60:
                     expected_time = f"{round(expected_time//60)}:{round(expected_time%60):02d} hours"
                 else:
@@ -733,8 +732,9 @@ class SymbolicRegressor:
                     f"Training terminated after {self.generation} generations")
                 return
 
+            total_generation_time = end_time_generation - start_time_generation
             self.times.loc[self.generation,
-                           "generation_time"] = end_time_generation - start_time_generation
+                           "generation_time"] = total_generation_time
 
     def generate_individual(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85) -> Program:
         """
@@ -1005,7 +1005,6 @@ class SymbolicRegressor:
             'client_name': self.client_name,
             'const_range': self.const_range,
             'converged_generation': self.converged_generation,
-            '_total_time': np.sum(self._total_time),
             'fpf_hypervolume': self.fpf_hypervolume,
             'fpf_tree_diversity': self.fpf_tree_diversity,
             'generation': self.generation,
@@ -1014,6 +1013,7 @@ class SymbolicRegressor:
             'parsimony_decay': self.parsimony_decay,
             'parsimony': self.parsimony,
             'population_size': self.population_size,
+            'total_time': self._total_time,
             'tournament_size': self.tournament_size,
         }
 
@@ -1102,6 +1102,8 @@ class SymbolicRegressor:
 
     @property
     def _total_time(self) -> float:
+        if not 'generation_time' in self.times.columns:
+            return 0
         tot = self.times['generation_time'].sum()
         if pd.isna(tot):
             return 0
