@@ -608,7 +608,7 @@ class SymbolicRegressor:
 
                 seconds_iter = self.times['time_generation_total'].mean()
                 if seconds_iter >= 60 and not pd.isna(self.times['time_generation_total'].std()):
-                    seconds_iter = f"{round(seconds_iter//60)}:{round(seconds_iter%60):02d} ± {round(self.times['generation_time'].std()//60)}:{round(self.times['generation_time'].std()%60):02d} mins"
+                    seconds_iter = f"{round(seconds_iter//60)}:{round(seconds_iter%60):02d} ± {round(self.times['time_generation_total'].std()//60)}:{round(self.times['time_generation_total'].std()%60):02d} mins"
                 else:
                     seconds_iter = f"{round(seconds_iter, 2)} ± {round(self.times['time_generation_total'].std(), 1)} secs"
 
