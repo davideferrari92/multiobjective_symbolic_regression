@@ -20,9 +20,6 @@ class Wasserstein(BaseFitness):
 
     def evaluate(self, program: Program, data: pd.DataFrame) -> float:
 
-        if not program.is_valid:
-            return np.nan
-
         if not hasattr(self, 'F_y'):
             raise AttributeError(
                 'Wasserstein distance requires the target distribution F_y to be provided in the data argument.')

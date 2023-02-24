@@ -129,6 +129,7 @@ class Program:
             setattr(result, k, copy.deepcopy(v, memo))
 
         result.program_hypervolume = np.nan
+        result._override_is_valid = True
         return result
 
     def __lt__(self, other: 'Program') -> bool:
@@ -228,7 +229,8 @@ class Program:
             self.simplify(inplace=True)
         except ValueError:
             self._override_is_valid = False
-            return None
+            self.fitness = {ftn.label: np.inf for ftn in self.fitness_functions}
+            return
 
         _converged: List[bool] = list()
 
@@ -240,11 +242,9 @@ class Program:
                 fitness_value = round(ftn.evaluate(program=self, data=data), 5)
             except KeyError:
                 fitness_value = np.inf
-                self._override_is_valid = False
 
             if pd.isna(fitness_value):
                 fitness_value = np.inf
-                self._override_is_valid = False
 
             self.fitness[ftn.label] = fitness_value
             self.is_fitness_to_minimize[ftn.label] = ftn.minimize

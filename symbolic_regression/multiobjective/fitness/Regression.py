@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import pandas as pd
 from astropy import stats
@@ -24,7 +25,6 @@ class WeightedMeanSquaredError(BaseFitness):
             return np.nan
 
         program = self.optimize(program=program, data=data)
-
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
 
