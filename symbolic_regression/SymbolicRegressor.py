@@ -377,9 +377,15 @@ class SymbolicRegressor:
                 # Ignore the fitness which are not to be optimized
                 if program1.is_fitness_to_minimize[this_fitness] == False:
                     continue
+                
+                try:
+                    p1_fitness = program1.fitness[this_fitness]
+                    p2_fitness = program2.fitness[this_fitness]
+                except KeyError:
+                    break
 
-                d = abs(program1.fitness[this_fitness]) - \
-                    abs(program2.fitness[this_fitness])
+                d = abs(p1_fitness) - \
+                    abs(p2_fitness)
 
                 if d < 0:
                     at_least_one_less_than_zero = True
@@ -662,13 +668,13 @@ class SymbolicRegressor:
                 if self.verbose > 0:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
                     print(
-                        f'Offsprings generated: {queue.qsize()}/{self.population_size} ({_elapsed} s, {round(queue.qsize()/_elapsed)} /s)', end='\r', flush=True)
+                        f'Offsprings generated: {queue.qsize()}/{self.population_size} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', end='\r', flush=True)
                 time.sleep(.2)
 
             else:
                 _elapsed = max(1, int(round(time.perf_counter() - before)))
                 print(
-                    f'Offsprings generated: {queue.qsize()}/{self.population_size} ({_elapsed} s, {round(queue.qsize()/_elapsed)} /s)', flush=True)
+                    f'Offsprings generated: {queue.qsize()}/{self.population_size} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', flush=True)
                 for p in procs:
                     p.join(timeout=.2)
 
@@ -746,13 +752,13 @@ class SymbolicRegressor:
                         _elapsed = max(
                             1, int(round(time.perf_counter() - before)))
                         print(
-                            f'Duplicates/invalid refilled: {queue.qsize()}/{missing_elements} ({_elapsed} s, {round(queue.qsize()/_elapsed)} /s)', end='\r', flush=True)
+                            f'Duplicates/invalid refilled: {queue.qsize()}/{missing_elements} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', end='\r', flush=True)
                     time.sleep(.2)
 
                 else:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
                     print(
-                        f'Duplicates/invalid refilled: {queue.qsize()}/{missing_elements} ({_elapsed} s, {round(queue.qsize()/_elapsed)} /s)', flush=True)
+                        f'Duplicates/invalid refilled: {queue.qsize()}/{missing_elements} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', flush=True)
                     for p in procs:
                         p.join(timeout=.2)
 
