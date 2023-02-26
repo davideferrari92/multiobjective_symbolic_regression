@@ -777,6 +777,9 @@ class SymbolicRegressor:
                 self.times.loc[self.generation,
                                "ratio_invalid_elements"] = missing_elements / len(self.population)
 
+            self.population: Population = Population(
+                filter(lambda p: p._has_empty_fitness == False, self.population))
+            
             # Calculates the Pareto front
             before = time.perf_counter()
             self._create_pareto_front()
