@@ -634,11 +634,12 @@ class SymbolicRegressor:
 
             self.generation += 1
 
-            print("#" * len(timing_str))
-            print(timing_str)
-            print("#" * len(timing_str))
-            print(
-                f"Starting generation {self.generation}/{self.generations_to_train}")
+            if self.verbose > 0:
+                print("#" * len(timing_str))
+                print(timing_str)
+                print("#" * len(timing_str))
+                print(
+                    f"Starting generation {self.generation}/{self.generations_to_train}")
 
             before = time.perf_counter()
 
@@ -672,9 +673,10 @@ class SymbolicRegressor:
                 time.sleep(.2)
 
             else:
-                _elapsed = max(1, int(round(time.perf_counter() - before)))
-                print(
-                    f'Offsprings generated: {queue.qsize()}/{self.population_size} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', flush=True)
+                if self.verbose > 0:
+                    _elapsed = max(1, int(round(time.perf_counter() - before)))
+                    print(
+                        f'Offsprings generated: {queue.qsize()}/{self.population_size} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', flush=True)
                 for p in procs:
                     p.join(timeout=.2)
 
@@ -756,9 +758,10 @@ class SymbolicRegressor:
                     time.sleep(.2)
 
                 else:
-                    _elapsed = max(1, int(round(time.perf_counter() - before)))
-                    print(
-                        f'Duplicates/invalid refilled: {queue.qsize()}/{missing_elements} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', flush=True)
+                    if self.verbose > 0:
+                        _elapsed = max(1, int(round(time.perf_counter() - before)))
+                        print(
+                            f'Duplicates/invalid refilled: {queue.qsize()}/{missing_elements} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', flush=True)
                     for p in procs:
                         p.join(timeout=.2)
 
@@ -809,8 +812,9 @@ class SymbolicRegressor:
             if any(p.converged for p in self.population):
                 if not self.converged_generation:
                     self.converged_generation = self.generation
-                logging.info(
-                    f"Training converged after {self.converged_generation} generations.")
+                if self.verbose > 0:
+                    print(
+                        f"Training converged after {self.converged_generation} generations.")
                 
             if (self.generation == 0) or (self.statistics_computation_frequency == -1 and (self.generation == self.generations_to_train or self.converged_generation)) or (self.statistics_computation_frequency > 0 and self.generation % self.statistics_computation_frequency == 0):
                 logging.info(f'Computing statistics for generation {self.generation}')
@@ -846,8 +850,8 @@ class SymbolicRegressor:
 
             # Use generations = -1 to rely only on convergence (risk of infinite loop)
             if self.generations_to_train > 0 and self.generation == self.generations_to_train:
-                logging.info(
-                    f"Training terminated after {self.generation} generations")
+                print(
+                    f"Training completed {self.generation}/{self.generations_to_train} generations")
                 return
             
             if self.converged_generation and self.stop_at_convergence:
@@ -1208,7 +1212,7 @@ class SymbolicRegressor:
 
         return metadata
 
-    def _print_first_pareto_front(self, verbose: int = 0):
+    def _print_first_pareto_front(self, verbose: int = 2):
         """
         Print best programs
 
@@ -1220,10 +1224,8 @@ class SymbolicRegressor:
             - None
         """
         if verbose > 0:
-            if self.fpf_hypervolume is not None:
-                fpf_hypervolume_str = f'and Hypervolume {round(self.fpf_hypervolume, 2)}/{int(self.fpf_hypervolume_reference)}'
-            else:
-                fpf_hypervolume_str = ''
+            fpf_hypervolume_str = f'and Hypervolume {round(self.fpf_hypervolume, 2)}/{int(self.fpf_hypervolume_reference)}' if self.fpf_hypervolume is not None else ''
+            
             print()
             print(
                 f"Average complexity of {round(self.average_complexity,1)} and 1PF of length {len(self.first_pareto_front)} {fpf_hypervolume_str}\n")
