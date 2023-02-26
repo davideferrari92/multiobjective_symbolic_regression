@@ -472,6 +472,23 @@ class Program:
         # Case for programs of only one constant FeatureNode.
         # Use get_constants() to have a list of all constant FeatureNode objects
         return []
+    
+    @property
+    def _has_empty_fitness(self):
+        """
+        This method return True if the program has an empty fitness.
+        An empty fitness cannot be interpreted as invalid program because
+        initially all programs have an empty fitness. We need a dedicated
+        method to check if the fitness is empty.
+
+        Args:
+            - None
+
+        Returns:
+            - bool
+                True if the program has an empty fitness.
+        """
+        return self.fitness == {}
 
     @property
     def hash(self):
