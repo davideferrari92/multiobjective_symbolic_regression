@@ -488,7 +488,7 @@ class Program:
             - bool
                 True if the program has an empty fitness.
         """
-        return self.fitness == {}
+        return len(self.fitness) == 0
 
     @property
     def hash(self):

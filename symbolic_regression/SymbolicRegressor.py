@@ -665,20 +665,23 @@ class SymbolicRegressor:
             for proc in procs:
                 proc.start()
 
-            while queue.qsize() < self.population_size:
+            q_size = 0
+            while q_size < self.population_size:
+                q_size = queue.qsize()
                 if self.verbose > 0:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
                     print(
-                        f'Offsprings generated: {queue.qsize()}/{self.population_size} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', end='\r', flush=True)
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s)', end='\r', flush=True)
                 time.sleep(.2)
 
             else:
+                q_size = queue.qsize()
                 if self.verbose > 0:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
                     print(
-                        f'Offsprings generated: {queue.qsize()}/{self.population_size} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', flush=True)
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!', flush=True)
                 for p in procs:
-                    p.join(timeout=.2)
+                    p.join(timeout=.5)
 
             for _ in range(self.population_size):
                 offsprings.append(queue.get())
@@ -749,19 +752,21 @@ class SymbolicRegressor:
                     procs.append(proc)
                     proc.start()
 
-                while queue.qsize() < missing_elements:
+                q_size = 0
+                while q_size < missing_elements:
+                    q_size = queue.qsize()
                     if self.verbose > 0:
                         _elapsed = max(
                             1, int(round(time.perf_counter() - before)))
                         print(
-                            f'Duplicates/invalid refilled: {queue.qsize()}/{missing_elements} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', end='\r', flush=True)
-                    time.sleep(.2)
+                            f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s)', end='\r', flush=True)
+                    time.sleep(.5)
 
                 else:
                     if self.verbose > 0:
                         _elapsed = max(1, int(round(time.perf_counter() - before)))
                         print(
-                            f'Duplicates/invalid refilled: {queue.qsize()}/{missing_elements} ({_elapsed} s, {round(queue.qsize()/_elapsed, 1)} /s)', flush=True)
+                            f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!', flush=True)
                     for p in procs:
                         p.join(timeout=.2)
 
@@ -779,9 +784,6 @@ class SymbolicRegressor:
                                "count_invalid_elements"] = missing_elements
                 self.times.loc[self.generation,
                                "ratio_invalid_elements"] = missing_elements / len(self.population)
-
-            self.population: Population = Population(
-                filter(lambda p: p._has_empty_fitness == False, self.population))
             
             # Calculates the Pareto front
             before = time.perf_counter()
@@ -939,7 +941,7 @@ class SymbolicRegressor:
                                              fitness_functions=fitness_functions, const_range=const_range,
                                              parsimony=parsimony, parsimony_decay=parsimony_decay)
 
-            if new_p.fitness == {}:
+            if new_p._has_empty_fitness:
                 continue
 
             if queue is not None:
@@ -1167,7 +1169,7 @@ class SymbolicRegressor:
             offspring = self._get_offspring(data=data, genetic_operators_frequency=genetic_operators_frequency,
                                             fitness_functions=fitness_functions, population=population, tournament_size=tournament_size, generation=generation)
             
-            if offspring.fitness == {}:
+            if offspring._has_empty_fitness:
                 continue
             
             if queue is not None:
