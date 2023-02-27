@@ -606,14 +606,14 @@ class SymbolicRegressor:
                 else:
                     time_total = f"{round(self._total_time)} secs"
 
-                seconds_iter = self.times['time_generation_total'].mean()
-                if seconds_iter >= 60 and not pd.isna(self.times['time_generation_total'].std()):
-                    seconds_iter = f"{round(seconds_iter//60)}:{round(seconds_iter%60):02d} ± {round(self.times['time_generation_total'].std()//60)}:{round(self.times['time_generation_total'].std()%60):02d} mins"
+                seconds_iter_avg = self.times['time_generation_total'].tail(5).mean()
+                seconds_iter_std = self.times['time_generation_total'].tail(5).std()
+                if seconds_iter_avg >= 60 and not pd.isna(seconds_iter_std):
+                    time_per_generation = f"{round(seconds_iter_avg//60)}:{round(seconds_iter_avg%60):02d} ± {round(seconds_iter_std//60)}:{round(seconds_iter_std%60):02d} mins"
                 else:
-                    seconds_iter = f"{round(seconds_iter, 2)} ± {round(self.times['time_generation_total'].std(), 1)} secs"
+                    time_per_generation = f"{round(seconds_iter_avg, 2)} ± {round(seconds_iter_std, 1)} secs"
 
-                expected_time = self.times['time_generation_total'].mean(
-                ) * (self.generations_to_train - self.generation)/60
+                expected_time = self.times['time_generation_total'].tail(5).mean() * (self.generations_to_train - self.generation) / 60
                 if pd.isna(expected_time):
                     expected_time = 'Unknown'
                 elif expected_time >= 60:
@@ -622,7 +622,7 @@ class SymbolicRegressor:
                     expected_time = f"{round(expected_time)}:{round((expected_time%1)*60):02d} mins"
             else:
                 time_total = f"0 secs"
-                seconds_iter = f"0 secs ± 0 secs"
+                time_per_generation = f"0 secs ± 0 secs"
                 expected_time = 'Unknown'
 
             if total_generation_time >= 60:
@@ -630,7 +630,7 @@ class SymbolicRegressor:
             else:
                 generation_time = f"{round(total_generation_time)} secs"
 
-            timing_str = f"Generation time {generation_time} - Average time per generation: {seconds_iter} - Total: {time_total} - Time to completion: {expected_time}"
+            timing_str = f"Generation time {generation_time} - Average time per generation: {time_per_generation} - Total: {time_total} - Time to completion: {expected_time}"
 
             self.generation += 1
 
