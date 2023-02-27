@@ -98,6 +98,17 @@ Feel free to get in touch writing to [davide.ferrari@kcl.ac.uk](mailto:davide.fe
 
 See more on [10.1109/ICDM54844.2022.00112](https://doi.org/10.1109/ICDM54844.2022.00112)
 
+```bibtex
+@INPROCEEDINGS{ferrari2022multiobjective,
+  author={Ferrari, Davide and Guidetti, Veronica and Mandreoli, Federica},
+  booktitle={2022 IEEE International Conference on Data Mining (ICDM)}, 
+  title={Multi-Objective Symbolic Regression for Data-Driven Scoring System Management}, 
+  year={2022},
+  volume={},
+  number={},
+  pages={945-950},
+  doi={10.1109/ICDM54844.2022.00112}}
+```
 
 ## A clinical benchmark
 **Davide Ferrari, Veronica Guidetti, Yanzhong Wang, Vasa Curcin**:
@@ -106,3 +117,17 @@ See more on [10.1109/ICDM54844.2022.00112](https://doi.org/10.1109/ICDM54844.202
 Proceedings of the American Medical Informatics (AMIA) Annual Symposium, Washington DC, Nov. 2022
 
 See more at: [https://scholar.google.it/citations?view_op=view_citation&hl=en&user=5zwLd3IAAAAJ&citation_for_view=5zwLd3IAAAAJ:W7OEmFMy1HYC](https://scholar.google.it/citations?view_op=view_citation&hl=en&user=5zwLd3IAAAAJ&citation_for_view=5zwLd3IAAAAJ:W7OEmFMy1HYC)
+
+```bibtex
+@inproceedings{Ferrari2022,
+   author = {Davide Ferrari and Veronica Guidetti and Vasa Curcin and Yanzhong Wang},
+   journal = {AMIA 2022, American Medical Informatics Association Annual Symposium,
+Washington, DC, USA, November 5-9, 2022},
+   publisher = {AMIA},
+   title = {Multi-objective Symbolic Regression to Generate Data-driven, Non-fixed
+Structure and Intelligible Mortality Predictors using EHR: Binary
+Classification Methodology and Comparison with State-of-the-art},
+   url = {https://knowledge.amia.org/76677-amia-1.4637602/f006-1.4642154/f006-1.4642155/877-1.4642417/511-1.4642414},
+   year = {2022},
+}
+```
