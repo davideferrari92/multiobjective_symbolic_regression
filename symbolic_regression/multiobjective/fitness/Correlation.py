@@ -17,7 +17,7 @@ class BaseCorrelation(BaseFitness):
         super().__init__(**kwargs)
         self.correlation_function: callable = None
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, **kwargs) -> float:
 
         if not program.is_valid:
             return np.nan

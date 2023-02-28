@@ -19,12 +19,14 @@ class WeightedMeanSquaredError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
         if not program.is_valid:
             return np.nan
 
-        program = self.optimize(program=program, data=data)
+        if not validation:
+            program = self.optimize(program=program, data=data)
+        
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
 
@@ -52,9 +54,10 @@ class WeightedMeanAbsoluteError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
-
-        self.optimize(program=program, data=data)
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+        
+        if not validation:
+            self.optimize(program=program, data=data)
 
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
@@ -87,9 +90,10 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
-        self.optimize(program=program, data=data)
+        if not validation:
+            self.optimize(program=program, data=data)
 
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
@@ -128,9 +132,10 @@ class MeanAveragePercentageError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
-        self.optimize(program=program, data=data)
+        if not validation:
+            self.optimize(program=program, data=data)
 
         if not program.is_valid:
             return np.inf
@@ -175,9 +180,10 @@ class NotConstant(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
-        self.optimize(program=program, data=data)
+        if not validation:
+            self.optimize(program=program, data=data)
 
         pred = program.evaluate(data=data)
 
@@ -200,9 +206,10 @@ class ValueRange(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
-        self.optimize(program=program, data=data)
+        if not validation:
+            self.optimize(program=program, data=data)
 
         pred = program.evaluate(data=data)
 

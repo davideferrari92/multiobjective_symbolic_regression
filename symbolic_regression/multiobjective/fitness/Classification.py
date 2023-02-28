@@ -21,12 +21,13 @@ class BaseClassification(BaseFitness):
         super().__init__(**kwargs)
         self.classification_metric = None
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
         
         if not program.is_valid:
             return np.nan
         
-        self.optimize(program=program, data=data)
+        if not validation:
+            self.optimize(program=program, data=data)
 
         if not self.classification_metric:
             raise AttributeError('Classification metric not defined')
@@ -66,9 +67,10 @@ class BinaryCrossentropy(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
-        self.optimize(program=program, data=data)
+        if not validation:
+            self.optimize(program=program, data=data)
 
         if self.logistic:
             program_to_evaluate = program.to_logistic(inplace=False)
@@ -122,9 +124,10 @@ class AUC(BaseClassification):
         super().__init__(**kwargs)
         self.classification_metric = roc_auc_score
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
-        self.optimize(program=program, data=data)
+        if not validation:
+            self.optimize(program=program, data=data)
 
         if not self.classification_metric:
             raise AttributeError('Classification metric not defined')
@@ -164,7 +167,7 @@ class GMeans(BaseFitness):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> pd.DataFrame:
+    def evaluate(self, program: Program, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
 
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program

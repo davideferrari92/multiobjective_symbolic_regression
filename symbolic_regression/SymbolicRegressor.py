@@ -234,20 +234,22 @@ class SymbolicRegressor:
 
         self.fpf_hypervolume_reference = np.product(references)
 
-    def compute_performance(self, data: Union[dict, pd.DataFrame, pd.Series], fitness_functions: List[BaseFitness] = None):
+    def compute_performance(self, fitness_functions: List[BaseFitness] = None, data: Union[dict, pd.DataFrame, pd.Series] = None, validation: bool = False):
         """
         This method computes the performance of each program in the population
 
         Args:
-            - data: Union[dict, pd.DataFrame, pd.Series]
-                The data on which the performance is computed
             - fitness_functions: List[BaseFitness] (default: None)
                 The fitness functions to use to compute the performance. Can override by the fitness_functions
                 attribute of the class
+            - data: Union[dict, pd.DataFrame, pd.Series]
+                The data on which the performance is computed
+            - validation: bool (default: False)
+                If True the performance is computed on the validation data without optimization
         """
         for p in self.population:
             p.compute_fitness(
-                self.fitness_functions if fitness_functions is None else fitness_functions, data)
+                fitness_functions=self.fitness_functions if fitness_functions is None else fitness_functions, data=data, validation=validation)
 
     def _create_pareto_front(self):
         """

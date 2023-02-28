@@ -118,6 +118,7 @@ class Program:
         else:
             self.program: Node = InvalidNode()
             self.fitness: Dict = dict()
+            self.fitness_validation: Dict = dict()
             self.fitness_functions: List[BaseFitness] = list()
             self.is_fitness_to_minimize: Dict = dict()
 
@@ -205,7 +206,7 @@ class Program:
     def features_used(self):
         return self.program._get_features(features_list=[])
 
-    def compute_fitness(self, fitness_functions: List[BaseFitness], data: Union[dict, pd.Series, pd.DataFrame]) -> None:
+    def compute_fitness(self, fitness_functions: List[BaseFitness], data: Union[dict, pd.Series, pd.DataFrame], validation: bool = False) -> None:
         """ This function evaluate the fitness of the program on the given data.
         The data can be a dictionary, a pandas Series or a pandas DataFrame.
 
@@ -214,6 +215,8 @@ class Program:
                 The fitness functions to evaluate
             - data: Union[dict, pd.Series, pd.DataFrame]
                 The data on which the program will be evaluated
+            - validation: bool  (default: False)
+                If True, the fitness will be computed on the validation data without optimization
 
         Returns:
             - None
@@ -223,13 +226,17 @@ class Program:
         # as we need them in other parts of the code (e.g. in the hypervolume computation)
         self.fitness_functions: List[BaseFitness] = fitness_functions
         self.fitness: Dict[str, float] = dict()
+        self.fitness_validation: Dict[str, float] = dict()
         self.is_fitness_to_minimize: Dict[str, bool] = dict()
 
         try:
             self.simplify(inplace=True)
         except ValueError:
             self._override_is_valid = False
-            self.fitness = {ftn.label: np.inf for ftn in self.fitness_functions}
+            if validation:
+                self.fitness_validation = {ftn.label: np.inf for ftn in self.fitness_functions}
+            else:
+                self.fitness = {ftn.label: np.inf for ftn in self.fitness_functions}
             return
 
         _converged: List[bool] = list()
@@ -239,26 +246,30 @@ class Program:
                 raise ValueError(
                     f"Fitness function with label {ftn.label} already used")
             try:
-                fitness_value = round(ftn.evaluate(program=self, data=data), 5)
+                fitness_value = round(ftn.evaluate(program=self, data=data, validation=validation), 5)
             except KeyError:
                 fitness_value = np.inf
 
             if pd.isna(fitness_value):
                 fitness_value = np.inf
 
-            self.fitness[ftn.label] = fitness_value
-            self.is_fitness_to_minimize[ftn.label] = ftn.minimize
+            if validation:
+                self.fitness_validation[ftn.label] = fitness_value
+            else:
+                self.fitness[ftn.label] = fitness_value
+                self.is_fitness_to_minimize[ftn.label] = ftn.minimize
 
-            if ftn.minimize and isinstance(ftn.convergence_threshold, (int, float)):
-                if fitness_value <= ftn.convergence_threshold:
-                    _converged.append(True)
-                else:
-                    _converged.append(False)
+                if ftn.minimize and isinstance(ftn.convergence_threshold, (int, float)):
+                    if fitness_value <= ftn.convergence_threshold:
+                        _converged.append(True)
+                    else:
+                        _converged.append(False)
 
-        # Only if all the fitness functions have converged, then the program has converged
-        self.converged = all(_converged) if len(_converged) > 0 else False
+                    # Only if all the fitness functions have converged, then the program has converged
+                    self.converged = all(_converged) if len(_converged) > 0 else False
 
-        self._compute_hypervolume()
+        if not validation:
+            self._compute_hypervolume()
 
     def _compute_hypervolume(self) -> float:
         """

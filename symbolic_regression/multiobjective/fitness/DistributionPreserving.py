@@ -18,7 +18,7 @@ class Wasserstein(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
         if not hasattr(self, 'F_y'):
             raise AttributeError(
