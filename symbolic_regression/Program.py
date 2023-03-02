@@ -485,21 +485,21 @@ class Program:
         return []
     
     @property
-    def _has_empty_fitness(self):
+    def _has_incomplete_fitness(self):
         """
-        This method return True if the program has an empty fitness.
-        An empty fitness cannot be interpreted as invalid program because
-        initially all programs have an empty fitness. We need a dedicated
-        method to check if the fitness is empty.
+        This method return True if the program has an incomplete fitness.
+        An incomplete fitness cannot be interpreted as invalid program because
+        initially all programs have an incomplete fitness. We need a dedicated
+        method to check if the fitness is incomplete.
 
         Args:
             - None
 
         Returns:
             - bool
-                True if the program has an empty fitness.
+                True if the program has an incomplete fitness.
         """
-        return len(self.fitness) == 0
+        return len(self.fitness) != len(self.fitness_functions)
 
     @property
     def hash(self):
@@ -821,10 +821,7 @@ class Program:
                         simplified = sympy.parse_expr(program.program.render())
                     else:
                         simplified = sympy.parse_expr(program)
-                except ValueError:
-                    program._override_is_valid = False
-                    return program.program
-                except TypeError:
+                except:
                     program._override_is_valid = False
                     return program.program
                 logging.debug(

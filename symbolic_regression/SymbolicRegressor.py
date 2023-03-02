@@ -608,14 +608,14 @@ class SymbolicRegressor:
                 else:
                     time_total = f"{round(self._total_time)} secs"
 
-                seconds_iter_avg = self.times['time_generation_total'].tail(5).mean()
+                seconds_iter_avg = self.times['time_generation_total'].tail(5).median()
                 seconds_iter_std = self.times['time_generation_total'].tail(5).std()
                 if seconds_iter_avg >= 60 and not pd.isna(seconds_iter_std):
                     time_per_generation = f"{round(seconds_iter_avg//60)}:{round(seconds_iter_avg%60):02d} ± {round(seconds_iter_std//60)}:{round(seconds_iter_std%60):02d} mins"
                 else:
                     time_per_generation = f"{round(seconds_iter_avg, 2)} ± {round(seconds_iter_std, 1)} secs"
 
-                expected_time = self.times['time_generation_total'].tail(5).mean() * (self.generations_to_train - self.generation) / 60
+                expected_time = self.times['time_generation_total'].tail(5).median() * (self.generations_to_train - self.generation) / 60
                 if pd.isna(expected_time):
                     expected_time = 'Unknown'
                 elif expected_time >= 60:
@@ -779,9 +779,12 @@ class SymbolicRegressor:
                     proc.kill()
 
                 self.population = Population(self.population + refill)
+
+                # exludes every program in refill with an empty fitness
+                self.population = [p for p in self.population if len(p.fitness) == len(self.fitness_functions)]
+                
                 self.times.loc[self.generation,
                                "time_refill_invalid"] = time.perf_counter() - before
-
                 self.times.loc[self.generation,
                                "count_invalid_elements"] = missing_elements
                 self.times.loc[self.generation,
@@ -943,7 +946,7 @@ class SymbolicRegressor:
                                              fitness_functions=fitness_functions, const_range=const_range,
                                              parsimony=parsimony, parsimony_decay=parsimony_decay)
 
-            if new_p._has_empty_fitness:
+            if new_p._has_incomplete_fitness:
                 continue
 
             if queue is not None:
@@ -1171,7 +1174,7 @@ class SymbolicRegressor:
             offspring = self._get_offspring(data=data, genetic_operators_frequency=genetic_operators_frequency,
                                             fitness_functions=fitness_functions, population=population, tournament_size=tournament_size, generation=generation)
             
-            if offspring._has_empty_fitness:
+            if offspring._has_incomplete_fitness:
                 continue
             
             if queue is not None:
