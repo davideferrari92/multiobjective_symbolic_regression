@@ -252,7 +252,7 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
     try:
         for i in range(n_constants):
             grad.append(sym.diff(p_sym, f'c{i}'))
-    except SyntaxError:
+    except:
         return [], [], []
 
     # define gradient and program python functions from sympy object
@@ -260,8 +260,9 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
     try:
         pyf_grad = lambdify([x_sym, c_sym], grad)
         pyf_prog = lambdify([x_sym, c_sym], p_sym)
-    except KeyError:  # When the function doesn't have sense
+    except:  # When the function doesn't have sense
         return [], [], []
+    
     # Define batches
     n_batches = int(X_data.shape[0] / batch_size)
     X_batch = np.array_split(X_data, n_batches, 0)
