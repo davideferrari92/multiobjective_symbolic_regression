@@ -249,8 +249,11 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
 
     # compute program analytic gradients with respect to the constants to be optimized
     grad = []
-    for i in range(n_constants):
-        grad.append(sym.diff(p_sym, f'c{i}'))
+    try:
+        for i in range(n_constants):
+            grad.append(sym.diff(p_sym, f'c{i}'))
+    except SyntaxError:
+        return [], [], []
 
     # define gradient and program python functions from sympy object
 
@@ -286,6 +289,8 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
                 num_grad = pyf_grad(tuple(split_X_batch), tuple(split_c_batch))
             except KeyError:
                 return [], [], []
+            except ValueError:
+                return [], [], []
 
             if task == 'regression:wmse':
                 av_loss = np.nanmean(w_batch[i] * (y_pred - y_batch[i])**2)
@@ -305,8 +310,7 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
 
             elif task == 'binary:logistic':
                 # compute average loss
-                #w=np.where(y_batch[i]==1, 1./(2*y_batch[i].mean()),  1./(2*(1-y_batch[i].mean())))
-                # av_loss=np.nanmean(-w*y_batch[i]*np.log(y_pred+1e-20)-w*(1.-y_batch[i])*np.log(1.-y_pred+1e-20))
+
                 sigma = 1. / (1. + np.exp(-y_pred)
                               )  # numerical value of sigmoid(program)
                 av_loss = np.nanmean(
