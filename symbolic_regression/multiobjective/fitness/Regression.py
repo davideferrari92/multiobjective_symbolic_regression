@@ -170,6 +170,43 @@ class MeanAveragePercentageError(BaseFitness):
             return np.inf
 
 
+class WAIC(BaseFitness):
+    """ Weighted Akaike Information Criterion (WAIC) """
+
+    def __init__(self, **kwargs) -> None:
+        """ This fitness requires the following arguments:
+
+        - target: str
+        - weights: str
+
+        """
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+
+        if not program.is_valid:
+            return np.nan
+
+        if not validation:
+            program = self.optimize(program=program, data=data)
+        
+        program_to_evaluate = program.to_logistic(
+            inplace=False) if self.logistic else program
+
+        pred = program_to_evaluate.evaluate(data=data)
+
+        try:
+            # Weighted Akaike Information Criterion
+            k = len(program.get_constants())
+            sigma = np.sum((data[self.target] - pred)**2) / (data.shape[0] - k)
+            waic = np.log(sigma) * data.shape[0] + 2 * k
+
+            return waic
+        except TypeError:
+            return np.inf
+        except ValueError:
+            return np.inf
+
 class NotConstant(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
