@@ -117,8 +117,8 @@ class Program:
             self.program: Node = program
         else:
             self.program: Node = InvalidNode()
-            self.fitness: Dict = dict()
-            self.fitness_validation: Dict = dict()
+            self.fitness: Dict[str, float] = dict()
+            self.fitness_validation: Dict[str, float] = dict()
             self.fitness_functions: List[BaseFitness] = list()
             self.is_fitness_to_minimize: Dict = dict()
 
@@ -225,28 +225,40 @@ class Program:
         # We store the fitness functions in the program object
         # as we need them in other parts of the code (e.g. in the hypervolume computation)
         self.fitness_functions: List[BaseFitness] = fitness_functions
-        self.fitness: Dict[str, float] = dict()
-        self.fitness_validation: Dict[str, float] = dict()
+        for ftn in self.fitness_functions:
+            for ftn2 in self.fitness_functions:
+                if ftn.label == ftn2.label and ftn != ftn2:
+                    raise ValueError(
+                        f"Fitness function with label {ftn.label} already used")
+
+        if validation:
+            self.fitness_validation: Dict[str, float] = dict()
+        else:
+            self.fitness: Dict[str, float] = dict()
+
         self.is_fitness_to_minimize: Dict[str, bool] = dict()
+
+        for ftn in self.fitness_functions:
+            self.is_fitness_to_minimize[ftn.label] = ftn.minimize
 
         try:
             self.simplify(inplace=True)
         except ValueError:
             self._override_is_valid = False
             if validation:
-                self.fitness_validation = {ftn.label: np.inf for ftn in self.fitness_functions}
+                self.fitness_validation = {
+                    ftn.label: np.inf for ftn in self.fitness_functions}
             else:
-                self.fitness = {ftn.label: np.inf for ftn in self.fitness_functions}
+                self.fitness = {
+                    ftn.label: np.inf for ftn in self.fitness_functions}
             return
 
         _converged: List[bool] = list()
 
         for ftn in self.fitness_functions:
-            if ftn.label in self.fitness:
-                raise ValueError(
-                    f"Fitness function with label {ftn.label} already used")
             try:
-                fitness_value = round(ftn.evaluate(program=self, data=data, validation=validation), 5)
+                fitness_value = round(ftn.evaluate(
+                    program=self, data=data, validation=validation), 5)
             except KeyError:
                 fitness_value = np.inf
 
@@ -257,7 +269,6 @@ class Program:
                 self.fitness_validation[ftn.label] = fitness_value
             else:
                 self.fitness[ftn.label] = fitness_value
-                self.is_fitness_to_minimize[ftn.label] = ftn.minimize
 
                 if ftn.minimize and isinstance(ftn.convergence_threshold, (int, float)):
                     if fitness_value <= ftn.convergence_threshold:
@@ -266,7 +277,8 @@ class Program:
                         _converged.append(False)
 
                     # Only if all the fitness functions have converged, then the program has converged
-                    self.converged = all(_converged) if len(_converged) > 0 else False
+                    self.converged = all(_converged) if len(
+                        _converged) > 0 else False
 
         if not validation:
             self._compute_hypervolume()
@@ -483,7 +495,7 @@ class Program:
         # Case for programs of only one constant FeatureNode.
         # Use get_constants() to have a list of all constant FeatureNode objects
         return []
-    
+
     @property
     def _has_incomplete_fitness(self):
         """

@@ -1,10 +1,10 @@
 import copy
 import logging
-from multiprocessing import Process, Queue
 import os
 import random
 import time
 from itertools import repeat
+from multiprocessing import Process, Queue
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -145,7 +145,7 @@ class SymbolicRegressor:
     @property
     def average_complexity(self):
         return self._average_complexity
-    
+
     @average_complexity.getter
     def average_complexity(self):
         return np.mean([p.complexity for p in self.population]) if len(self.population) > 0 else 0
@@ -379,7 +379,7 @@ class SymbolicRegressor:
                 # Ignore the fitness which are not to be optimized
                 if program1.is_fitness_to_minimize[this_fitness] == False:
                     continue
-                
+
                 try:
                     p1_fitness = program1.fitness[this_fitness]
                     p2_fitness = program2.fitness[this_fitness]
@@ -477,7 +477,7 @@ class SymbolicRegressor:
         """
         return [p for p in self.population if p.rank == 1]
 
-    def fit(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], generations_to_train: int, n_jobs: int = -1, stop_at_convergence: bool = False, verbose: int = 0) -> None:
+    def fit(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], generations_to_train: int, n_jobs: int = -1, stop_at_convergence: bool = False, verbose: int = 0, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> None:
         """
         This method trains the population.
 
@@ -506,6 +506,8 @@ class SymbolicRegressor:
                 If True the training stops when the population converges
             - verbose: int (default 0)
                 The verbosity level of the training
+            - val_data: Union[dict, pd.DataFrame, pd.Series] (default None)
+                The data on which the validation is performed
 
         Returns:
             - None
@@ -520,7 +522,7 @@ class SymbolicRegressor:
 
         start = time.perf_counter()
         try:
-            self._fit(data=data)
+            self._fit(data=data, val_data=val_data)
         except KeyboardInterrupt:
             self.generation -= 1  # The increment is applied even if the generation is interrupted
             self.status = "Interrupted by KeyboardInterrupt"
@@ -529,7 +531,7 @@ class SymbolicRegressor:
         stop = time.perf_counter()
         self.training_duration += stop - start
 
-    def _fit(self, data: Union[dict, pd.DataFrame, pd.Series]) -> None:
+    def _fit(self, data: Union[dict, pd.DataFrame, pd.Series], val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> None:
         """
         This method is the main loop of the genetic programming algorithm.
 
@@ -552,6 +554,8 @@ class SymbolicRegressor:
         Args:
             - data: Union[dict, pd.DataFrame, pd.Series]
                 The data on which the training is performed
+            - val_data: Union[dict, pd.DataFrame, pd.Series] (default None)
+                The data on which the validation is performed
 
         Returns:
             - None
@@ -608,14 +612,17 @@ class SymbolicRegressor:
                 else:
                     time_total = f"{round(self._total_time)} secs"
 
-                seconds_iter_avg = self.times['time_generation_total'].tail(5).median()
-                seconds_iter_std = self.times['time_generation_total'].tail(5).std()
+                seconds_iter_avg = self.times['time_generation_total'].tail(
+                    5).median()
+                seconds_iter_std = self.times['time_generation_total'].tail(
+                    5).std()
                 if seconds_iter_avg >= 60 and not pd.isna(seconds_iter_std):
                     time_per_generation = f"{round(seconds_iter_avg//60)}:{round(seconds_iter_avg%60):02d} ± {round(seconds_iter_std//60)}:{round(seconds_iter_std%60):02d} mins"
                 else:
                     time_per_generation = f"{round(seconds_iter_avg, 2)} ± {round(seconds_iter_std, 1)} secs"
 
-                expected_time = self.times['time_generation_total'].tail(5).median() * (self.generations_to_train - self.generation) / 60
+                expected_time = self.times['time_generation_total'].tail(
+                    5).median() * (self.generations_to_train - self.generation) / 60
                 if pd.isna(expected_time):
                     expected_time = 'Unknown'
                 elif expected_time >= 60:
@@ -632,7 +639,7 @@ class SymbolicRegressor:
             else:
                 generation_time = f"{round(total_generation_time)} secs"
 
-            timing_str = f"Generation time {generation_time} - Average time per generation: {time_per_generation} - Total: {time_total} - Time to completion: {expected_time}"
+            timing_str = f"Generation {generation_time} - On average: {time_per_generation} - Total: {time_total} - To completion: {expected_time}"
 
             self.generation += 1
 
@@ -640,8 +647,8 @@ class SymbolicRegressor:
                 print("#" * len(timing_str))
                 print(timing_str)
                 print("#" * len(timing_str))
-                print(
-                    f"Starting generation {self.generation}/{self.generations_to_train}")
+            print(
+                f"{self.client_name}: starting generation {self.generation}/{self.generations_to_train}")
 
             before = time.perf_counter()
 
@@ -766,7 +773,8 @@ class SymbolicRegressor:
 
                 else:
                     if self.verbose > 0:
-                        _elapsed = max(1, int(round(time.perf_counter() - before)))
+                        _elapsed = max(
+                            1, int(round(time.perf_counter() - before)))
                         print(
                             f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!', flush=True)
                     for p in procs:
@@ -778,18 +786,20 @@ class SymbolicRegressor:
                 for proc in procs:
                     proc.kill()
 
-                self.population = Population(self.population + refill)
+                self.population: Population = Population(
+                    self.population + refill)
 
                 # exludes every program in refill with an empty fitness
-                self.population = [p for p in self.population if len(p.fitness) == len(self.fitness_functions)]
-                
+                self.population = [
+                    p for p in self.population if not p._has_incomplete_fitness]
+
                 self.times.loc[self.generation,
                                "time_refill_invalid"] = time.perf_counter() - before
                 self.times.loc[self.generation,
                                "count_invalid_elements"] = missing_elements
                 self.times.loc[self.generation,
                                "ratio_invalid_elements"] = missing_elements / len(self.population)
-            
+
             # Calculates the Pareto front
             before = time.perf_counter()
             self._create_pareto_front()
@@ -822,24 +832,30 @@ class SymbolicRegressor:
                 if self.verbose > 0:
                     print(
                         f"Training converged after {self.converged_generation} generations.")
-                
-            if (self.generation == 0) or (self.statistics_computation_frequency == -1 and (self.generation == self.generations_to_train or self.converged_generation)) or (self.statistics_computation_frequency > 0 and self.generation % self.statistics_computation_frequency == 0):
-                logging.info(f'Computing statistics for generation {self.generation}')
+
+            if (self.generation == 1) or (self.statistics_computation_frequency == -1 and (self.generation == self.generations_to_train or self.converged_generation)) or (self.statistics_computation_frequency > 0 and self.generation % self.statistics_computation_frequency == 0):
+                if self.verbose > 0:
+                    print(
+                        f'Computing statistics for generation {self.generation}')
                 # Calculates the hypervolume
                 before = time.perf_counter()
                 self.compute_hypervolume()
                 self.times.loc[self.generation,
-                            "time_hypervolume_computation"] = time.perf_counter() - before
+                               "time_hypervolume_computation"] = time.perf_counter() - before
 
                 before = time.perf_counter()
                 self.tree_diversity()
                 self.times.loc[self.generation,
-                            "time_tree_diversity_computation"] = time.perf_counter() - before
+                               "time_tree_diversity_computation"] = time.perf_counter() - before
 
                 before = time.perf_counter()
                 self.spearman_diversity(data=data)
                 self.times.loc[self.generation,
-                            "time_spearman_diversity_computation"] = time.perf_counter() - before
+                               "time_spearman_diversity_computation"] = time.perf_counter() - before
+
+                if val_data is not None:
+                    self.compute_performance(
+                        fitness_functions=self.fitness_functions, data=val_data, validation=True)
 
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front(verbose=self.verbose)
@@ -848,7 +864,7 @@ class SymbolicRegressor:
             self.times.loc[self.generation,
                            "time_generation_total"] = total_generation_time
 
-            if self.checkpoint_file and self.checkpoint_frequency > 0 and self.generation % self.checkpoint_frequency == 0:
+            if self.checkpoint_file and self.checkpoint_frequency > 0 and self.generation % self.checkpoint_frequency == 0 or self.generation == self.generations_to_train or self.generations_to_train:
                 try:
                     self.save_model(file=self.checkpoint_file)
                 except FileNotFoundError:
@@ -860,8 +876,11 @@ class SymbolicRegressor:
                 print(
                     f"Training completed {self.generation}/{self.generations_to_train} generations")
                 return
-            
+
             if self.converged_generation and self.stop_at_convergence:
+                if val_data is not None:
+                    self.compute_performance(
+                        fitness_functions=self.fitness_functions, data=val_data, validation=True)
                 print(
                     f"Training converged after {self.converged_generation} generations and requested to stop.")
                 return
@@ -1173,10 +1192,10 @@ class SymbolicRegressor:
 
             offspring = self._get_offspring(data=data, genetic_operators_frequency=genetic_operators_frequency,
                                             fitness_functions=fitness_functions, population=population, tournament_size=tournament_size, generation=generation)
-            
+
             if offspring._has_incomplete_fitness:
                 continue
-            
+
             if queue is not None:
                 queue.put(offspring)
             else:
@@ -1232,7 +1251,7 @@ class SymbolicRegressor:
         """
         if verbose > 0:
             fpf_hypervolume_str = f'and Hypervolume {round(self.fpf_hypervolume, 2)}/{int(self.fpf_hypervolume_reference)}' if self.fpf_hypervolume is not None else ''
-            
+
             print()
             print(
                 f"Average complexity of {round(self.average_complexity,1)} and 1PF of length {len(self.first_pareto_front)} {fpf_hypervolume_str}\n")
