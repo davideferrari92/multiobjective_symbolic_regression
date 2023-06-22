@@ -239,12 +239,12 @@ class SymbolicRegressor:
             self.fpf_hypervolume_reference = np.product(references)
 
         else:
-        #     try:
-            points = points[np.sum((points - references)
-                                <= 0, axis=1) == points.shape[1]]
-            hypervolume = _HyperVolume(references).exclusive(points)
-            # except ValueError:
-            #     hypervolume = np.nan
+            try:
+                points = points[np.sum((points - references)
+                                    <= 0, axis=1) == points.shape[1]]
+                hypervolume = _HyperVolume(references).exclusive(points)
+            except ValueError:
+                hypervolume = np.nan
 
             return hypervolume
 
