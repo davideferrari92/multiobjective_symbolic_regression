@@ -178,7 +178,7 @@ class SymbolicRegressor:
 
         return pd.DataFrame(istances)
 
-    def compute_hypervolume(self):
+    def compute_hypervolume(self, exclusive: bool = False):
         """
         This method computes the hypervolume of the current population
 
@@ -198,7 +198,11 @@ class SymbolicRegressor:
         point is updated to the new value.
 
         Args:
-            - None
+            - exclusive: bool  (default: False)
+                If True, the hypervolume is computed on the whole pareto front and
+                saved in the statistics. If False, the hypervolume is computed only
+                in an exclusive way and not saved. This is for final checks on the
+                model. This last option may be inefficient and slow.
 
         Returns:
             - hypervolume: float
@@ -216,23 +220,33 @@ class SymbolicRegressor:
         references = np.array(
             [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
 
-        try:
-            points = points[np.sum((points - references)
-                                   <= 0, axis=1) == points.shape[1]]
+        if not exclusive:
+            try:
+                points = points[np.sum((points - references)
+                                    <= 0, axis=1) == points.shape[1]]
+                self.fpf_hypervolume = _HyperVolume(references).compute(points)
 
-            self.fpf_hypervolume = _HyperVolume(references).compute(points)
+            except ValueError:
+                self.fpf_hypervolume = np.nan
 
-        except ValueError:
-            self.fpf_hypervolume = np.nan
+            self.fpf_stats.loc[self.generation, 'n_individuals'] = len(
+                self.first_pareto_front)
+            self.fpf_stats.loc[self.generation,
+                            'fpf_hypervolume'] = self.fpf_hypervolume
+            self.fpf_stats.loc[self.generation,
+                            'fpf_hypervolume_reference'] = self.fpf_hypervolume_reference
 
-        self.fpf_stats.loc[self.generation, 'n_individuals'] = len(
-            self.first_pareto_front)
-        self.fpf_stats.loc[self.generation,
-                           'fpf_hypervolume'] = self.fpf_hypervolume
-        self.fpf_stats.loc[self.generation,
-                           'fpf_hypervolume_reference'] = self.fpf_hypervolume_reference
+            self.fpf_hypervolume_reference = np.product(references)
 
-        self.fpf_hypervolume_reference = np.product(references)
+        else:
+            try:
+                points = points[np.sum((points - references)
+                                    <= 0, axis=1) == points.shape[1]]
+                hypervolume = _HyperVolume(references).exclusive(points)
+            except ValueError:
+                hypervolume = np.nan
+
+            return hypervolume
 
     def compute_performance(self, fitness_functions: List[BaseFitness] = None, data: Union[dict, pd.DataFrame, pd.Series] = None, validation: bool = False):
         """

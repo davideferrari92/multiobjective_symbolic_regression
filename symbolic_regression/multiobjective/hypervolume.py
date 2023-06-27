@@ -1,3 +1,9 @@
+from copy import deepcopy
+from typing import List
+
+import numpy as np
+
+
 class _HyperVolume:
     """
     #    This class is part of DEAP.
@@ -36,6 +42,22 @@ class _HyperVolume:
         """Constructor."""
         self.referencePoint = referencePoint
         self.list = []
+
+    def exclusive(self, front: List[List[float]]):
+        '''
+        In this function we calculate the hypervolume of each point in the front individually.
+        This is done by calculating the hypervolume of the front without each point iteratively.
+
+        Reference: https://dl.acm.org/doi/10.1145/3453474
+        '''
+        hv_base = self.compute(front)
+        hv_exclusives: List[float] = []
+        
+        for i in range(len(front)):
+            excl_front = np.delete(front, i, axis=0)
+            hv_exclusives.append(hv_base - self.compute(excl_front))
+
+        return hv_exclusives
 
     def compute(self, front):
         """Returns the hypervolume that is dominated by a non-dominated front.
