@@ -1,5 +1,7 @@
 # Multi-objectie Symbolic Regression
 
+Root repository of this project is [https://github.com/davideferrari92/multiobjective_symbolic_regression](https://github.com/davideferrari92/multiobjective_symbolic_regression)
+
 **Symbolic Regression** is a mathematical technique based on genetic programming that search in the space of mathematical equations to find one or more that best fit a given learning task bsaed on a dataset.
 In this repository you will find an implementation from scratch in Python that allow the versatile implementation of any fitness function (loss function) and use any number of them during one training task. This is called "*multi-objective training*". It consists of evaluating more than one fitness function per training loop and consider all of them in a multidimensional space in which a datapoint represent one of the generated models, and its coordinates represent the performance value for every single fitness measure.
 
