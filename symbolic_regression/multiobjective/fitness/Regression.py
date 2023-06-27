@@ -1,4 +1,3 @@
-import time
 import numpy as np
 import pandas as pd
 from astropy import stats
@@ -32,6 +31,9 @@ class WeightedMeanSquaredError(BaseFitness):
 
         pred = program_to_evaluate.evaluate(data=data)
 
+        if np.isnan(pred).any():
+            return np.inf
+        
         try:
             wmse = (((pred - data[self.target])**2) * data[self.weights]
                     ).mean() if self.weights else ((pred - data[self.target])**2).mean()
@@ -193,6 +195,9 @@ class WeightedAIC(BaseFitness):
             inplace=False) if self.logistic else program
 
         pred = program_to_evaluate.evaluate(data=data)
+
+        if np.isnan(pred).any():
+            return np.inf
 
         try:
             k = len(program_to_evaluate.get_constants())
