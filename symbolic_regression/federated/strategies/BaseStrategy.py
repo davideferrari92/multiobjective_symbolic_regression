@@ -1,7 +1,6 @@
 import logging
 from abc import abstractmethod
 from typing import Dict
-from symbolic_regression.Population import Population
 
 from symbolic_regression.SymbolicRegressor import SymbolicRegressor
 
@@ -78,7 +77,7 @@ class BaseStrategy:
         algorithm.
         """
 
-        logging.debug(
+        logging.info(
             f'Executing {self.mode} strategy iteration {self.federated_rounds_executed}/{self.federated_rounds}: on_start')
         self.on_start(**kwargs)
 

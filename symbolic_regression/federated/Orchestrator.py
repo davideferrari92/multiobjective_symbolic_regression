@@ -134,10 +134,10 @@ class Orchestrator(FederatedAgent):
                 logging.debug(
                     f'Receiving termination validation from {msg.sender_name}')
                 
-                self.federated_aggregation_strategy = msg.payload['server']
-                self._federated_aggregation_strategy_history.append(
-                    self.federated_aggregation_strategy)
-                self.federated_aggregation_strategies[msg.sender_name] = msg.payload['clients']
+                # self.federated_aggregation_strategy = msg.payload['server']
+                # self._federated_aggregation_strategy_history.append(
+                #     self.federated_aggregation_strategy)
+                self.federated_aggregation_strategies[msg.sender_name] = msg.payload#['clients']
                 self._federated_aggregation_strategies_history.append(
                     self.federated_aggregation_strategies)
 

@@ -248,7 +248,7 @@ class SymbolicRegressor:
 
             return hypervolume
 
-    def compute_performance(self, fitness_functions: List[BaseFitness] = None, data: Union[dict, pd.DataFrame, pd.Series] = None, validation: bool = False):
+    def compute_performance(self, fitness_functions: List[BaseFitness] = None, data: Union[dict, pd.DataFrame, pd.Series] = None, validation: bool = False, validation_federated: bool = False, simplify: bool = False):
         """
         This method computes the performance of each program in the population
 
@@ -260,10 +260,17 @@ class SymbolicRegressor:
                 The data on which the performance is computed
             - validation: bool (default: False)
                 If True the performance is computed on the validation data without optimization
+            - validation_federated: bool (default: False)
+                If True the performance is computed on the training and validation data without optimization (only for federated training)
+            - simplify: bool (default: False)
+                If True the program is simplified before computing the performance
         """
+        if data is None:
+            return
+        
         for p in self.population:
             p.compute_fitness(
-                fitness_functions=self.fitness_functions if fitness_functions is None else fitness_functions, data=data, validation=validation)
+                fitness_functions=self.fitness_functions if fitness_functions is None else fitness_functions, data=data, validation=validation, validation_federated=validation_federated, simplify=simplify)
 
     def _create_pareto_front(self):
         """

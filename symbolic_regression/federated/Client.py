@@ -1,6 +1,6 @@
 import logging
 from multiprocessing.connection import Listener
-from typing import List
+from typing import Dict, List
 import pandas as pd
 
 from symbolic_regression.federated.Agent import FederatedAgent
@@ -59,6 +59,7 @@ class FederatedSRClient(FederatedAgent):
         self.mode: str = 'client'
 
         self.data: pd.DataFrame = None
+        self.val_data: pd.DataFrame = None
 
     def load_data(self, data_path: str):
         """ Load data from a file
@@ -181,13 +182,14 @@ class FederatedSRClient(FederatedAgent):
                 server_strategy: BaseStrategy = msg.payload['server']
                 client_strategies: List[BaseStrategy] = msg.payload['clients']
 
-                logging.debug(
-                    f'Computing performance on {len(client_strategies)} clients strategies')
+                logging.info(
+                    f'Computing validation performance on {len(client_strategies)} clients strategies')
 
-                server_strategy.on_validation(data=self.data)
+                server_strategy.on_validation(data=self.data, val_data=self.val_data)
 
-                for client_name, client_strategy in client_strategies.items():
-                    client_strategy.on_validation(data=self.data)
+                client_strategies: Dict[str, BaseStrategy]
+                for client_strategy in client_strategies.values():
+                    client_strategy.on_validation(data=self.data, val_data=self.val_data)
 
                 self.send_to_orchestrator(
                     comm_type='TerminationValidation', payload={
@@ -213,7 +215,7 @@ class FederatedSRClient(FederatedAgent):
                 """
                 self.status = 'training'
 
-                self.federated_aggregation_strategy.execute(data=self.data)
+                self.federated_aggregation_strategy.execute(data=self.data, val_data=self.val_data)
 
                 self.send_to_orchestrator(
                     comm_type='ToOrchestratorAggregationStrategy', payload=self.federated_aggregation_strategy)

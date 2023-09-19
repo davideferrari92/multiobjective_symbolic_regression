@@ -206,7 +206,7 @@ class Program:
     def features_used(self):
         return self.program._get_features(features_list=[])
 
-    def compute_fitness(self, fitness_functions: List[BaseFitness], data: Union[dict, pd.Series, pd.DataFrame], validation: bool = False) -> None:
+    def compute_fitness(self, fitness_functions: List[BaseFitness], data: Union[dict, pd.Series, pd.DataFrame], validation: bool = False, validation_federated: bool = False, simplify: bool = True) -> None:
         """ This function evaluate the fitness of the program on the given data.
         The data can be a dictionary, a pandas Series or a pandas DataFrame.
 
@@ -217,6 +217,10 @@ class Program:
                 The data on which the program will be evaluated
             - validation: bool  (default: False)
                 If True, the fitness will be computed on the validation data without optimization
+            - validation_federated: bool  (default: False)
+                If True, the fitness will be computed on the training and validation data without optimization (only for federated training)
+            - simplify: bool  (default: True)
+                If True, the program will be simplified before computing the fitness
 
         Returns:
             - None
@@ -231,7 +235,7 @@ class Program:
                     raise ValueError(
                         f"Fitness function with label {ftn.label} already used")
 
-        if validation:
+        if validation or validation_federated:
             self.fitness_validation: Dict[str, float] = dict()
         else:
             self.fitness: Dict[str, float] = dict()
@@ -241,24 +245,28 @@ class Program:
         for ftn in self.fitness_functions:
             self.is_fitness_to_minimize[ftn.label] = ftn.minimize
 
-        try:
-            self.simplify(inplace=True)
-        except ValueError:
-            self._override_is_valid = False
-            if validation:
-                self.fitness_validation = {
-                    ftn.label: np.inf for ftn in self.fitness_functions}
-            else:
-                self.fitness = {
-                    ftn.label: np.inf for ftn in self.fitness_functions}
-            return
+        if simplify:
+            try:
+                self.simplify(inplace=True)
+            except ValueError:
+                self._override_is_valid = False
+                if validation:
+                    self.fitness_validation = {
+                        ftn.label: np.inf for ftn in self.fitness_functions}
+                elif not validation:
+                    self.fitness = {
+                        ftn.label: np.inf for ftn in self.fitness_functions}
+                return
 
         _converged: List[bool] = list()
 
         for ftn in self.fitness_functions:
             try:
+                """ We don't want optimization of the constants in the validation stage, both local (validation)
+                and federated (validation_federated)
+                """
                 fitness_value = round(ftn.evaluate(
-                    program=self, data=data, validation=validation), 5)
+                    program=self, data=data, validation=(validation or validation_federated)), 5)
             except KeyError:
                 fitness_value = np.inf
 
@@ -690,7 +698,7 @@ class Program:
 
             to_optimize = self if inplace else copy.deepcopy(self)
 
-            to_optimize.simplify(inplace=True)
+            # to_optimize.simplify(inplace=True)
 
             try:
                 final_parameters, _, _ = f_opt(
