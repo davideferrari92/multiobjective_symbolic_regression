@@ -1,6 +1,8 @@
 import copy
+import json
 import logging
 import os
+import pickle
 import random
 import time
 from itertools import repeat
@@ -22,7 +24,7 @@ backend_parallel = 'loky'
 
 class SymbolicRegressor:
 
-    def __init__(self, client_name: str, checkpoint_file: str = None, checkpoint_frequency: int = -1, const_range: tuple = (0, 1), parsimony=0.8, parsimony_decay=0.85, population_size: int = 300, tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1}, statistics_computation_frequency: int = 10) -> None:
+    def __init__(self, client_name: str, checkpoint_file: str = None, checkpoint_frequency: int = -1, checkpoint_overwrite: bool = True, const_range: tuple = (0, 1), parsimony=0.8, parsimony_decay=0.85, population_size: int = 300, tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1}, statistics_computation_frequency: int = 10) -> None:
         """ This class implements the basic features for training a Symbolic Regression algorithm
 
         Args:
@@ -34,6 +36,9 @@ class SymbolicRegressor:
 
             - checkpoint_frequency: int (default: -1)
                 the frequency of saving the model
+
+            - checkpoint_overwrite: bool (default: True)
+                if True the checkpoint file is overwritten, if False the checkpoint file gets the generation number as suffix
 
             - const_range: tuple (default: (0, 1))
                 this is the range of values from which to generate constants in the program
@@ -71,6 +76,7 @@ class SymbolicRegressor:
         self.client_name: str = client_name
         self.checkpoint_file: str = checkpoint_file
         self.checkpoint_frequency: int = checkpoint_frequency
+        self.checkpoint_overwrite: bool = checkpoint_overwrite
         self.features: List = None
         self.operations: List = None
         self.population_size: int = population_size
@@ -120,9 +126,13 @@ class SymbolicRegressor:
         )
 
     def save_model(self, file: str):
-        import json
-        import pickle
+        # Gets the number of the generation padded with zeros to the number
+        # of digits of the total number of generations
+        generation_str = str(self.generation).zfill(
+            len(str(self.generations_to_train)))
 
+        if not self.checkpoint_overwrite:
+            file = file + f".gen{generation_str}.sr"
         # Dump this object in a pickle file
         with open(file, "wb") as f:
             for p in self.population:
@@ -135,8 +145,6 @@ class SymbolicRegressor:
             json.dump(self.metadata, f)
 
     def load_model(self, file: str):
-        import pickle
-
         with open(file, "rb") as f:
             sr: SymbolicRegressor = pickle.load(f)
 
@@ -1281,7 +1289,11 @@ class SymbolicRegressor:
             for index, p in enumerate(self.first_pareto_front):
                 print(f'{index})\t{p.program}')
                 print()
+                print(f'\tTrain fitness')
                 print(f'\t{p.fitness}')
+                if len(p.fitness_validation):
+                    print(f'\tValidation fitness')
+                    print(f'\t{p.fitness_validation}')
                 print()
 
     def spearman_diversity(self, data: Union[dict, pd.Series, pd.DataFrame]) -> float:
@@ -1329,6 +1341,7 @@ class SymbolicRegressor:
         istances = list()
 
         for index, p in enumerate(self.population):
+            p: 'Program'
             row = dict()
             row['index'] = index + 1
             row['program'] = p.program
