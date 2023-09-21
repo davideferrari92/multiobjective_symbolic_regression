@@ -161,6 +161,6 @@ class FedNSGAII(BaseStrategy):
 
         elif self.mode == 'client':
             self.regressor.population: Population = self.regressor.population.as_program()
-            self.regressor.compute_performance(data=data, validation=False, validation_federated=True, simplify=False)
-            self.regressor.compute_performance(data=val_data, validation=True, validation_federated=True, simplify=False)
+            self.regressor.compute_fitness_population(data=data, validation=False, validation_federated=True, simplify=False)
+            self.regressor.compute_fitness_population(data=val_data, validation=True, validation_federated=True, simplify=False)
             self.regressor.population: Population = self.regressor.population.as_binary()
