@@ -236,6 +236,7 @@ class Program:
                         f"Fitness function with label {ftn.label} already used")
 
         if validation or validation_federated:
+            simplify = False
             self.fitness_validation: Dict[str, float] = dict()
         else:
             self.fitness: Dict[str, float] = dict()
@@ -266,7 +267,7 @@ class Program:
                 and federated (validation_federated)
                 """
                 fitness_value = round(ftn.evaluate(
-                    program=self, data=data, validation=(validation or validation_federated)), 5)
+                    program=self, data=data, validation=validation or validation_federated), 5)
             except KeyError:
                 fitness_value = np.inf
 

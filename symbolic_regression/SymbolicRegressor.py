@@ -256,7 +256,7 @@ class SymbolicRegressor:
 
             return hypervolume
 
-    def compute_performance(self, fitness_functions: List[BaseFitness] = None, data: Union[dict, pd.DataFrame, pd.Series] = None, validation: bool = False, validation_federated: bool = False, simplify: bool = False):
+    def compute_fitness_population(self, fitness_functions: List[BaseFitness] = None, data: Union[dict, pd.DataFrame, pd.Series] = None, validation: bool = False, validation_federated: bool = False, simplify: bool = False):
         """
         This method computes the performance of each program in the population
 
@@ -274,11 +274,19 @@ class SymbolicRegressor:
                 If True the program is simplified before computing the performance
         """
         if data is None:
+            logging.warning(
+                f'No data provided to compute the fitness of the population')
             return
         
         for p in self.population:
+            p: Program
             p.compute_fitness(
-                fitness_functions=self.fitness_functions if fitness_functions is None else fitness_functions, data=data, validation=validation, validation_federated=validation_federated, simplify=simplify)
+                fitness_functions=self.fitness_functions if fitness_functions is None else fitness_functions, 
+                data=data, 
+                validation=validation, 
+                validation_federated=validation_federated, 
+                simplify=simplify)
+
 
     def _create_pareto_front(self):
         """
@@ -695,7 +703,8 @@ class SymbolicRegressor:
                         self.tournament_size,
                         self.generation,
                         int(self.population_size/jobs),
-                        queue
+                        queue,
+                        val_data
                     )
                 )
                 procs.append(proc)
@@ -883,7 +892,7 @@ class SymbolicRegressor:
                                "time_spearman_diversity_computation"] = time.perf_counter() - before
 
                 if val_data is not None:
-                    self.compute_performance(
+                    self.compute_fitness_population(
                         fitness_functions=self.fitness_functions, data=val_data, validation=True)
 
             end_time_generation = time.perf_counter()
@@ -893,7 +902,7 @@ class SymbolicRegressor:
             self.times.loc[self.generation,
                            "time_generation_total"] = total_generation_time
 
-            if self.checkpoint_file and self.checkpoint_frequency > 0 and self.generation % self.checkpoint_frequency == 0 or self.generation == self.generations_to_train or self.generations_to_train:
+            if self.checkpoint_file and self.checkpoint_frequency > 0 and (self.generation % self.checkpoint_frequency == 0 or self.generation == self.generations_to_train):
                 try:
                     self.save_model(file=self.checkpoint_file)
                 except FileNotFoundError:
@@ -908,13 +917,13 @@ class SymbolicRegressor:
 
             if self.converged_generation and self.stop_at_convergence:
                 if val_data is not None:
-                    self.compute_performance(
+                    self.compute_fitness_population(
                         fitness_functions=self.fitness_functions, data=val_data, validation=True)
                 print(
                     f"Training converged after {self.converged_generation} generations and requested to stop.")
                 return
 
-    def generate_individual(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85) -> Program:
+    def generate_individual(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> Program:
         """
         This method generates a new individual for the population
 
@@ -940,6 +949,8 @@ class SymbolicRegressor:
                 coefficient is updated at each generation. The parsimony coefficient is multiplied
                 by this value at each generation. This allows to decrease the parsimony coefficient
                 over time to prevent the program to be too complex (deep).
+            - val_data: Union[dict, pd.DataFrame, pd.Series] (default None)
+                The data on which the validation is performed
 
         Returns:
             - p: Program
@@ -949,10 +960,15 @@ class SymbolicRegressor:
         new_p = Program(features=features, operations=operations, const_range=const_range,
                         parsimony=parsimony, parsimony_decay=parsimony_decay)
         new_p.init_program()
-        new_p.compute_fitness(fitness_functions=fitness_functions, data=data)
+        new_p.compute_fitness(fitness_functions=fitness_functions, data=data, validation=False)
+
+        if val_data is not None:
+            new_p.compute_fitness(
+                fitness_functions=fitness_functions, data=val_data, validation=True)
+
         return new_p
 
-    def generate_individual_batch(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85, batch_size: int = 1000, queue: Queue = None) -> Program:
+    def generate_individual_batch(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85, batch_size: int = 1000, queue: Queue = None, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> Program:
         """
         This method generates a new individual for the population
 
@@ -978,6 +994,12 @@ class SymbolicRegressor:
                 coefficient is updated at each generation. The parsimony coefficient is multiplied
                 by this value at each generation. This allows to decrease the parsimony coefficient
                 over time to prevent the program to be too complex (deep).
+            - batch_size: int (default 1000)
+                The number of individuals to generate
+            - queue: Queue (default None)
+                The queue in which to put the generated individuals
+            - val_data: Union[dict, pd.DataFrame, pd.Series] (default None)
+                The data on which the validation is performed
 
         Returns:
             - p: Program
@@ -992,7 +1014,7 @@ class SymbolicRegressor:
 
             new_p = self.generate_individual(data=data, features=features, operations=operations,
                                              fitness_functions=fitness_functions, const_range=const_range,
-                                             parsimony=parsimony, parsimony_decay=parsimony_decay)
+                                             parsimony=parsimony, parsimony_decay=parsimony_decay, val_data=val_data)
 
             if new_p._has_incomplete_fitness:
                 continue
@@ -1007,7 +1029,7 @@ class SymbolicRegressor:
         return new_ps
 
     @staticmethod
-    def _get_offspring(data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: Population, tournament_size: int, generation: int) -> Program:
+    def _get_offspring(data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: Population, tournament_size: int, generation: int, val_data: Union[Dict, pd.Series, pd.DataFrame] = None) -> Program:
         """
         This method generates an offspring of a program from the current population
 
@@ -1050,6 +1072,8 @@ class SymbolicRegressor:
                 The size of the tournament selection
             - generation: int
                 The current generation
+            - val_data: Union[Dict, pd.Series, pd.DataFrame] (default None)
+                The data on which the validation is performed
 
         Returns:
             - _offspring: Program
@@ -1150,7 +1174,9 @@ class SymbolicRegressor:
                     # This program will be removed from the population later.
                     program1.init_program()
                     program1.compute_fitness(
-                        fitness_functions=fitness_functions, data=data)
+                        fitness_functions=fitness_functions, data=data, validation=False)
+                    program1.compute_fitness(
+                        fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
                     return program1
 
                 _offspring: Program = None
@@ -1199,6 +1225,8 @@ class SymbolicRegressor:
                 # Add the fitness to the object after the cross_over or mutation
                 _offspring.compute_fitness(
                     fitness_functions=fitness_functions, data=data)
+                _offspring.compute_fitness(
+                    fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
 
                 # Reset the hash to force the re-computation
                 _offspring._hash = None
@@ -1211,7 +1239,7 @@ class SymbolicRegressor:
             return program1
 
     def _get_offspring_batch(self, data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: Population, tournament_size: int, generation: int,
-                             batch_size: int, queue: Queue = None) -> Program:
+                             batch_size: int, queue: Queue = None, val_data: Union[Dict, pd.Series, pd.DataFrame] = None) -> Program:
 
         population = population.as_program()
         offsprings: List[Program] = list()
@@ -1219,7 +1247,7 @@ class SymbolicRegressor:
         submitted = 0
         while submitted < batch_size * 3:
 
-            offspring = self._get_offspring(data=data, genetic_operators_frequency=genetic_operators_frequency,
+            offspring = self._get_offspring(data=data, val_data=val_data, genetic_operators_frequency=genetic_operators_frequency,
                                             fitness_functions=fitness_functions, population=population, tournament_size=tournament_size, generation=generation)
 
             if offspring._has_incomplete_fitness:

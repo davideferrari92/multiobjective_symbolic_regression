@@ -78,12 +78,10 @@ class BinaryCrossentropy(BaseFitness):
         pred = np.array(program_to_evaluate.evaluate(data=data))
         ground_truth = data[self.target]
 
-        sample_weights = data[self.weights] if self.weights else None
-
         try:
             return log_loss(y_true=ground_truth,
                             y_pred=pred,
-                            sample_weight=sample_weights)
+                            sample_weight=data[self.weights] if (self.weights and not validation) else None)
         except ValueError:
             return np.inf
         except TypeError:
@@ -212,14 +210,12 @@ class AkaikeInformationCriteriaBCE(BaseFitness):
         pred = np.array(program_to_evaluate.evaluate(data=data))
         ground_truth = data[self.target]
 
-        sample_weights = data[self.weights] if self.weights else None
-
         try:
             nconstants = len(program.get_constants())
 
             BCE = log_loss(y_true=ground_truth,
                             y_pred=pred,
-                            sample_weight=sample_weights)
+                            sample_weight=data[self.weights] if (self.weights and not validation) else None)
             
             AIC = 2 * (nconstants / len(data) + BCE)
 
