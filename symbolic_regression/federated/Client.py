@@ -180,6 +180,8 @@ class FederatedSRClient(FederatedAgent):
                 """
                 logging.debug(f'Termination requested')
                 server_strategy: BaseStrategy = msg.payload['server']
+                server_strategy.mode = 'client'  # Would be orchestrator otherwise and therefore wouldnt' execute anything
+                
                 client_strategies: List[BaseStrategy] = msg.payload['clients']
 
                 logging.info(
