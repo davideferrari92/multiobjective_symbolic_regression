@@ -1175,8 +1175,9 @@ class SymbolicRegressor:
                     program1.init_program()
                     program1.compute_fitness(
                         fitness_functions=fitness_functions, data=data, validation=False)
-                    program1.compute_fitness(
-                        fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
+                    if val_data is not None:
+                        program1.compute_fitness(
+                            fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
                     return program1
 
                 _offspring: Program = None
@@ -1225,8 +1226,9 @@ class SymbolicRegressor:
                 # Add the fitness to the object after the cross_over or mutation
                 _offspring.compute_fitness(
                     fitness_functions=fitness_functions, data=data)
-                _offspring.compute_fitness(
-                    fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
+                if val_data is not None:
+                    _offspring.compute_fitness(
+                        fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
 
                 # Reset the hash to force the re-computation
                 _offspring._hash = None
@@ -1319,7 +1321,7 @@ class SymbolicRegressor:
                 print()
                 print(f'\tTrain fitness')
                 print(f'\t{p.fitness}')
-                if len(p.fitness_validation):
+                if hasattr(self, 'fitness_validation') and len(p.fitness_validation) > 0:
                     print(f'\tValidation fitness')
                     print(f'\t{p.fitness_validation}')
                 print()

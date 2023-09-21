@@ -1,6 +1,6 @@
 import copy
 from abc import ABC, abstractmethod
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -436,7 +436,10 @@ class FeatureNode(Node):
         """
         super().__init__(father)
 
-        self.feature = feature
+        self._feature_confidence_intervals: List[float, float] = [np.nan, np.nan]
+        self._feature: Union[str, float] = feature
+        self.feature: Union[str, float] = feature
+
         self.arity = 0  # because it is a constand and not an operator
         self.is_constant = is_constant
         self.index = None
@@ -445,6 +448,81 @@ class FeatureNode(Node):
         """ This method returns the string representation of the FeatureNode
         """
         return self.render()
+
+    @property
+    def feature_confidence_intervals(self) -> List[float]:
+        """ This property returns the confidence intervals of the feature
+
+        Returns:
+            = self._feature_confidence_intervals: List[float, float]
+                The confidence intervals of the feature
+        """
+        return self._feature_confidence_intervals
+
+    @property
+    def feature(self) -> Union[str, float]:
+        """ This property returns the feature of the FeatureNode
+
+        Returns:
+            = self._feature: Union[str, float]
+                The feature of the FeatureNode
+        """
+        return self._feature
+    
+    @feature.setter
+    def feature(self, feature: Union[float, List[float]]) -> None:
+        """ This property sets the feature of the FeatureNode
+
+        Args:
+            - feature: Union[str, float]
+                The feature of the FeatureNode
+
+        Returns:
+            - None
+        """
+        if isinstance(feature, str):
+            self._feature = feature
+            self._feature_confidence_intervals = [np.nan, np.nan]
+            self.is_constant = False
+        if isinstance(feature, float) or isinstance(feature, int):
+            self._feature = float(feature)
+            self._feature_confidence_intervals = [float(feature), float(feature)]
+            self.is_constant = True
+        elif isinstance(feature, list):
+            feature = self._reject_outliers(values=feature, n_sigma=5.)
+
+            self._feature = float(np.median(feature))
+            self._feature_confidence_intervals = [float(np.quantile(feature, 0.05)), float(np.quantile(feature, 0.95))]
+            self.is_constant = True
+
+    @feature.getter
+    def feature(self) -> float:
+        """ This property returns the feature of the FeatureNode
+
+        Returns:
+            - self._feature: Union[str, float]
+                The feature of the FeatureNode
+        """
+        return self._feature
+    
+    @staticmethod
+    def _reject_outliers(values: List[float], n_sigma: float = 2.):
+        """ This method returns the values of a list of values that are not outliers
+
+        Args:
+            - values: List[float]
+                The list of values
+            - n_sigma: float    (default: 2.)
+                The number of standard deviations to consider a value an outlier
+
+        Returns:
+            - values[s < n_sigma]: List[float]
+                The values of the list that are not outliers
+        """
+        d = np.abs(values - np.median(values))
+        mdev = np.median(d)
+        s = d / mdev if mdev else np.zeros(len(d))
+        return list(values[s < n_sigma])
 
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame, None] = None) -> Union[int, float]:
         """ This function evaluate the value of a FeatureNode, which is the datapoint passed as argument
