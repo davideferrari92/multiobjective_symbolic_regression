@@ -21,8 +21,8 @@ class Wasserstein(BaseFitness):
     def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
 
         if not hasattr(self, 'F_y'):
-            raise AttributeError(
-                'Wasserstein distance requires the target distribution F_y to be provided in the data argument.')
+            self.F_y = get_cumulant_hist(
+                data=data, target=self.target, bins=self.bins)
 
         features = program.features
 

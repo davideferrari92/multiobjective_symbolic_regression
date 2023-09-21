@@ -187,3 +187,45 @@ class GMeans(BaseFitness):
         ix = np.argmax(gmeans)
 
         return gmeans[ix]
+
+
+class AkaikeInformationCriteriaBCE(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        """ This fitness requires the following arguments:
+
+        - target: str
+        - weights: str
+        - logistic: bool
+
+        """
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+
+        if not validation:
+            self.optimize(program=program, data=data)
+
+        if self.logistic:
+            program_to_evaluate = program.to_logistic(inplace=False)
+
+        pred = np.array(program_to_evaluate.evaluate(data=data))
+        ground_truth = data[self.target]
+
+        sample_weights = data[self.weights] if self.weights else None
+
+        try:
+            nconstants = len(program.get_constants())
+
+            BCE = log_loss(y_true=ground_truth,
+                            y_pred=pred,
+                            sample_weight=sample_weights)
+            
+            AIC = 2 * (nconstants / len(data) + BCE)
+
+            return AIC
+        
+        except ValueError:
+            return np.inf
+        except TypeError:
+            return np.inf

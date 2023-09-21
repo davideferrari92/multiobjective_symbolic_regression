@@ -268,6 +268,26 @@ class ValueRange(BaseFitness):
         return upper_bound_constraint + lower_bound_constraint
 
 
+class Complexity(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        """ This fitness requires the following arguments:
+
+        - target: str
+        - weights: str
+
+        """
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, **kwargs) -> float:
+
+        if not program.is_valid:
+            return np.nan
+        
+        
+        return program.complexity
+
+
 def create_regression_weights(data: pd.DataFrame, target: str, bins: int = None):
 
     y = np.array(data[target])

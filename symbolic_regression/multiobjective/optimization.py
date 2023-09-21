@@ -312,8 +312,7 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
             elif task == 'binary:logistic':
                 # compute average loss
 
-                sigma = 1. / (1. + np.exp(-y_pred)
-                              )  # numerical value of sigmoid(program)
+                sigma = 1. / (1. + np.exp(-y_pred))  # numerical value of sigmoid(program)
                 av_loss = np.nanmean(
                     -w_batch[i] *
                     (y_batch[i] * np.log(sigma + 1e-20) +
