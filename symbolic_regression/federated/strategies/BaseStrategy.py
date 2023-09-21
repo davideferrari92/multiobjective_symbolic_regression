@@ -39,6 +39,7 @@ class BaseStrategy:
         self.configuration: Dict = configuration
 
         self.federated_rounds_executed: int = 0
+        self.federated_round_is_terminated: bool = True
 
         self.regressor: SymbolicRegressor = None
         self.regressors: Dict[str, SymbolicRegressor] = {}
@@ -78,7 +79,7 @@ class BaseStrategy:
         """
 
         logging.info(
-            f'Executing {self.mode} strategy iteration {self.federated_rounds_executed}/{self.federated_rounds}: on_start')
+            f'Executing {self.mode} strategy iteration {self.federated_rounds_executed + 1}/{self.federated_rounds}: on_start')
         self.on_start(**kwargs)
 
         if self.mode == 'server' and len(self.regressors) < self.min_clients:
@@ -92,7 +93,8 @@ class BaseStrategy:
         logging.debug(f'Executing {self.mode} strategy: on_termination')
         self.on_termination(**kwargs)
 
-        self.federated_rounds_executed += 1
+        if self.federated_round_is_terminated:
+            self.federated_rounds_executed += 1
 
     @abstractmethod
     def aggregation(self, **kwargs):
