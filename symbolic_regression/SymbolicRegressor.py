@@ -1318,6 +1318,10 @@ class SymbolicRegressor:
                 The dictionary of the marker to use in the plot
             - highlight_best: bool (default True)
                 Whether to highlight the best program in the pareto front
+            - xlim: Tuple[float, float] (default None)
+                The limits of the x axis
+            - ylim: Tuple[float, float] (default None)
+                The limits of the y axis
             - figsize: Union[Dict[str,  Any], None] (default None)
                 The size of the figure
 
