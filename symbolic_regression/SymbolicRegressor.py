@@ -7,10 +7,11 @@ import random
 import time
 from itertools import repeat
 from multiprocessing import Process, Queue
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objs as go
 from loky import get_reusable_executor
 from scipy.stats import spearmanr
 
@@ -231,7 +232,7 @@ class SymbolicRegressor:
         if not exclusive:
             try:
                 points = points[np.sum((points - references)
-                                    <= 0, axis=1) == points.shape[1]]
+                                       <= 0, axis=1) == points.shape[1]]
                 self.fpf_hypervolume = _HyperVolume(references).compute(points)
 
             except ValueError:
@@ -240,23 +241,23 @@ class SymbolicRegressor:
             self.fpf_stats.loc[self.generation, 'n_individuals'] = len(
                 self.first_pareto_front)
             self.fpf_stats.loc[self.generation,
-                            'fpf_hypervolume'] = self.fpf_hypervolume
+                               'fpf_hypervolume'] = self.fpf_hypervolume
             self.fpf_stats.loc[self.generation,
-                            'fpf_hypervolume_reference'] = self.fpf_hypervolume_reference
+                               'fpf_hypervolume_reference'] = self.fpf_hypervolume_reference
 
             self.fpf_hypervolume_reference = np.product(references)
 
         else:
             try:
                 points = points[np.sum((points - references)
-                                    <= 0, axis=1) == points.shape[1]]
+                                       <= 0, axis=1) == points.shape[1]]
                 hypervolume = _HyperVolume(references).exclusive(points)
             except ValueError:
                 hypervolume = np.nan
 
             return hypervolume
 
-    def compute_fitness_population(self, fitness_functions: List[BaseFitness] = None, data: Union[dict, pd.DataFrame, pd.Series] = None, validation: bool = False, validation_federated: bool = False, simplify: bool = False):
+    def compute_fitness_population(self, fitness_functions: List[BaseFitness] = None, data: Union[dict, pd.DataFrame, pd.Series] = None, validation: bool = False, validation_federated: bool = False, simplify: bool = True):
         """
         This method computes the performance of each program in the population
 
@@ -277,16 +278,15 @@ class SymbolicRegressor:
             logging.warning(
                 f'No data provided to compute the fitness of the population')
             return
-        
+
         for p in self.population:
             p: Program
             p.compute_fitness(
-                fitness_functions=self.fitness_functions if fitness_functions is None else fitness_functions, 
-                data=data, 
-                validation=validation, 
-                validation_federated=validation_federated, 
+                fitness_functions=self.fitness_functions if fitness_functions is None else fitness_functions,
+                data=data,
+                validation=validation,
+                validation_federated=validation_federated,
                 simplify=simplify)
-
 
     def _create_pareto_front(self):
         """
@@ -685,7 +685,7 @@ class SymbolicRegressor:
                 print(timing_str)
                 print("#" * len(timing_str))
             print(
-                f"{self.client_name}: starting generation {self.generation}/{self.generations_to_train}")
+                f"{self.client_name}: starting generation {self.generation}/{self.generations_to_train}", end='\r' if self.verbose == 0 else '\n', flush=True)
 
             before = time.perf_counter()
 
@@ -960,7 +960,8 @@ class SymbolicRegressor:
         new_p = Program(features=features, operations=operations, const_range=const_range,
                         parsimony=parsimony, parsimony_decay=parsimony_decay)
         new_p.init_program()
-        new_p.compute_fitness(fitness_functions=fitness_functions, data=data, validation=False)
+        new_p.compute_fitness(fitness_functions=fitness_functions,
+                              data=data, validation=False, simplify=True)
 
         if val_data is not None:
             new_p.compute_fitness(
@@ -1174,7 +1175,7 @@ class SymbolicRegressor:
                     # This program will be removed from the population later.
                     program1.init_program()
                     program1.compute_fitness(
-                        fitness_functions=fitness_functions, data=data, validation=False)
+                        fitness_functions=fitness_functions, data=data, validation=False, simplify=True)
                     if val_data is not None:
                         program1.compute_fitness(
                             fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
@@ -1225,7 +1226,7 @@ class SymbolicRegressor:
 
                 # Add the fitness to the object after the cross_over or mutation
                 _offspring.compute_fitness(
-                    fitness_functions=fitness_functions, data=data)
+                    fitness_functions=fitness_functions, data=data, simplify=True)
                 if val_data is not None:
                     _offspring.compute_fitness(
                         fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
@@ -1296,6 +1297,119 @@ class SymbolicRegressor:
         }
 
         return metadata
+
+    def plot_compare_fitness(self, perf_x: str, perf_y: str, pf_rank: int = 1, on_val: bool = False,
+                             marker_dict: Dict[str, Any] = dict(size=5, color='grey'), highlight_best: bool = True,
+                             xlim: Tuple[float, float] = None, ylim: Tuple[float, float] = None,
+                             figsize: Union[Dict[str,  Any], None] = None, title: str = None):
+        """
+        This method plots the distribution of two performance metrics for the programs in the first pareto front
+
+        Args:
+            - perf_x: str
+                The name of the first performance metric to plot
+            - perf_y: str
+                The name of the second performance metric to plot
+            - pf_rank: int (default 1)
+                The rank of the pareto front to plot
+            - on_val: bool (default False)
+                Whether to plot the performance on the validation data or on the training data
+            - marker_dict: Dict[str, Any] (default dict(size=5,color='grey'))
+                The dictionary of the marker to use in the plot
+            - highlight_best: bool (default True)
+                Whether to highlight the best program in the pareto front
+            - figsize: Union[Dict[str,  Any], None] (default None)
+                The size of the figure
+
+        Returns:
+            - fig: go.Figure    
+                The plotly figure
+        """
+
+        perf_df = pd.DataFrame()
+        for index, p in enumerate(self.extract_pareto_front(rank=pf_rank)):
+            p: 'Program'
+            if on_val:
+                if not hasattr(p, 'fitness_validation') or len(p.fitness_validation) == 0:
+                    raise ValueError(
+                        f"Program {index} does not have a validation fitness")
+                for perf in p.fitness_validation:
+                    perf_df.loc[index, perf] = p.fitness_validation[perf]
+            else:
+                for perf in p.fitness:
+                    perf_df.loc[index, perf] = p.fitness[perf]
+
+        fig = go.Figure()
+
+        perf_df['color'] = marker_dict.get('color', 'grey')
+
+        if highlight_best:
+            perf_x_max = perf_df[perf_x].max()
+            perf_x_min = perf_df[perf_x].min()
+            perf_y_max = perf_df[perf_y].max()
+            perf_y_min = perf_df[perf_y].min()
+            perf_x_max_index = perf_df[perf_df[perf_x] == perf_x_max].index[0]
+            perf_x_min_index = perf_df[perf_df[perf_x] == perf_x_min].index[0]
+            perf_y_max_index = perf_df[perf_df[perf_y] == perf_y_max].index[0]
+            perf_y_min_index = perf_df[perf_df[perf_y] == perf_y_min].index[0]
+            perf_df.loc[perf_x_max_index, 'color'] = 'red'
+            perf_df.loc[perf_y_max_index, 'color'] = 'red'
+            perf_df.loc[perf_x_min_index, 'color'] = 'blue'
+            perf_df.loc[perf_y_min_index, 'color'] = 'blue'
+
+        # Add the points to the plot
+        fig.add_trace(go.Scatter(
+            x=perf_df[perf_x],
+            y=perf_df[perf_y],
+            mode='markers',
+            marker=marker_dict,
+            marker_color=perf_df['color'],
+            # customdata=list(perf_df.columns)
+        ))
+
+        fig.update_traces(
+            hovertemplate="<br>".join([
+                f"{perf_x}: %{{x}}",
+                f"{perf_y}: %{{y}}",
+                # f"Program: %{{customdata[0]}}",
+                # f"Complexity: %{{customdata[1]}}"
+            ])
+        )
+
+        title = title if title is not None else f"Distribution of {perf_x} and {perf_y} for the {pf_rank} Pareto Front on {'validation' if on_val else 'training'} data"
+
+        fig.update_layout(
+            title=title,
+            xaxis_title=perf_x,
+            yaxis_title=perf_y
+        )
+
+        if xlim is not None:
+            fig.update_xaxes(range=xlim)
+        if ylim is not None:
+            fig.update_yaxes(range=ylim)
+
+        if isinstance(figsize, Dict):
+            fig.update_layout(
+                autosize=False,
+                width=figsize['width'],
+                height=figsize['height'],
+            )
+
+        # Set background color to white but with the grid lines
+        fig.update_layout(
+            plot_bgcolor="white",
+            xaxis=dict(
+                gridcolor="lightgrey",
+                gridwidth=2,
+            ),
+            yaxis=dict(
+                gridcolor="lightgrey",
+                gridwidth=2,
+            ),
+        )
+
+        return fig
 
     def _print_first_pareto_front(self, verbose: int = 2):
         """
