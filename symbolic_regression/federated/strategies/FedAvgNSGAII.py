@@ -46,7 +46,7 @@ class FedAvgNSGAII(FedNSGAII):
     def __init__(self, **kwargs) -> None:
         super().__init__(
             name=kwargs['name'], mode=kwargs['mode'], configuration=kwargs['configuration'])
-        
+
         self.stage: int = 1
         self.federated_round_is_terminated: bool = False
 
@@ -72,7 +72,7 @@ class FedAvgNSGAII(FedNSGAII):
             - Phase 2 Server: calculate the constant-wise average of each program and generate a new population in 
                 which each program has the average of the constants of the programs in the same position of the
                 previous populations
-        
+
         '''
 
         if self.mode == 'server':
@@ -85,30 +85,54 @@ class FedAvgNSGAII(FedNSGAII):
                     logging.info(
                         f'Incorporating {client_name} regressor population')
 
-                    self.regressor.population.extend(client_regressor.extract_pareto_front(rank=1))
-                    self.regressor.population.extend(client_regressor.extract_pareto_front(rank=2))
-                
-                logging.debug(f'Incorporated population size: {len(self.regressor.population)}')
+                    for r in range(1, self.federated_configuration.get('max_rank_aggregation', 2) + 1):
+                        self.regressor.population.extend(
+                            client_regressor.extract_pareto_front(rank=r))
+
+                logging.debug(
+                    f'Incorporated population size: {len(self.regressor.population)}')
 
                 self.stage = 2
                 self.federated_round_is_terminated = False
 
             elif self.stage == 2:
-                
+
                 logging.debug(f'Server {self.name} is executing stage 2')
 
-                self.regressor.population: Population = copy.deepcopy(self.regressors[list(self.regressors.keys())[0]].population)
+                self.regressor.population: Population = copy.deepcopy(
+                    self.regressors[list(self.regressors.keys())[0]].population)
+
+                ineligible = 0
+
+                for ith_programs in zip(*[regressor.population for regressor in self.regressors.values()]):
+                    """ Apply constants_confidence_intervals_overlap() to each pair of programs in ith_programs.
+                    If any one return False, then all of them are set is_valid=False 
+                    """
+                    stop = False
+                    for i in range(len(ith_programs)):
+                        for j in range(i + 1, len(ith_programs)):
+                            if not ith_programs[i].is_valid or not ith_programs[j].is_valid or not ith_programs[i].constants_confidence_intervals_overlap(ith_programs[j]):
+                                stop = True
+                                break
+
+                    if stop:
+                        ineligible += 1
+                        for program in ith_programs:
+                            program._override_is_valid = False
 
                 for index, programs in enumerate(zip(*[regressor.population for regressor in self.regressors.values()])):
 
                     if len(programs[0].get_constants()) == 0:
                         continue
-                    
+
                     self.regressor.population[index].set_constants(
-                        [sum([program.get_constants()[i].feature for program in programs]) / len(programs) for i in range(len(programs[0].get_constants()))])
+                        [sum([program.get_constants()[i] for program in programs]) / len(programs) for i in range(len(programs[0].get_constants()))])
 
                 self.stage = 1
                 self.federated_round_is_terminated = True
+
+                if self.training_configuration.get('verbose', 0) > 0:
+                    logging.info(f"Ineligible: {ineligible}/{len(self.regressor.population)}")
             else:
                 raise ValueError(f'Invalid stage {self.stage}')
 
@@ -117,6 +141,11 @@ class FedAvgNSGAII(FedNSGAII):
             if self.stage == 1:
 
                 logging.debug(f'Client {self.name} is executing stage 1')
+
+                self.regressor.compute_fitness_population(
+                    data=data, validation=False, validation_federated=True, simplify=False)
+                self.regressor.compute_fitness_population(
+                    data=val_data, validation=True, validation_federated=True, simplify=False)
 
                 self.regressor.fit(
                     data=data,
@@ -137,13 +166,20 @@ class FedAvgNSGAII(FedNSGAII):
 
                 logging.debug(f'Client {self.name} is executing stage 2')
 
-                self.regressor.compute_fitness_population(
-                    fitness_functions=self.training_configuration['fitness_functions'],
-                    data=data,
-                    validation=False,
-                    simplify=False
-                )
-                
+                for program in self.regressor.population:
+                    program.bootstrap(
+                        data=data,
+                        target=self.training_configuration['target'],
+                        weights=self.training_configuration['weights'],
+                        constants_optimization=self.training_configuration['constants_optimization'],
+                        constants_optimization_conf=self.training_configuration[
+                            'constants_optimization_conf'],
+                        k=self.training_configuration.get('bootstrap_k', 100),
+                        frac=self.training_configuration.get(
+                            'bootstrap_frac', 0.6),
+                        inplace=True
+                    )
+
                 self.federated_round_is_terminated = False
 
             else:
