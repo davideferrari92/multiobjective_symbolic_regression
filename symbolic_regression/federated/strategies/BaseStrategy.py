@@ -78,8 +78,13 @@ class BaseStrategy:
         algorithm.
         """
 
+        if hasattr(self, 'stage'):
+            stage_str = f' (stage {self.stage})'
+        else:
+            stage_str = ''
+
         logging.info(
-            f'Executing {self.mode} strategy iteration {self.federated_rounds_executed + 1}/{self.federated_rounds}: on_start')
+            f'Executing {self.mode} strategy iteration {self.federated_rounds_executed + 1}/{self.federated_rounds}{stage_str}: on_start')
         self.on_start(**kwargs)
 
         if self.mode == 'server' and len(self.regressors) < self.min_clients:
@@ -87,10 +92,12 @@ class BaseStrategy:
                 f'Not enough clients to execute the strategy {self.name}')
             return
 
-        logging.debug(f'Executing {self.mode} strategy: aggregation')
+        logging.info(
+            f'Executing {self.mode} strategy iteration {self.federated_rounds_executed + 1}/{self.federated_rounds}{stage_str}: aggregation')
         self.aggregation(**kwargs)
 
-        logging.debug(f'Executing {self.mode} strategy: on_termination')
+        logging.info(
+            f'Executing {self.mode} strategy iteration {self.federated_rounds_executed + 1}/{self.federated_rounds}{stage_str}: on_termination')
         self.on_termination(**kwargs)
 
         if self.federated_round_is_terminated:
