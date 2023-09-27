@@ -1298,7 +1298,7 @@ class SymbolicRegressor:
 
         return metadata
 
-    def plot_compare_fitness(self, perf_x: str, perf_y: str, pf_rank: int = 1, on_val: bool = False,
+    def plot_compare_fitness(self, perf_x: str, perf_y: str, pf_rank: int = 1, generation: int = None, on_val: bool = False,
                              marker_dict: Dict[str, Any] = dict(size=5, color='grey'), highlight_best: bool = True,
                              xlim: Tuple[float, float] = None, ylim: Tuple[float, float] = None,
                              figsize: Union[Dict[str,  Any], None] = None, title: str = None):
@@ -1312,6 +1312,8 @@ class SymbolicRegressor:
                 The name of the second performance metric to plot
             - pf_rank: int (default 1)
                 The rank of the pareto front to plot
+            - generation: int (default None)
+                The generation to plot. If -1, the last generation is plotted
             - on_val: bool (default False)
                 Whether to plot the performance on the validation data or on the training data
             - marker_dict: Dict[str, Any] (default dict(size=5,color='grey'))
@@ -1330,8 +1332,16 @@ class SymbolicRegressor:
                 The plotly figure
         """
 
+        if generation and pf_rank > 1:
+            raise ValueError(
+                "Cannot plot pareto fronts beyond the first for historic generations")
+
+        generation = self.generation if not generation else generation
+
+        iterate_over = self.extract_pareto_front(rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 1]
+
         perf_df = pd.DataFrame()
-        for index, p in enumerate(self.extract_pareto_front(rank=pf_rank)):
+        for index, p in enumerate(iterate_over):
             p: 'Program'
             if on_val:
                 if not hasattr(p, 'fitness_validation') or len(p.fitness_validation) == 0:
@@ -1380,7 +1390,7 @@ class SymbolicRegressor:
             ])
         )
 
-        title = title if title is not None else f"Distribution of {perf_x} and {perf_y} for the {pf_rank} Pareto Front on {'validation' if on_val else 'training'} data"
+        title = title if title is not None else f"Distribution of {perf_x} and {perf_y} for the {pf_rank} Pareto Front of generation {generation}/{self.generations_to_train} on {'validation' if on_val else 'training'} data"
 
         fig.update_layout(
             title=title,
@@ -1439,7 +1449,7 @@ class SymbolicRegressor:
                 print()
                 print(f'\tTrain fitness')
                 print(f'\t{p.fitness}')
-                if hasattr(self, 'fitness_validation') and len(p.fitness_validation) > 0:
+                if hasattr(p, 'fitness_validation') and len(p.fitness_validation) > 0:
                     print(f'\tValidation fitness')
                     print(f'\t{p.fitness_validation}')
                 print()
