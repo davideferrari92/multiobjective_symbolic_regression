@@ -2,6 +2,7 @@ import copy
 import logging
 import random
 from typing import Dict, List, Tuple, Union
+from joblib import Parallel, delayed
 
 import numpy as np
 import pandas as pd
@@ -205,6 +206,96 @@ class Program:
     @features_used.getter
     def features_used(self):
         return self.program._get_features(features_list=[])
+
+    def bootstrap(self, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization: str, constants_optimization_conf: dict, inplace: bool = False, k: int = 1000, frac: float = .6) -> 'Program':
+        """ This method allow to bootstrap a program.
+
+        The bootstrapping is a statistical method to estimate the uncertainty of a model.
+        We optimize the constants k times over a random fraction frac of the dataset.
+        The result is a list of k constants for each constant of the program. These are
+        then used to create a new program with the same structure of the original one
+        but with the new constants. It leverages the confidence intervals capability of
+        FeatureNode to receive a list of values for each constant.
+
+        Args:
+            - data: Union[dict, pd.Series, pd.DataFrame]
+                The data on which the program will be evaluated
+            - target: str
+                The target variable of the data
+            - weights: str
+                The weights of the data
+            - constants_optimization: str
+                The constants optimization method to use
+            - constants_optimization_conf: dict
+                The configuration of the constants optimization method
+            - inplace: bool  (default=False)
+                If True, the method will modify the program in place, otherwise it will return a new program
+            - k: int  (default=1000)
+                The number of bootstrap iterations
+            - frac: float  (default=.6)
+                The fraction of the data to use for each bootstrap iteration
+        """
+
+        def _internal_bootstrap(data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization: str, constants_optimization_conf: dict, frac: float = .6) -> 'Program':
+            bs_data = data.sample(frac=frac, replace=True)
+            # !!! Weights should now be adapted to the bs_data target distribution
+
+            # Increase the epochs to be used for the bootstrap
+            constants_optimization_conf = copy.deepcopy(
+                constants_optimization_conf)
+            constants_optimization_conf['epochs'] = max(200, constants_optimization_conf['epochs'])
+
+            recalibrated = copy.deepcopy(self)
+            recalibrated.set_constants(
+                new=list(np.random.uniform(
+                    low=self.const_range[0],
+                    high=self.const_range[1],
+                    size=len(self.get_constants())
+                ))
+            )
+            return recalibrated.optimize(
+                data=bs_data,
+                target=target,
+                weights=weights,
+                constants_optimization=constants_optimization,
+                constants_optimization_conf=constants_optimization_conf,
+                inplace=False
+            ).get_constants(return_objects=False)
+
+        bootstrapped_constants: List[float] = Parallel(n_jobs=-1)(delayed(_internal_bootstrap)(
+            data=data,
+            target=target,
+            weights=weights,
+            constants_optimization=constants_optimization,
+            constants_optimization_conf=constants_optimization_conf,
+            frac=frac
+        ) for _ in range(k))
+
+        if inplace:
+            bootstrapped_program = self
+        else:
+            bootstrapped_program = copy.deepcopy(self)
+
+        bootstrapped_program.set_constants(
+            [list(new_constants) for new_constants in zip(*bootstrapped_constants)])
+
+        return bootstrapped_program
+
+    def constants_confidence_intervals_overlap(self, other: 'Program') -> bool:
+
+        if not len(self.get_constants(return_objects=False)) == len(other.get_constants(return_objects=False)):
+            raise ValueError(
+                "The two programs have different number of constants")
+
+        for self_constant, other_constant in zip(self.get_constants(return_objects=True), other.get_constants(return_objects=True)):
+            if self_constant.feature_confidence_intervals == [np.nan, np.nan] or other_constant.feature_confidence_intervals == [np.nan, np.nan]:
+                return False
+            overlap = max(0, min(self_constant.feature_confidence_intervals[1], other_constant.feature_confidence_intervals[1]) - max(
+                self_constant.feature_confidence_intervals[0], other_constant.feature_confidence_intervals[0]))
+            if overlap <= 1e-7:
+                return False
+
+        return True
 
     def compute_fitness(self, fitness_functions: List[BaseFitness], data: Union[dict, pd.Series, pd.DataFrame], validation: bool = False, validation_federated: bool = False, simplify: bool = True) -> None:
         """ This function evaluate the fitness of the program on the given data.
@@ -449,7 +540,7 @@ class Program:
 
         return node
 
-    def get_constants(self):
+    def get_constants(self, return_objects: bool = False):
         """
         This method allow to get all constants used in a tree.
 
@@ -457,7 +548,9 @@ class Program:
         all constants to be in a fixed order explored by a DFS descent of the tree.
 
         Args:
-            - None
+            - return_objects: bool  (default=False)
+                If True, the method will return a list of FeatureNode objects instead of a list of
+                feature names.
 
         Returns:
             - List[FeatureNode]
@@ -477,6 +570,9 @@ class Program:
 
         for index, constant in enumerate(to_return):
             self._set_constants_index(constant=constant, index=index)
+
+        if not return_objects:
+            to_return = [f.feature for f in to_return]
 
         return to_return
 
@@ -655,8 +751,53 @@ class Program:
                  weights: str,
                  constants_optimization: str,
                  constants_optimization_conf: dict,
+                 bootstrap: bool = False,
                  inplace: bool = False) -> 'Program':
 
+        """ This method allow to optimize the constants of a program.
+
+        The optimization of constants consists of executing a gradient descent strategy on the constants
+        based on the task of the training (classification or regression). The optimization is done using
+        implementations of Stochastic Gradient Descent (SGD) and ADAM (both in 1D and 2D version).
+
+        In the input dictionary constants_optimization_conf, the following parameters can be set:
+            - learning_rate: float
+                The learning rate
+            - batch_size: int
+                The batch size
+            - epochs: int
+                The number of epochs
+            - gradient_clip: bool
+                Whether to clip the gradients
+            - beta_1: float
+                The beta 1 parameter for ADAM
+            - beta_2: float
+                The beta 2 parameter for ADAM
+            - epsilon: floatbins
+                The l1 regularization parameter
+            - l2_param: float
+                The l2 regularization parameter
+
+        Args:
+            - data: Union[dict, pd.Series, pd.DataFrame]
+                The data on which the program will be evaluated
+            - target: str
+                The target variable of the data
+            - weights: str
+                The weights of the data
+            - constants_optimization: str
+                The constants optimization method to use
+            - constants_optimization_conf: dict
+                The configuration of the constants optimization method
+            - bootstrap: bool  (default=False)
+                If True, the constants will be optimized using bootstrapping
+            - inplace: bool  (default=False)
+                If True, the method will modify the program in place, otherwise it will return a new program
+
+        Returns:
+            - Program
+                The optimized program
+        """
         if not constants_optimization or not self.is_valid:
             return self
 
@@ -666,7 +807,7 @@ class Program:
             raise AttributeError(
                 f'Task supported are regression:wmse, regression:wrrmse or binary:logistic')
 
-        n_constants = len(self.get_constants())
+        n_constants = len(self.get_constants(return_objects=False))
         n_features_used = len(self.features_used)
 
         if not isinstance(self.program, FeatureNode) and n_constants > 0 and n_features_used > 0:
@@ -699,8 +840,6 @@ class Program:
 
             to_optimize = self if inplace else copy.deepcopy(self)
 
-            # to_optimize.simplify(inplace=True)
-
             try:
                 final_parameters, _, _ = f_opt(
                     program=to_optimize,
@@ -708,7 +847,8 @@ class Program:
                     target=target,
                     weights=weights,
                     constants_optimization_conf=constants_optimization_conf,
-                    task=task
+                    task=task,
+                    bootstrap=bootstrap,
                 )
             except NameError:
                 return to_optimize
@@ -762,7 +902,7 @@ class Program:
         Returns:
             - None
         """
-        for constant, new_value in zip(self.get_constants(), new):
+        for constant, new_value in zip(self.get_constants(return_objects=True), new):
             constant.feature = new_value
 
     @staticmethod
@@ -1282,7 +1422,7 @@ class Program:
         offspring = copy.deepcopy(self)
 
         leaves = offspring.get_features(
-            return_objects=True) + offspring.get_constants()
+            return_objects=True) + offspring.get_constants(return_objects=True)
 
         mutate_point = random.choice(leaves)
         mutate_father = mutate_point.father
