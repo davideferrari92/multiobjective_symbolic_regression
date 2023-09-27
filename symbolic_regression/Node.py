@@ -519,6 +519,8 @@ class FeatureNode(Node):
             - values[s < n_sigma]: List[float]
                 The values of the list that are not outliers
         """
+        values = np.array(values)
+
         d = np.abs(values - np.median(values))
         mdev = np.median(d)
         s = d / mdev if mdev else np.zeros(len(d))
@@ -852,6 +854,10 @@ class InvalidNode(Node):
             = np.inf: float
                 The InvalidNode is not valid, so it always returns np.inf
         """
+        return np.inf
+
+    @property
+    def feature(self) -> float:
         return np.inf
 
     def render(self, data: Union[dict, pd.Series, None] = None, format_tf: bool = False, format_diff: bool = False) -> str:
