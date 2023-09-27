@@ -6,10 +6,12 @@ import pandas as pd
 import sympy as sym
 from sympy.utilities.lambdify import lambdify
 
+from symbolic_regression.multiobjective.fitness.Regression import create_regression_weights
+
 warnings.filterwarnings("ignore")
 
 
-def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str):
+def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str, bootstrap: bool = False):
     '''
     Stochastic Gradient Descent with analytic derivatives
 
@@ -38,6 +40,8 @@ def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weight
                 L2 regularization parameter
         - task: str
             Task to be performed. Can be 'regression' or 'classification'
+        - bootstrap: bool
+            When bootstrapping is used, the weights are recalculated each time
 
     Returns:
         - list
@@ -58,7 +62,8 @@ def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weight
         return [], [], []
 
     n_features = len(program.features)
-    constants = np.array([item.feature for item in program.get_constants()])
+    constants = np.array(
+        [item.feature for item in program.get_constants(return_objects=True)])
     n_constants = constants.size
 
     if n_constants == 0:  # No constants in program
@@ -74,10 +79,22 @@ def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weight
     # Initialize ground truth and data arrays
     y_true = np.reshape(data[target].to_numpy(), (data[target].shape[0], 1))
     X_data = data[program.features].to_numpy()
+
     if weights:
-        w = np.reshape(data[weights].to_numpy(), (data[weights].shape[0], 1))
+        if bootstrap:
+            if task == 'regression:wmse' or task == 'regression:wrrmse':
+                w = create_regression_weights(
+                    data=data, target=target, bins=10)
+            elif task == 'binary:logistic':
+                w = np.where(y_true == 1, 1./(2*y_true.mean()),
+                             1./(2*(1-y_true.mean())))
+            w = np.reshape(w, (w.shape[0], 1))
+        else:
+            w = np.reshape(data[weights].to_numpy(),
+                           (data[weights].shape[0], 1))
     else:
         w = np.ones_like(y_true)
+
     # convert program render into sympy formula (symplify?)
     p_sym = program.program.render(format_diff=True)
 
@@ -164,7 +181,7 @@ def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weight
     return constants, loss, log
 
 
-def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str):
+def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str, bootstrap: bool = False):
     ''' ADAM with analytic derivatives
 
     Args:
@@ -190,15 +207,15 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
                 The beta 1 parameter for ADAM
             - beta_2: float
                 The beta 2 parameter for ADAM
-            - epsilon: float
-                The epsilon parameter for ADAM
-            - l1_param: float
+            - epsilon: floatbins
                 The l1 regularization parameter
             - l2_param: float
                 The l2 regularization parameter
 
         - task: str
             The task to optimize
+        - bootstrap: bool
+            When bootstrapping is used, the weights are recalculated each time
 
     Returns:
         - constants: np.array
@@ -223,7 +240,8 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
         return [], [], []
 
     n_features = len(program.features)
-    constants = np.array([item.feature for item in program.get_constants()])
+    constants = np.array(
+        [item.feature for item in program.get_constants(return_objects=True)])
     n_constants = constants.size
 
     if n_constants == 0:  # No constants in program
@@ -239,8 +257,19 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
     # Initialize ground truth and data arrays
     y_true = np.reshape(data[target].to_numpy(), (data[target].shape[0], 1))
     X_data = data[program.features].to_numpy()
+
     if weights:
-        w = np.reshape(data[weights].to_numpy(), (data[weights].shape[0], 1))
+        if bootstrap:
+            if task == 'regression:wmse' or task == 'regression:wrrmse':
+                w = create_regression_weights(
+                    data=data, target=target, bins=10)
+            elif task == 'binary:logistic':
+                w = np.where(y_true == 1, 1./(2*y_true.mean()),
+                             1./(2*(1-y_true.mean())))
+            w = np.reshape(w, (w.shape[0], 1))
+        else:
+            w = np.reshape(data[weights].to_numpy(),
+                           (data[weights].shape[0], 1))
     else:
         w = np.ones_like(y_true)
 
@@ -262,7 +291,7 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
         pyf_prog = lambdify([x_sym, c_sym], p_sym)
     except:  # When the function doesn't have sense
         return [], [], []
-    
+
     # Define batches
     n_batches = int(X_data.shape[0] / batch_size)
     X_batch = np.array_split(X_data, n_batches, 0)
@@ -312,7 +341,8 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
             elif task == 'binary:logistic':
                 # compute average loss
 
-                sigma = 1. / (1. + np.exp(-y_pred))  # numerical value of sigmoid(program)
+                # numerical value of sigmoid(program)
+                sigma = 1. / (1. + np.exp(-y_pred))
                 av_loss = np.nanmean(
                     -w_batch[i] *
                     (y_batch[i] * np.log(sigma + 1e-20) +
@@ -350,7 +380,7 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
     return constants, loss, log
 
 
-def ADAM2FOLD(program, data: Union[dict, pd.Series, pd.DataFrame], target: list, weights: list, constants_optimization_conf: dict, task: str):
+def ADAM2FOLD(program, data: Union[dict, pd.Series, pd.DataFrame], target: list, weights: list, constants_optimization_conf: dict, task: str, bootstrap: bool = False):
     ''' ADAM with analytic derivatives for 2-fold programs
 
     Args:
@@ -380,6 +410,8 @@ def ADAM2FOLD(program, data: Union[dict, pd.Series, pd.DataFrame], target: list,
                 The epsilon parameter for Adam
         -task: str
             The task to optimize
+        -bootstrap: bool
+            When bootstrapping is used, the weights are recalculated each time
 
     Returns:
         -constants: list
@@ -389,7 +421,7 @@ def ADAM2FOLD(program, data: Union[dict, pd.Series, pd.DataFrame], target: list,
         -log: list
             The constants at each epoch
     '''
-    #print('using ADAM2FOLD')
+    # print('using ADAM2FOLD')
     learning_rate = constants_optimization_conf['learning_rate']
     batch_size = constants_optimization_conf['batch_size']
     epochs = constants_optimization_conf['epochs']
@@ -402,7 +434,8 @@ def ADAM2FOLD(program, data: Union[dict, pd.Series, pd.DataFrame], target: list,
         return [], [], []
 
     n_features = len(program.features)
-    constants = np.array([item.feature for item in program.get_constants()])
+    constants = np.array(
+        [item.feature for item in program.get_constants(return_objects=True)])
     n_constants = constants.size
 
     if n_constants == 0:  # No constants in program
@@ -421,11 +454,26 @@ def ADAM2FOLD(program, data: Union[dict, pd.Series, pd.DataFrame], target: list,
     y_true_2 = np.reshape(data[target[1]].to_numpy(),
                           (data[target[1]].shape[0], 1))
     X_data = data[program.features].to_numpy()
+
     if weights:
-        w1 = np.reshape(data[weights[0]].to_numpy(),
-                        (data[weights[0]].shape[0], 1))
-        w2 = np.reshape(data[weights[1]].to_numpy(),
-                        (data[weights[1]].shape[0], 1))
+        if bootstrap:
+            if task == 'regression:wmse' or task == 'regression:wrrmse':
+                w1 = create_regression_weights(
+                    data=data, target=target[0], bins=10)
+                w2 = create_regression_weights(
+                    data=data, target=target[1], bins=10)
+            elif task == 'binary:logistic':
+                w1 = np.where(y_true_1 == 1, 1./(2*y_true_1.mean()),
+                              1./(2*(1-y_true_1.mean())))
+                w2 = np.where(y_true_2 == 1, 1./(2*y_true_2.mean()),
+                              1./(2*(1-y_true_2.mean())))
+            w1 = np.reshape(w1, (w1.shape[0], 1))
+            w2 = np.reshape(w2, (w2.shape[0], 1))
+        else:
+            w1 = np.reshape(data[weights[0]].to_numpy(),
+                            (data[weights[0]].shape[0], 1))
+            w2 = np.reshape(data[weights[1]].to_numpy(),
+                            (data[weights[1]].shape[0], 1))
     else:
         w1 = np.ones_like(y_true_1)
         w2 = np.ones_like(y_true_2)
