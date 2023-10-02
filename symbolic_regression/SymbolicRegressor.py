@@ -859,7 +859,7 @@ class SymbolicRegressor:
             self.best_program = self.population[0]
             self.best_programs_history.append(self.best_program)
             self.first_pareto_front_history.append(
-                list(self.first_pareto_front))
+                [copy.deepcopy(p) for p in self.first_pareto_front])
 
             self.times.loc[self.generation,
                            "count_average_complexity"] = self.average_complexity
