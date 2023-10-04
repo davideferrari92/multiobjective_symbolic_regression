@@ -709,8 +709,13 @@ class SymbolicRegressor:
                 )
                 procs.append(proc)
 
-            for proc in procs:
+            was_limited_str = ''
+            for index, proc in enumerate(procs):
                 proc.start()
+                if psutil.virtual_memory().percent > 90:
+                    logging.warning(f'Limiting to {index+1} processes due to memory allocation')
+                    was_limited_str = '[limited]'
+                    break
 
             q_size = 0
             while q_size < self.population_size:
@@ -718,7 +723,7 @@ class SymbolicRegressor:
                 if self.verbose > 0:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
                     print(
-                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s)', end='\r', flush=True)
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s) {was_limited_str}   ', end='\r', flush=True)
                 time.sleep(.2)
 
             else:
@@ -726,15 +731,20 @@ class SymbolicRegressor:
                 if self.verbose > 0:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
                     print(
-                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!', flush=True)
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
                 for p in procs:
-                    p.join(timeout=.5)
+                    if p.is_alive():
+                        p.join(timeout=.5)
 
             for _ in range(self.population_size):
                 offsprings.append(queue.get())
 
             for proc in procs:
-                proc.kill()
+                try:
+                    proc.kill()
+                except:
+                    pass
+
 
             self.times.loc[self.generation,
                            "time_offsprings_generation"] = time.perf_counter() - before
@@ -816,13 +826,17 @@ class SymbolicRegressor:
                         print(
                             f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!', flush=True)
                     for p in procs:
-                        p.join(timeout=.2)
+                        if p.is_alive():
+                            p.join(timeout=.2)
 
                 for _ in range(missing_elements):
                     refill.append(queue.get())
 
                 for proc in procs:
-                    proc.kill()
+                    try:
+                        proc.kill()
+                    except:
+                        pass
 
                 self.population: Population = Population(
                     self.population + refill)
@@ -1250,8 +1264,33 @@ class SymbolicRegressor:
         submitted = 0
         while submitted < batch_size * 3:
 
-            offspring = self._get_offspring(data=data, val_data=val_data, genetic_operators_frequency=genetic_operators_frequency,
-                                            fitness_functions=fitness_functions, population=population, tournament_size=tournament_size, generation=generation)
+        kept_alive_when_excess_memory_allocation = False
+        jobs = self.n_jobs if self.n_jobs > 0 else os.cpu_count()
+
+        while submitted < batch_size * jobs:
+
+            """ The following piece of code manages the case in which the processes allocated too much memory.
+            It happened randomly that the processes allocated more memory than usual and lead to a crash.
+            In situations like this we spot when processes allocate more memory that the system is able to handle for
+            them and, only if the system memory allocation is proximal to 100%, we kill the current process with a likelyhood
+            of 50% so to leave less processes running.
+            This will slow down the current generation but it's unlikely that the phenomena will repeat itself soon,
+            therefore we accept this tradeoff.
+            """
+
+            if not kept_alive_when_excess_memory_allocation and \
+                (psutil.virtual_memory().percent > 90) and \
+                    (psutil.Process().memory_info().rss > (psutil.virtual_memory().total/jobs)):
+                
+                if random.random() < .5:
+                    return
+                
+                kept_alive_when_excess_memory_allocation = True
+
+            offspring = self._get_offspring(data=data, val_data=val_data, 
+                                            genetic_operators_frequency=genetic_operators_frequency,
+                                            fitness_functions=fitness_functions, population=population, 
+                                            tournament_size=tournament_size, generation=generation)
 
             if offspring._has_incomplete_fitness:
                 continue
