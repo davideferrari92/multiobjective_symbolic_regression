@@ -22,10 +22,10 @@ class BaseClassification(BaseFitness):
         self.classification_metric = None
 
     def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
-        
+
         if not program.is_valid:
             return np.nan
-        
+
         if not validation:
             self.optimize(program=program, data=data)
 
@@ -214,13 +214,13 @@ class AkaikeInformationCriteriaBCE(BaseFitness):
             nconstants = len(program.get_constants())
 
             BCE = log_loss(y_true=ground_truth,
-                            y_pred=pred,
-                            sample_weight=data[self.weights] if (self.weights and not validation) else None)
-            
+                           y_pred=pred,
+                           sample_weight=data[self.weights] if (self.weights and not validation) else None)
+
             AIC = 2 * (nconstants / len(data) + BCE)
 
             return AIC
-        
+
         except ValueError:
             return np.inf
         except TypeError:
