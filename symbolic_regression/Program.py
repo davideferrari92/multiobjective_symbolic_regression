@@ -2,11 +2,11 @@ import copy
 import logging
 import random
 from typing import Dict, List, Tuple, Union
-from joblib import Parallel, delayed
 
 import numpy as np
 import pandas as pd
 import sympy
+from joblib import Parallel, delayed
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
@@ -130,6 +130,9 @@ class Program:
         for k, v in self.__dict__.items():
             setattr(result, k, copy.deepcopy(v, memo))
 
+        result.programs_dominated_by = list()
+        result.programs_dominates = list()
+
         result.program_hypervolume = np.nan
         result._override_is_valid = True
         return result
@@ -243,7 +246,8 @@ class Program:
             # Increase the epochs to be used for the bootstrap
             constants_optimization_conf = copy.deepcopy(
                 constants_optimization_conf)
-            constants_optimization_conf['epochs'] = max(200, constants_optimization_conf['epochs'])
+            constants_optimization_conf['epochs'] = max(
+                200, constants_optimization_conf['epochs'])
 
             recalibrated = copy.deepcopy(self)
             recalibrated.set_constants(
@@ -418,13 +422,15 @@ class Program:
 
         self.program_hypervolume = _HyperVolume(references).compute(points)
 
-    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+    def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame], logistic: bool = False, threshold: float = None) -> Union[int, float]:
         """ This function evaluate the program on the given data.
         The data can be a dictionary, a pandas Series or a pandas DataFrame.
 
         Args:
             - data: dict, pd.Series, pd.DataFrame
                 The data on which the program will be evaluated
+            - logistic: bool  (default: False)
+                If True, the program will be evaluated using the logistic function
 
         Returns:
             - int, float
@@ -759,7 +765,6 @@ class Program:
                  constants_optimization_conf: dict,
                  bootstrap: bool = False,
                  inplace: bool = False) -> 'Program':
-
         """ This method allow to optimize the constants of a program.
 
         The optimization of constants consists of executing a gradient descent strategy on the constants
