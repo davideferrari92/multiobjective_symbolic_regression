@@ -433,6 +433,12 @@ class Program:
         if not self.is_valid:
             return np.nan
 
+        if logistic:
+            if isinstance(threshold, float) and 0 <= threshold <= 1:
+                return np.where(self.program.to_logistic(inplace=False).evaluate(data=data) > threshold, 1, 0)
+
+            return self.program.to_logistic(inplace=False).evaluate(data=data)
+
         return self.program.evaluate(data=data)
 
     def _generate_tree(self, depth=-1, parsimony: float = .8, parsimony_decay: float = .85, father: Union[Node, None] = None, force_constant: bool = False) -> Node:
