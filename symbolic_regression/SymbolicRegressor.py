@@ -12,9 +12,11 @@ from typing import Any, Dict, List, Tuple, Union
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
+import psutil
 from loky import get_reusable_executor
 from scipy.stats import spearmanr
 
+from symbolic_regression.callbacks.CallbackBase import MOSRCallbackBase
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
 from symbolic_regression.Population import Population
@@ -25,7 +27,7 @@ backend_parallel = 'loky'
 
 class SymbolicRegressor:
 
-    def __init__(self, client_name: str, checkpoint_file: str = None, checkpoint_frequency: int = -1, checkpoint_overwrite: bool = True, const_range: tuple = (0, 1), parsimony=0.8, parsimony_decay=0.85, population_size: int = 300, tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1}, statistics_computation_frequency: int = 10) -> None:
+    def __init__(self, client_name: str, checkpoint_file: str = None, checkpoint_frequency: int = -1, checkpoint_overwrite: bool = True, const_range: tuple = (0, 1), parsimony=0.8, parsimony_decay=0.85, population_size: int = 300, tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1}, statistics_computation_frequency: int = 10, callbacks: List[MOSRCallbackBase] = list()) -> None:
         """ This class implements the basic features for training a Symbolic Regression algorithm
 
         Args:
@@ -69,6 +71,9 @@ class SymbolicRegressor:
                     - Tree Diversity
                     - Spearman Diversity
 
+            - callbacks: List[MOSRCallbackBase] (default: list())
+                this is the list of callbacks to be executed during the training
+
         Returns:
             - None
         """
@@ -106,6 +111,9 @@ class SymbolicRegressor:
         self.statistics_computation_frequency: int = statistics_computation_frequency
         self.population: Population = Population()
         self.training_duration: int = 0
+
+        self._callbacks = list()
+        self.callbacks: List[MOSRCallbackBase] = callbacks
 
         self.times: pd.DataFrame = pd.DataFrame(
             columns=['count_average_complexity',
@@ -186,6 +194,19 @@ class SymbolicRegressor:
             istances.append(row)
 
         return pd.DataFrame(istances)
+
+    @property
+    def callbacks(self):
+        if hasattr(self, '_callbacks'):
+            return self._callbacks
+        else:
+            return list()
+
+    @callbacks.setter
+    def callbacks(self, callbacks: List[MOSRCallbackBase]):
+        self._callbacks = callbacks
+        for c in self._callbacks:
+            c.sr = self
 
     def compute_hypervolume(self, exclusive: bool = False):
         """
@@ -643,7 +664,7 @@ class SymbolicRegressor:
             if self.generation > 0:
                 minutes_total = round(self._total_time/60)
                 if minutes_total >= 60:
-                    time_total = f"{round(minutes_total/60)}:{round(minutes_total%60):02d} hours"
+                    time_total = f"{round(minutes_total//60)}:{round(minutes_total%60):02d} hours"
                 elif self._total_time > 60:
                     time_total = f"{minutes_total} mins"
                 else:
@@ -680,12 +701,13 @@ class SymbolicRegressor:
 
             self.generation += 1
 
-            if self.verbose > 0:
+            if self.verbose > 1:
                 print("#" * len(timing_str))
                 print(timing_str)
                 print("#" * len(timing_str))
-            print(
-                f"{self.client_name}: starting generation {self.generation}/{self.generations_to_train}", end='\r' if self.verbose == 0 else '\n', flush=True)
+            if self.verbose > 0:
+                print(
+                    f"{self.client_name}: starting generation {self.generation}/{self.generations_to_train}", end='\r' if self.verbose == 1 else '\n', flush=True)
 
             before = time.perf_counter()
 
@@ -693,13 +715,17 @@ class SymbolicRegressor:
             procs: List[Process] = list()
             queue: Queue = Queue(maxsize=self.population_size)
             for _ in range(jobs):
+                try:
+                    population_to_pass = self.population.as_binary()
+                except AttributeError:
+                    population_to_pass = self.population
                 proc = Process(
                     target=self._get_offspring_batch,
                     args=(
-                        data,
+                        copy.deepcopy(data),
                         self.genetic_operators_frequency,
                         self.fitness_functions,
-                        self.population.as_binary(),
+                        population_to_pass,
                         self.tournament_size,
                         self.generation,
                         int(self.population_size/jobs),
@@ -713,7 +739,8 @@ class SymbolicRegressor:
             for index, proc in enumerate(procs):
                 proc.start()
                 if psutil.virtual_memory().percent > 90:
-                    logging.warning(f'Limiting to {index+1} processes due to memory allocation')
+                    logging.warning(
+                        f'Limiting to {index+1} processes due to memory allocation')
                     was_limited_str = '[limited]'
                     break
 
@@ -744,7 +771,6 @@ class SymbolicRegressor:
                     proc.kill()
                 except:
                     pass
-
 
             self.times.loc[self.generation,
                            "time_offsprings_generation"] = time.perf_counter() - before
@@ -803,7 +829,8 @@ class SymbolicRegressor:
                             self.parsimony,
                             self.parsimony_decay,
                             int(missing_elements/jobs),
-                            queue
+                            queue,
+                            val_data
                         )
                     )
                     procs.append(proc)
@@ -812,7 +839,7 @@ class SymbolicRegressor:
                 q_size = 0
                 while q_size < missing_elements:
                     q_size = queue.qsize()
-                    if self.verbose > 0:
+                    if self.verbose > 1:
                         _elapsed = max(
                             1, int(round(time.perf_counter() - before)))
                         print(
@@ -820,7 +847,7 @@ class SymbolicRegressor:
                     time.sleep(.5)
 
                 else:
-                    if self.verbose > 0:
+                    if self.verbose > 1:
                         _elapsed = max(
                             1, int(round(time.perf_counter() - before)))
                         print(
@@ -881,12 +908,12 @@ class SymbolicRegressor:
             if any(p.converged for p in self.population):
                 if not self.converged_generation:
                     self.converged_generation = self.generation
-                if self.verbose > 0:
+                if self.verbose > 1:
                     print(
                         f"Training converged after {self.converged_generation} generations.")
 
             if (self.generation == 1) or (self.statistics_computation_frequency == -1 and (self.generation == self.generations_to_train or self.converged_generation)) or (self.statistics_computation_frequency > 0 and self.generation % self.statistics_computation_frequency == 0):
-                if self.verbose > 0:
+                if self.verbose > 1:
                     print(
                         f'Computing statistics for generation {self.generation}')
                 # Calculates the hypervolume
@@ -905,12 +932,11 @@ class SymbolicRegressor:
                 self.times.loc[self.generation,
                                "time_spearman_diversity_computation"] = time.perf_counter() - before
 
-                if val_data is not None:
-                    self.compute_fitness_population(
-                        fitness_functions=self.fitness_functions, data=val_data, validation=True)
-
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front(verbose=self.verbose)
+
+            for c in self.callbacks:
+                c.on_generation_end()
 
             total_generation_time = end_time_generation - start_time_generation
             self.times.loc[self.generation,
@@ -930,9 +956,6 @@ class SymbolicRegressor:
                 return
 
             if self.converged_generation and self.stop_at_convergence:
-                if val_data is not None:
-                    self.compute_fitness_population(
-                        fitness_functions=self.fitness_functions, data=val_data, validation=True)
                 print(
                     f"Training converged after {self.converged_generation} generations and requested to stop.")
                 return
@@ -1262,7 +1285,6 @@ class SymbolicRegressor:
         offsprings: List[Program] = list()
 
         submitted = 0
-        while submitted < batch_size * 3:
 
         kept_alive_when_excess_memory_allocation = False
         jobs = self.n_jobs if self.n_jobs > 0 else os.cpu_count()
@@ -1281,15 +1303,15 @@ class SymbolicRegressor:
             if not kept_alive_when_excess_memory_allocation and \
                 (psutil.virtual_memory().percent > 90) and \
                     (psutil.Process().memory_info().rss > (psutil.virtual_memory().total/jobs)):
-                
+
                 if random.random() < .5:
                     return
-                
+
                 kept_alive_when_excess_memory_allocation = True
 
-            offspring = self._get_offspring(data=data, val_data=val_data, 
+            offspring = self._get_offspring(data=data, val_data=val_data,
                                             genetic_operators_frequency=genetic_operators_frequency,
-                                            fitness_functions=fitness_functions, population=population, 
+                                            fitness_functions=fitness_functions, population=population,
                                             tournament_size=tournament_size, generation=generation)
 
             if offspring._has_incomplete_fitness:
@@ -1340,6 +1362,7 @@ class SymbolicRegressor:
     def plot_compare_fitness(self, perf_x: str, perf_y: str, pf_rank: int = 1, generation: int = None, on_val: bool = False,
                              marker_dict: Dict[str, Any] = dict(size=5, color='grey'), highlight_best: bool = True,
                              xlim: Tuple[float, float] = None, ylim: Tuple[float, float] = None,
+                             xlog: bool = False, ylog: bool = False,
                              figsize: Union[Dict[str,  Any], None] = None, title: str = None):
         """
         This method plots the distribution of two performance metrics for the programs in the first pareto front
@@ -1363,6 +1386,10 @@ class SymbolicRegressor:
                 The limits of the x axis
             - ylim: Tuple[float, float] (default None)
                 The limits of the y axis
+            - xlog: bool (default False)
+                Whether to use a log scale for the x axis
+            - ylog: bool (default False)
+                Whether to use a log scale for the y axis
             - figsize: Union[Dict[str,  Any], None] (default None)
                 The size of the figure
 
@@ -1371,21 +1398,19 @@ class SymbolicRegressor:
                 The plotly figure
         """
 
-        if generation and pf_rank > 1:
+        if generation and generation != self.generation and pf_rank > 1:
             raise ValueError(
                 "Cannot plot pareto fronts beyond the first for historic generations")
 
         generation = self.generation if not generation else generation
 
-        iterate_over = self.extract_pareto_front(rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 1]
+        iterate_over = self.extract_pareto_front(
+            rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 1]
 
         perf_df = pd.DataFrame()
         for index, p in enumerate(iterate_over):
             p: 'Program'
             if on_val:
-                if not hasattr(p, 'fitness_validation') or len(p.fitness_validation) == 0:
-                    raise ValueError(
-                        f"Program {index} does not have a validation fitness")
                 for perf in p.fitness_validation:
                     perf_df.loc[index, perf] = p.fitness_validation[perf]
             else:
@@ -1441,6 +1466,10 @@ class SymbolicRegressor:
             fig.update_xaxes(range=xlim)
         if ylim is not None:
             fig.update_yaxes(range=ylim)
+        if xlog:
+            fig.update_xaxes(type="log")
+        if ylog:
+            fig.update_yaxes(type="log")
 
         if isinstance(figsize, Dict):
             fig.update_layout(
@@ -1464,7 +1493,7 @@ class SymbolicRegressor:
 
         return fig
 
-    def _print_first_pareto_front(self, verbose: int = 2):
+    def _print_first_pareto_front(self, verbose: int = 3):
         """
         Print best programs
 
@@ -1475,13 +1504,13 @@ class SymbolicRegressor:
         Returns:
             - None
         """
-        if verbose > 0:
+        if verbose > 1:
             fpf_hypervolume_str = f'and Hypervolume {round(self.fpf_hypervolume, 2)}/{int(self.fpf_hypervolume_reference)}' if self.fpf_hypervolume is not None else ''
 
             print()
             print(
                 f"Average complexity of {round(self.average_complexity,1)} and 1PF of length {len(self.first_pareto_front)} {fpf_hypervolume_str}\n")
-        if verbose > 1:
+        if verbose > 2:
             print(f"\tBest individual(s) in the first Pareto Front")
             for index, p in enumerate(self.first_pareto_front):
                 print(f'{index})\t{p.program}')
