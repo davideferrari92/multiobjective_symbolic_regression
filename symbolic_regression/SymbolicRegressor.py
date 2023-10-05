@@ -211,9 +211,12 @@ class SymbolicRegressor:
 
     @callbacks.setter
     def callbacks(self, callbacks: List[MOSRCallbackBase]):
+        if not isinstance(callbacks, List):
+            raise TypeError(
+                f"Expected a list of MOSRCallbackBase, got {type(callbacks)}")
         self._callbacks = callbacks
         for c in self._callbacks:
-            c.sr = self
+            c.sr: 'SymbolicRegressor' = self
 
     def compute_hypervolume(self, exclusive: bool = False):
         """
