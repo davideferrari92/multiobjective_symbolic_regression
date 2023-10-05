@@ -204,7 +204,7 @@ class MaxAbsoluteError(BaseFitness):
             return np.inf
 
 
-class WeightedAIC(BaseFitness):
+class WMSEAkaike(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
         """ This fitness requires the following arguments:

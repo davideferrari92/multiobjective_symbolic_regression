@@ -187,7 +187,7 @@ class GMeans(BaseFitness):
         return gmeans[ix]
 
 
-class AkaikeInformationCriteriaBCE(BaseFitness):
+class BCEAkaike(BaseFitness):
 
     def __init__(self, **kwargs) -> None:
         """ This fitness requires the following arguments:
@@ -225,3 +225,16 @@ class AkaikeInformationCriteriaBCE(BaseFitness):
             return np.inf
         except TypeError:
             return np.inf
+
+
+class AkaikeInformationCriteriaBCE(BCEAkaike):
+
+    def __init__(self, **kwargs) -> None:
+        """ This fitness requires the following arguments:
+
+        - target: str
+        - weights: str
+        - logistic: bool
+
+        """
+        super().__init__(**kwargs)
