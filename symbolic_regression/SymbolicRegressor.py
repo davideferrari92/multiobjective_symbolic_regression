@@ -1300,6 +1300,9 @@ class SymbolicRegressor:
             therefore we accept this tradeoff.
             """
 
+            if queue.qsize() >= len(population):
+                return
+
             if not kept_alive_when_excess_memory_allocation and \
                 (psutil.virtual_memory().percent > 90) and \
                     (psutil.Process().memory_info().rss > (psutil.virtual_memory().total/jobs)):
