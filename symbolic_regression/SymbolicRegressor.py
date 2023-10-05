@@ -217,6 +217,7 @@ class SymbolicRegressor:
         self._callbacks = callbacks
         for c in self._callbacks:
             c.sr: 'SymbolicRegressor' = self
+            c.on_callback_set_init()
 
     def compute_hypervolume(self, exclusive: bool = False):
         """

@@ -10,6 +10,10 @@ class MOSRCallbackBase:
         return f"{self.__class__.__name__}({self.kwargs})"
 
     @abstractmethod
+    def on_callback_set_init(self):
+        pass
+
+    @abstractmethod
     def on_initialization_start(self):
         pass
 
