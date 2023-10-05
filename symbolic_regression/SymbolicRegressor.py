@@ -641,7 +641,8 @@ class SymbolicRegressor:
                 c.on_initialization_start()
 
             before = time.perf_counter()
-            logging.info(f"Initializing population")
+            if self.verbose > 0:
+                print(f"Initializing population")
             self.status = "Generating population"
 
             self.population = Population(executor.map(
@@ -655,6 +656,7 @@ class SymbolicRegressor:
                     repeat(self.const_range, self.population_size),
                     repeat(self.parsimony, self.population_size),
                     repeat(self.parsimony_decay, self.population_size),
+                    repeat(copy.deepcopy(val_data), self.population_size),
                 )
             ))
 
