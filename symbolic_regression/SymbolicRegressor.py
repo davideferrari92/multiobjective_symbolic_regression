@@ -632,6 +632,10 @@ class SymbolicRegressor:
         executor = get_reusable_executor(max_workers=jobs, timeout=100)
 
         if not self.population:
+            
+            for c in self.callbacks:
+                c.on_initialization_start()
+
             before = time.perf_counter()
             logging.info(f"Initializing population")
             self.status = "Generating population"
@@ -652,6 +656,10 @@ class SymbolicRegressor:
 
             self.times.loc[self.generation+1,
                            "time_initialization"] = time.perf_counter() - before
+            
+            for c in self.callbacks:
+                c.on_initialization_end()
+
         else:
             logging.info("Fitting with existing population")
 
@@ -661,6 +669,9 @@ class SymbolicRegressor:
                     f"The model already had trained for {self.generation} generations")
                 self.status = "Terminated: generations completed"
                 return
+
+            for c in self.callbacks:
+                c.on_generation_start()
 
             start_time_generation = time.perf_counter()
 
@@ -718,6 +729,9 @@ class SymbolicRegressor:
 
             before = time.perf_counter()
 
+            for c in self.callbacks:
+                c.on_offspring_generation_start()
+
             offsprings: List[Program] = list()
             procs: List[Process] = list()
             queue: Queue = Queue(maxsize=self.population_size)
@@ -753,6 +767,10 @@ class SymbolicRegressor:
 
             q_size = 0
             while q_size < self.population_size:
+                # Make sure at least some processes are alive
+                if not any([p.is_alive() for p in procs]):
+                    for p in procs[:len(procs)//2]:
+                        p.start()
                 q_size = queue.qsize()
                 if self.verbose > 0:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
@@ -783,6 +801,9 @@ class SymbolicRegressor:
                            "time_offsprings_generation"] = time.perf_counter() - before
 
             self.population = Population(self.population + offsprings)
+
+            for c in self.callbacks:
+                c.on_offspring_generation_end()
 
             # Removes all duplicated programs in the population
             before_cleaning = len(self.population)
@@ -820,6 +841,9 @@ class SymbolicRegressor:
 
                 logging.info(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements")
+
+                for c in self.callbacks:
+                    c.on_refill_start()
 
                 refill: List[Program] = list()
                 procs: List[Process] = list()
@@ -875,6 +899,9 @@ class SymbolicRegressor:
                 self.population: Population = Population(
                     self.population + refill)
 
+                for c in self.callbacks:
+                    c.on_refill_end()
+
                 # exludes every program in refill with an empty fitness
                 self.population = [
                     p for p in self.population if not p._has_incomplete_fitness]
@@ -919,6 +946,9 @@ class SymbolicRegressor:
                         f"Training converged after {self.converged_generation} generations.")
 
             if (self.generation == 1) or (self.statistics_computation_frequency == -1 and (self.generation == self.generations_to_train or self.converged_generation)) or (self.statistics_computation_frequency > 0 and self.generation % self.statistics_computation_frequency == 0):
+                for c in self.callbacks:
+                    c.on_stats_calculation_start()
+
                 if self.verbose > 1:
                     print(
                         f'Computing statistics for generation {self.generation}')
@@ -938,15 +968,18 @@ class SymbolicRegressor:
                 self.times.loc[self.generation,
                                "time_spearman_diversity_computation"] = time.perf_counter() - before
 
+                for c in self.callbacks:
+                    c.on_stats_calculation_end()
+
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front(verbose=self.verbose)
-
-            for c in self.callbacks:
-                c.on_generation_end()
 
             total_generation_time = end_time_generation - start_time_generation
             self.times.loc[self.generation,
                            "time_generation_total"] = total_generation_time
+
+            for c in self.callbacks:
+                c.on_generation_end()
 
             if self.checkpoint_file and self.checkpoint_frequency > 0 and (self.generation % self.checkpoint_frequency == 0 or self.generation == self.generations_to_train):
                 try:
@@ -957,11 +990,17 @@ class SymbolicRegressor:
 
             # Use generations = -1 to rely only on convergence (risk of infinite loop)
             if self.generations_to_train > 0 and self.generation == self.generations_to_train:
+                for c in self.callbacks:
+                    c.on_training_completed()
+                
                 print(
                     f"Training completed {self.generation}/{self.generations_to_train} generations")
                 return
 
             if self.converged_generation and self.stop_at_convergence:
+                for c in self.callbacks:
+                    c.on_convergence()
+
                 print(
                     f"Training converged after {self.converged_generation} generations and requested to stop.")
                 return
