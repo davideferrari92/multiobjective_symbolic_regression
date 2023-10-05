@@ -5,6 +5,7 @@ import os
 import pickle
 import random
 import time
+import zlib
 from itertools import repeat
 from multiprocessing import Process, Queue
 from typing import Any, Dict, List, Tuple, Union
@@ -95,8 +96,6 @@ class SymbolicRegressor:
         self.tournament_size: int = tournament_size
 
         # Training Configuration
-        self.best_program = None
-        self.best_programs_history: List = list()
         self.converged_generation: int = None
         self.fitness_functions: List[BaseFitness] = None
         self.first_pareto_front_history: List = list()
@@ -142,12 +141,14 @@ class SymbolicRegressor:
 
         if not self.checkpoint_overwrite:
             file = file + f".gen{generation_str}.sr"
+
         # Dump this object in a pickle file
+        for p in self.population:
+            p.programs_dominated_by: List[Program] = list()
+            p.programs_dominates: List[Program] = list()
+
         with open(file, "wb") as f:
-            for p in self.population:
-                p.programs_dominated_by: List[Program] = list()
-                p.programs_dominates: List[Program] = list()
-            pickle.dump(self, f)
+            pickle.dump(compress(self), f)
 
         # Dump the self.metadata in a json file
         with open(file + ".metadata.json", "w") as f:
@@ -156,6 +157,12 @@ class SymbolicRegressor:
     def load_model(self, file: str):
         with open(file, "rb") as f:
             sr: SymbolicRegressor = pickle.load(f)
+
+        try:
+            sr = decompress(sr)
+            logging.debug(f"Loaded compressed model from {file}")
+        except TypeError:
+            pass
 
         return sr
 
@@ -897,10 +904,9 @@ class SymbolicRegressor:
             self.population = Population(
                 self.population[:self.population_size])
 
-            self.best_program = self.population[0]
-            self.best_programs_history.append(self.best_program)
             self.first_pareto_front_history.append(
-                [copy.deepcopy(p) for p in self.first_pareto_front])
+                compress([copy.deepcopy(p) for p in self.first_pareto_front])
+            )
 
             self.times.loc[self.generation,
                            "count_average_complexity"] = self.average_complexity
@@ -1408,7 +1414,12 @@ class SymbolicRegressor:
         generation = self.generation if not generation else generation
 
         iterate_over = self.extract_pareto_front(
-            rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 1]
+            rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 2]
+
+        try:
+            iterate_over = decompress(iterate_over)
+        except TypeError:
+            logging.warning(f"Legacy version. PF was not compressed. Consider using compress() to save memory and disk space")
 
         perf_df = pd.DataFrame()
         for index, p in enumerate(iterate_over):
@@ -1627,3 +1638,15 @@ class SymbolicRegressor:
                            'fpf_tree_diversity'] = self.fpf_tree_diversity
 
         return self.fpf_tree_diversity
+
+
+def compress(object):
+    serialized_data = pickle.dumps(object)
+    compressed_data = zlib.compress(serialized_data)
+    return compressed_data
+
+
+def decompress(compressed_data):
+    serialized_data = zlib.decompress(compressed_data)
+    object = pickle.loads(serialized_data)
+    return object
