@@ -754,7 +754,7 @@ class SymbolicRegressor:
                     for p in procs[:len(procs)//2]:
                         p.start()
                 q_size = queue.qsize()
-                if self.verbose > 0:
+                if self.verbose > 1:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
                     print(
                         f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s) {was_limited_str}   ', end='\r', flush=True)
@@ -762,7 +762,7 @@ class SymbolicRegressor:
 
             else:
                 q_size = queue.qsize()
-                if self.verbose > 0:
+                if self.verbose > 1:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
                     print(
                         f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
