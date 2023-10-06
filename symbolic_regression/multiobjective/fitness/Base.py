@@ -38,6 +38,10 @@ class BaseFitness:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+    def __repr__(self) -> str:
+        # Return the name of the class with all the arguments
+        return f"{self.__class__.__name__}({', '.join([f'{k}={v}' for k, v in self.__dict__.items()])})"
+
     @abstractmethod
     def evaluate(self, program) -> pd.DataFrame:
         raise NotImplementedError
