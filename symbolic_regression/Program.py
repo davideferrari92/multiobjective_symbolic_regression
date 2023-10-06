@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sympy
 from joblib import Parallel, delayed
+from pytexit import py2tex
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
@@ -1159,6 +1160,14 @@ class Program:
         self._hash = None
 
         return program_to_logistic
+
+    def to_latex(self) -> str:
+        """ This allow to print the program in LaTeX format
+
+        Returns:
+            A string representing the program in LaTeX format
+        """
+        return py2tex(str(self.program))
 
     def to_mathematica(self) -> str:
         """ This allow to print the program in Mathematica format
