@@ -128,9 +128,6 @@ class Specificity(BaseFitness):
         if not validation:
             self.optimize(program=program, data=data)
 
-        if not self.classification_metric:
-            raise AttributeError('Classification metric not defined')
-
         program_to_evaluate = program.to_logistic(
             inplace=False) if self.logistic else program
 
