@@ -1437,7 +1437,7 @@ class SymbolicRegressor:
         generation = self.generation if not generation else generation
 
         iterate_over = self.extract_pareto_front(
-            rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 2]
+            rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 1]
 
         try:
             iterate_over = decompress(iterate_over)
