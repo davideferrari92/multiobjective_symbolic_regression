@@ -17,21 +17,20 @@ class BaseCorrelation(BaseFitness):
         super().__init__(**kwargs)
         self.correlation_function: callable = None
 
-    def evaluate(self, program: Program, data: pd.DataFrame, **kwargs) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, pred=None, **kwargs) -> float:
 
-        if not program.is_valid:
-            return np.nan
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
 
-        if self.logistic:
-            program_to_evaluate = program.to_logistic(inplace=False)
-            ground_truth = data[self.target].astype('int')
-        else:
-            program_to_evaluate = program
-            ground_truth = data[self.target]
-
-        try:
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
             pred = np.array(program_to_evaluate.evaluate(data=data))
 
+        ground_truth = data[self.target].astype(
+            'int') if self.logistic else data[self.target]
+
+        try:
             cs, _ = self.correlation_function(ground_truth, pred)
 
             if self.one_minus:

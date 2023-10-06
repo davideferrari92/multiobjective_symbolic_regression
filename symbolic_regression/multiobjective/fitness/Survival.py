@@ -17,7 +17,7 @@ class CoxEfron(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
         if not program.is_valid:
             return np.nan
@@ -80,7 +80,7 @@ class CoxAkaike(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
         if not program.is_valid:
             return np.nan

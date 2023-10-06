@@ -18,26 +18,27 @@ class Wasserstein(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
-        if not hasattr(self, 'F_y'):
-            self.F_y = get_cumulant_hist(
-                data=data, target=self.target, bins=self.bins)
+        if pred is None:
+            if not hasattr(self, 'F_y'):
+                self.F_y = get_cumulant_hist(
+                    data=data, target=self.target, bins=self.bins)
 
-        features = program.features
+            features = program.features
 
-        try:
-            y_pred = np.array(program.evaluate(data[features]))
-        except KeyError:
-            return np.inf
+            try:
+                pred = np.array(program.evaluate(data[features]))
+            except KeyError:
+                return np.inf
 
         # we add -1 so that wasserstein distance belongs to [0,1]
         dy = 1./(self.F_y.shape[0]-1)
 
         # rescale between [0,1]
         try:
-            rescaled_y_pred = (y_pred-np.min(y_pred)) / \
-                (np.max(y_pred)-np.min(y_pred))
+            rescaled_y_pred = (pred-np.min(pred)) / \
+                (np.max(pred)-np.min(pred))
             # compute density function histogram based on target optimal one
             pd_y_pred_grid, _ = stats.histogram(
                 rescaled_y_pred, bins=self.F_y.shape[0], density=True)

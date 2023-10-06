@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (accuracy_score, average_precision_score, confusion_matrix, f1_score,
-                             log_loss, precision_score, recall_score,
-                             roc_auc_score, roc_curve)
+from sklearn.metrics import (accuracy_score, average_precision_score,
+                             confusion_matrix, f1_score, log_loss,
+                             precision_score, recall_score, roc_auc_score,
+                             roc_curve)
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.Program import Program
@@ -21,25 +22,26 @@ class BaseClassification(BaseFitness):
         super().__init__(**kwargs)
         self.classification_metric = None
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
-        if not program.is_valid:
-            return np.nan
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
 
-        if not validation:
-            self.optimize(program=program, data=data)
+            if not validation:
+                self.optimize(program=program, data=data)
 
-        if not self.classification_metric:
-            raise AttributeError('Classification metric not defined')
+            if not self.classification_metric:
+                raise AttributeError('Classification metric not defined')
 
-        program_to_evaluate = program.to_logistic(
-            inplace=False) if self.logistic else program
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
 
-        try:
-            pred = (np.array(program_to_evaluate.evaluate(data=data))
-                    > self.threshold).astype('int')
-        except TypeError:
-            return np.nan
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
 
         ground_truth = data[self.target].astype('int')
 
@@ -67,15 +69,17 @@ class BinaryCrossentropy(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
-        if not validation:
-            self.optimize(program=program, data=data)
+        if pred is None:
+            if not validation:
+                self.optimize(program=program, data=data)
 
-        if self.logistic:
-            program_to_evaluate = program.to_logistic(inplace=False)
+            if self.logistic:
+                program_to_evaluate = program.to_logistic(inplace=False)
 
-        pred = np.array(program_to_evaluate.evaluate(data=data))
+            pred = np.array(program_to_evaluate.evaluate(data=data))
+
         ground_truth = data[self.target]
 
         try:
@@ -99,7 +103,45 @@ class Precision(BaseClassification):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.classification_metric = precision_score
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP_train = cm[0][0]
+            TN_train = cm[1][1]
+            FP_train = cm[0][1]
+            FN_train = cm[1][0]
+
+            metric = TP_train / (TP_train + FP_train)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
 
 
 class Recall(BaseClassification):
@@ -120,22 +162,23 @@ class Specificity(BaseFitness):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
-        if not program.is_valid:
-            return np.nan
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
 
-        if not validation:
-            self.optimize(program=program, data=data)
+            if not validation:
+                self.optimize(program=program, data=data)
 
-        program_to_evaluate = program.to_logistic(
-            inplace=False) if self.logistic else program
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
 
-        try:
-            pred = (np.array(program_to_evaluate.evaluate(data=data))
-                    > self.threshold).astype('int')
-        except TypeError:
-            return np.nan
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
 
         ground_truth = data[self.target].astype('int')
 
@@ -172,21 +215,22 @@ class AUC(BaseClassification):
         super().__init__(**kwargs)
         self.classification_metric = roc_auc_score
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
-        if not validation:
-            self.optimize(program=program, data=data)
+        if pred is None:
+            if not validation:
+                self.optimize(program=program, data=data)
 
-        if not self.classification_metric:
-            raise AttributeError('Classification metric not defined')
+            if not self.classification_metric:
+                raise AttributeError('Classification metric not defined')
 
-        program_to_evaluate = program.to_logistic(
-            inplace=False) if self.logistic else program
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
 
-        try:
-            pred = np.array(program_to_evaluate.evaluate(data=data))
-        except TypeError:
-            return np.nan
+            try:
+                pred = np.array(program_to_evaluate.evaluate(data=data))
+            except TypeError:
+                return np.nan
 
         ground_truth = data[self.target].astype('int')
 
@@ -215,12 +259,14 @@ class GMeans(BaseFitness):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    def evaluate(self, program: Program, data: pd.DataFrame, pred=None, **kwargs) -> pd.DataFrame:
 
-        program_to_evaluate = program.to_logistic(
-            inplace=False) if self.logistic else program
+        if pred is None:
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
 
-        pred = np.array(program_to_evaluate.evaluate(data=data))
+            pred = np.array(program_to_evaluate.evaluate(data=data))
+
         ground_truth = data[self.target]
 
         try:
@@ -249,20 +295,22 @@ class BCEAkaike(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
-        if not validation:
-            self.optimize(program=program, data=data)
+        if pred is None:
+            if not validation:
+                self.optimize(program=program, data=data)
 
-        if self.logistic:
-            program_to_evaluate = program.to_logistic(inplace=False)
+            if self.logistic:
+                program_to_evaluate = program.to_logistic(inplace=False)
 
-        pred = np.array(program_to_evaluate.evaluate(data=data))
+            nconstants = len(program.get_constants())
+
+            pred = np.array(program_to_evaluate.evaluate(data=data))
+
         ground_truth = data[self.target]
 
         try:
-            nconstants = len(program.get_constants())
-
             BCE = log_loss(y_true=ground_truth,
                            y_pred=pred,
                            sample_weight=data[self.weights] if (self.weights and not validation) else None)
@@ -274,6 +322,8 @@ class BCEAkaike(BaseFitness):
         except ValueError:
             return np.inf
         except TypeError:
+            return np.inf
+        except UnboundLocalError:
             return np.inf
 
 
