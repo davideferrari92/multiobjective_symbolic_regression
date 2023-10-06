@@ -2,6 +2,7 @@ astropy
 loky
 numpy
 pandas
+pytexit
 scikit-learn
 scipy
 sympy==1.9
