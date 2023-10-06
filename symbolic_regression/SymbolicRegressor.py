@@ -686,41 +686,17 @@ class SymbolicRegressor:
                 p.programs_dominated_by: List[Program] = list()
 
             if self.generation > 0:
-                minutes_total = round(self._total_time/60)
-                if minutes_total >= 60:
-                    time_total = f"{round(minutes_total//60)}:{round(minutes_total%60):02d} hours"
-                elif self._total_time > 60:
-                    time_total = f"{minutes_total} mins"
-                else:
-                    time_total = f"{round(self._total_time)} secs"
-
-                seconds_iter_avg = self.times['time_generation_total'].tail(
-                    5).median()
-                seconds_iter_std = self.times['time_generation_total'].tail(
-                    5).std()
-                if seconds_iter_avg >= 60 and not pd.isna(seconds_iter_std):
-                    time_per_generation = f"{round(seconds_iter_avg//60)}:{round(seconds_iter_avg%60):02d} ± {round(seconds_iter_std//60)}:{round(seconds_iter_std%60):02d} mins"
-                else:
-                    time_per_generation = f"{round(seconds_iter_avg, 2)} ± {round(seconds_iter_std, 1)} secs"
-
-                expected_time = self.times['time_generation_total'].tail(
-                    5).median() * (self.generations_to_train - self.generation) / 60
-                if pd.isna(expected_time):
-                    expected_time = 'Unknown'
-                elif expected_time >= 60:
-                    expected_time = f"{round(expected_time//60)}:{round(expected_time%60):02d} hours"
-                else:
-                    expected_time = f"{round(expected_time)}:{round((expected_time%1)*60):02d} mins"
+                time_total = datetime.timedelta(seconds=int(self.times['time_generation_total'].sum()))
+                seconds_iter_avg = datetime.timedelta(seconds=int(self.times['time_generation_total'].tail(5).median()))
+                seconds_iter_std = datetime.timedelta(seconds=int(self.times['time_generation_total'].tail(5).std())) if self.generation > 1 else datetime.timedelta(seconds=0)
+                time_per_generation = f"{seconds_iter_avg} ± {seconds_iter_std}"
+                expected_time = datetime.timedelta(seconds=int(self.times['time_generation_total'].tail(10).median() * (self.generations_to_train - self.generation)))
             else:
-                time_total = f"0 secs"
-                time_per_generation = f"0 secs ± 0 secs"
+                time_total = f"00:00:00"
+                time_per_generation = f"00:00:00 ± 00:00:00"
                 expected_time = 'Unknown'
 
-            if total_generation_time >= 60:
-                generation_time = f"{round(total_generation_time//60)}:{round(total_generation_time%60):02d} mins"
-            else:
-                generation_time = f"{round(total_generation_time)} secs"
-
+            generation_time = datetime.timedelta(seconds=int(total_generation_time))
             timing_str = f"Generation {generation_time} - On average: {time_per_generation} - Total: {time_total} - To completion: {expected_time}"
 
             self.generation += 1
