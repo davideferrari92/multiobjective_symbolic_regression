@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (accuracy_score, average_precision_score, f1_score,
+from sklearn.metrics import (accuracy_score, average_precision_score, confusion_matrix, f1_score,
                              log_loss, precision_score, recall_score,
                              roc_auc_score, roc_curve)
 
@@ -107,6 +107,59 @@ class Recall(BaseClassification):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.classification_metric = recall_score
+
+
+class Sensitivity(Recall):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+
+class Specificity(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False) -> float:
+
+        if not program.is_valid:
+            return np.nan
+
+        if not validation:
+            self.optimize(program=program, data=data)
+
+        if not self.classification_metric:
+            raise AttributeError('Classification metric not defined')
+
+        program_to_evaluate = program.to_logistic(
+            inplace=False) if self.logistic else program
+
+        try:
+            pred = (np.array(program_to_evaluate.evaluate(data=data))
+                    > self.threshold).astype('int')
+        except TypeError:
+            return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP_train = cm[0][0]
+            TN_train = cm[1][1]
+            FP_train = cm[0][1]
+            FN_train = cm[1][0]
+
+            metric = TN_train / (TN_train + FP_train)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
 
 
 class F1Score(BaseClassification):
