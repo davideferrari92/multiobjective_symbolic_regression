@@ -1364,6 +1364,57 @@ class SymbolicRegressor:
 
         return metadata
 
+    def plot_generations_time(self):
+
+        import plotly.express as px
+        
+        def format_time(seconds):
+            return datetime.datetime.utcfromtimestamp(seconds)
+
+        self.times['time_generation_total_formatted'] = self.times['time_generation_total'].apply(format_time)
+
+        fig = px.line(self.times, y='time_generation_total_formatted', title='Generation Time')
+        fig.update_yaxes(title='Time', tickformat='%M:%S')
+        return fig
+
+    def plot_best_individual(self, fitness: str, on_val: bool = False):
+        """ This method plots the best individual in a given fitness for each generation
+
+        Args:
+            - fitness: str
+                The name of the fitness to plot
+            - on_val: bool (default False)
+                Whether to plot the performance on the validation data or on the training data
+
+        Returns:
+            - fig: go.Figure
+                The plotly figure
+        """
+
+        if not fitness in [f.label for f in self.fitness_functions]:
+            raise ValueError(
+                f'Fitness {fitness} not found in the fitness functions. Please use one of the following: {", ".join([f.label for f in self.fitness_functions])}')
+        
+        import plotly.express as px
+
+        branch = 'validation' if on_val else 'training'
+
+        if on_val and not self.best_history.get('validation'):
+            logging.warning(f'No validation data available. Plotting training data instead')
+            branch = 'training'
+
+        data = [
+            {'Generation': generation,
+             fitness: decompress(self.best_history[branch][generation][fitness]).fitness[fitness] if on_val else decompress(self.best_history[branch][generation][fitness]).fitness_validation[fitness]
+             } for generation in self.best_history[branch]
+        ]
+
+        # Create a scatter plot with the generation on the x-axis and the fitness on the y-axis
+        fig = px.scatter(data, x='Generation', y=fitness,
+                        title=f'Best individual on {fitness} for each generation on {branch} set')
+        
+        return fig
+
     def plot_compare_fitness(self, perf_x: str, perf_y: str, pf_rank: int = 1, generation: int = None, on_val: bool = False,
                              marker_dict: Dict[str, Any] = dict(size=5, color='grey'), highlight_best: bool = True,
                              xlim: Tuple[float, float] = None, ylim: Tuple[float, float] = None,
@@ -1409,13 +1460,8 @@ class SymbolicRegressor:
 
         generation = self.generation if not generation else generation
 
-        if not generation:
-            iterate_over = self.extract_pareto_front(rank=pf_rank)
-        else:
-            try:
-                iterate_over = self.first_pareto_front_history[generation - 1]
-            except IndexError:
-                iterate_over = self.first_pareto_front_history[-1]
+        iterate_over = self.extract_pareto_front(
+            rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 1]
 
         try:
             iterate_over = decompress(iterate_over)
