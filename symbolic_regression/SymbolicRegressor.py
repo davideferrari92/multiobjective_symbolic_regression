@@ -99,6 +99,8 @@ class SymbolicRegressor:
         # Training Configuration
         self.converged_generation: int = None
         self.fitness_functions: List[BaseFitness] = None
+        # self._force_fitness_recomputation: bool = False
+        self.best_history: Dict = dict()
         self.first_pareto_front_history: List = list()
         self.fpf_hypervolume: float = None
         self.fpf_hypervolume_reference: float = None
@@ -176,7 +178,7 @@ class SymbolicRegressor:
         return np.mean([p.complexity for p in self.population]) if len(self.population) > 0 else 0
 
     @property
-    def best_history(self):
+    def callbacks(self):
         if hasattr(self, '_callbacks'):
             return self._callbacks
         else:
@@ -190,7 +192,10 @@ class SymbolicRegressor:
         self._callbacks = callbacks
         for c in self._callbacks:
             c.sr: 'SymbolicRegressor' = self
-            c.on_callback_set_init()
+            try:
+                c.on_callback_set_init()
+            except:
+                logging.warning(f"Callback {c.__class__.__name__} raised an exception on callback set init")
 
     def compute_hypervolume(self, exclusive: bool = False):
         """
@@ -281,7 +286,7 @@ class SymbolicRegressor:
         """
         if data is None:
             logging.warning(
-                f'No data provided to compute the fitness of the population')
+                f'No {"training" if not validation else "validation"} data provided to compute the fitness of the population')
             return
 
         for p in self.population:
@@ -556,6 +561,13 @@ class SymbolicRegressor:
         """
         self.features = features
         self.operations = operations
+        # for old_f, new_f in zip(self.fitness_functions, fitness_functions):
+        #     # If any of the elements of their __dict__ is different, the fitness functions are different
+        #     if old_f.__dict__ != new_f.__dict__:
+        #         logging.warning(f"Fitness functions are being changed with {', '.join([f.label for f in fitness_functions])}")
+        #         self._force_fitness_recomputation = True
+        #         break
+
         self.fitness_functions = fitness_functions
         self.generations_to_train = generations_to_train
         self.n_jobs = n_jobs
@@ -611,7 +623,10 @@ class SymbolicRegressor:
         if not self.population:
             
             for c in self.callbacks:
-                c.on_initialization_start()
+                try:
+                    c.on_initialization_start()
+                except:
+                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on initialization start")
 
             before = time.perf_counter()
             if self.verbose > 0:
@@ -637,9 +652,18 @@ class SymbolicRegressor:
                            "time_initialization"] = time.perf_counter() - before
             
             for c in self.callbacks:
-                c.on_initialization_end()
+                try:
+                    c.on_initialization_end()
+                except:
+                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on initialization end")
 
         else:
+            # if self._force_fitness_recomputation:
+            #     logging.warning("Fitness was changed, recomputing fitness")
+            #     self.compute_fitness_population(fitness_functions=self.fitness_functions, data=data, validation=False, validation_federated=False, simplify=False)
+            #     if val_data is not None:
+            #         self.compute_fitness_population(fitness_functions=self.fitness_functions, data=val_data, validation=True, validation_federated=False, simplify=False)
+            #     self._force_fitness_recomputation = False
             logging.info("Fitting with existing population")
 
         while True:
@@ -650,7 +674,10 @@ class SymbolicRegressor:
                 return
 
             for c in self.callbacks:
-                c.on_generation_start()
+                try:
+                    c.on_generation_start()
+                except:
+                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on generation start")
 
             start_time_generation = time.perf_counter()
 
@@ -685,7 +712,10 @@ class SymbolicRegressor:
             before = time.perf_counter()
 
             for c in self.callbacks:
-                c.on_offspring_generation_start()
+                try:
+                    c.on_offspring_generation_start()
+                except:
+                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on offspring generation start")
 
             offsprings: List[Program] = list()
             procs: List[Process] = list()
@@ -704,7 +734,7 @@ class SymbolicRegressor:
                         population_to_pass,
                         self.tournament_size,
                         self.generation,
-                        int(self.population_size/jobs),
+                        int(max(os.cpu_count(), self.population_size/jobs)),
                         queue,
                         val_data
                     )
@@ -758,7 +788,10 @@ class SymbolicRegressor:
             self.population = Population(self.population + offsprings)
 
             for c in self.callbacks:
-                c.on_offspring_generation_end()
+                try:
+                    c.on_offspring_generation_end()
+                except:
+                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on offspring generation end")
 
             # Removes all duplicated programs in the population
             before_cleaning = len(self.population)
@@ -798,7 +831,10 @@ class SymbolicRegressor:
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements")
 
                 for c in self.callbacks:
-                    c.on_refill_start()
+                    try:
+                        c.on_refill_start()
+                    except:
+                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on refill start")
 
                 refill: List[Program] = list()
                 procs: List[Process] = list()
@@ -814,7 +850,7 @@ class SymbolicRegressor:
                             self.const_range,
                             self.parsimony,
                             self.parsimony_decay,
-                            int(missing_elements/jobs),
+                            int(max(os.cpu_count(), missing_elements/jobs)),
                             queue,
                             val_data
                         )
@@ -855,7 +891,10 @@ class SymbolicRegressor:
                     self.population + refill)
 
                 for c in self.callbacks:
-                    c.on_refill_end()
+                    try:
+                        c.on_refill_end()
+                    except:
+                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on refill end")
 
                 # exludes every program in refill with an empty fitness
                 self.population = [
@@ -890,6 +929,30 @@ class SymbolicRegressor:
                 compress([copy.deepcopy(p) for p in self.first_pareto_front])
             )
 
+            if not self.best_history.get('training'):
+                self.best_history['training'] = dict()
+            if not self.best_history['training'].get(self.generation):
+                self.best_history['training'][self.generation] = dict()
+
+            if val_data is not None and not self.best_history.get('validation'):
+                self.best_history['validation'] = dict()
+            if val_data is not None and not self.best_history['validation'].get(self.generation):
+                self.best_history['validation'][self.generation] = dict()
+
+            for fitness in self.fitness_functions:
+                if fitness.minimize:
+                    best_p = min([p for p in self.first_pareto_front if p.is_valid], key=lambda obj: obj.fitness.get(fitness.label, +float('inf')))
+                    if val_data is not None:
+                        best_p_val = min([p for p in self.first_pareto_front if p.is_valid], key=lambda obj: obj.fitness_validation.get(fitness.label, +float('inf')))
+                else:
+                    best_p = max([p for p in self.first_pareto_front if p.is_valid], key=lambda obj: obj.fitness.get(fitness.label, -float('inf')))
+                    if val_data is not None:
+                        best_p_val = max([p for p in self.first_pareto_front if p.is_valid], key=lambda obj: obj.fitness_validation.get(fitness.label, -float('inf')))
+
+                self.best_history['training'][self.generation][fitness.label] = compress(best_p)
+                if val_data is not None:
+                    self.best_history['validation'][self.generation][fitness.label] = compress(best_p_val)
+
             self.times.loc[self.generation,
                            "count_average_complexity"] = self.average_complexity
 
@@ -902,7 +965,10 @@ class SymbolicRegressor:
 
             if (self.generation == 1) or (self.statistics_computation_frequency == -1 and (self.generation == self.generations_to_train or self.converged_generation)) or (self.statistics_computation_frequency > 0 and self.generation % self.statistics_computation_frequency == 0):
                 for c in self.callbacks:
-                    c.on_stats_calculation_start()
+                    try:
+                        c.on_stats_computation_start()
+                    except:
+                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on stats calculation start")
 
                 if self.verbose > 1:
                     print(
@@ -924,7 +990,10 @@ class SymbolicRegressor:
                                "time_spearman_diversity_computation"] = time.perf_counter() - before
 
                 for c in self.callbacks:
-                    c.on_stats_calculation_end()
+                    try:
+                        c.on_stats_computation_end()
+                    except:
+                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on stats calculation end")
 
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front(verbose=self.verbose)
@@ -934,7 +1003,10 @@ class SymbolicRegressor:
                            "time_generation_total"] = total_generation_time
 
             for c in self.callbacks:
-                c.on_generation_end()
+                try:
+                    c.on_generation_end()
+                except:
+                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on generation end")
 
             if self.checkpoint_file and self.checkpoint_frequency > 0 and (self.generation % self.checkpoint_frequency == 0 or self.generation == self.generations_to_train):
                 try:
@@ -946,7 +1018,10 @@ class SymbolicRegressor:
             # Use generations = -1 to rely only on convergence (risk of infinite loop)
             if self.generations_to_train > 0 and self.generation == self.generations_to_train:
                 for c in self.callbacks:
-                    c.on_training_completed()
+                    try:
+                        c.on_training_completed()
+                    except:
+                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on training completed")
                 
                 print(
                     f"Training completed {self.generation}/{self.generations_to_train} generations")
@@ -954,7 +1029,10 @@ class SymbolicRegressor:
 
             if self.converged_generation and self.stop_at_convergence:
                 for c in self.callbacks:
-                    c.on_convergence()
+                    try:
+                        c.on_convergence()
+                    except:
+                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on convergence")
 
                 print(
                     f"Training converged after {self.converged_generation} generations and requested to stop.")
@@ -1469,8 +1547,13 @@ class SymbolicRegressor:
 
         generation = self.generation if not generation else generation
 
-        iterate_over = self.extract_pareto_front(
-            rank=pf_rank) if not generation else self.first_pareto_front_history[generation - 1]
+        if not generation:
+            iterate_over = self.extract_pareto_front(rank=pf_rank)
+        else:
+            try:
+                iterate_over = self.first_pareto_front_history[generation - 1]
+            except IndexError:
+                iterate_over = self.first_pareto_front_history[-1]
 
         try:
             iterate_over = decompress(iterate_over)
