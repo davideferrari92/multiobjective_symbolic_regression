@@ -1365,6 +1365,15 @@ class SymbolicRegressor:
         return metadata
 
     def plot_generations_time(self):
+        """ This method plots the time spent in each generation
+
+        Args:
+            - None
+
+        Returns:
+            - fig: go.Figure
+                The plotly figure
+        """
 
         import plotly.express as px
         
