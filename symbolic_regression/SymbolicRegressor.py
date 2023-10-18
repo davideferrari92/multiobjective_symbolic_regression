@@ -28,21 +28,12 @@ backend_parallel = 'loky'
 
 class SymbolicRegressor:
 
-    def __init__(self, client_name: str, checkpoint_file: str = None, checkpoint_frequency: int = -1, checkpoint_overwrite: bool = True, const_range: tuple = (0, 1), parsimony=0.8, parsimony_decay=0.85, population_size: int = 300, tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1}, statistics_computation_frequency: int = 10, callbacks: List[MOSRCallbackBase] = list()) -> None:
+    def __init__(self, client_name: str, const_range: tuple = (0, 1), parsimony=0.8, parsimony_decay=0.85, population_size: int = 300, tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1}, statistics_computation_frequency: int = 10, callbacks: List[MOSRCallbackBase] = list()) -> None:
         """ This class implements the basic features for training a Symbolic Regression algorithm
 
         Args:
             - client_name: str
                 the name of the client
-
-            - checkpoint_file: str (default: None)
-                the file to save the model
-
-            - checkpoint_frequency: int (default: -1)
-                the frequency of saving the model
-
-            - checkpoint_overwrite: bool (default: True)
-                if True the checkpoint file is overwritten, if False the checkpoint file gets the generation number as suffix
 
             - const_range: tuple (default: (0, 1))
                 this is the range of values from which to generate constants in the program
@@ -138,6 +129,8 @@ class SymbolicRegressor:
 
         if not checkpoint_overwrite:
             file = file + f".gen{generation_str}.sr"
+        else:
+            file = file + ".sr"
 
         # Dump this object in a pickle file
         for p in self.population:
@@ -986,13 +979,6 @@ class SymbolicRegressor:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on generation end")
 
-            if self.checkpoint_file and self.checkpoint_frequency > 0 and (self.generation % self.checkpoint_frequency == 0 or self.generation == self.generations_to_train):
-                try:
-                    self.save_model(file=self.checkpoint_file)
-                except FileNotFoundError:
-                    logging.warning(
-                        f'FileNotFoundError raised in checkpoint saving: {self.checkpoint_file}')
-
             # Use generations = -1 to rely only on convergence (risk of infinite loop)
             if self.generations_to_train > 0 and self.generation == self.generations_to_train:
                 for c in self.callbacks:
@@ -1379,8 +1365,6 @@ class SymbolicRegressor:
         """
         metadata = {
             'average_complexity': self.average_complexity,
-            'checkpoint_file': self.checkpoint_file,
-            'checkpoint_frequency': self.checkpoint_frequency,
             'client_name': self.client_name,
             'const_range': self.const_range,
             'converged_generation': self.converged_generation,
