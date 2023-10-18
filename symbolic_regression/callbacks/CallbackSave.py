@@ -18,7 +18,7 @@ class MOSRCallbackSaveCheckpoint(MOSRCallbackBase):
 
         if self.sr.generation % self.checkpoint_frequency == 0:
             self.sr: SymbolicRegressor
-            self.sr.save_model(file=self.checkpoint_file,
+            self.sr.save_model(file=f'{self.checkpoint_file}.{self.sr.client_name}',
                                checkpoint_overwrite=self.checkpoint_overwrite)
 
             print(f"Checkpoint saved at generation {self.sr.generation}.")
