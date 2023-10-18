@@ -81,9 +81,6 @@ class SymbolicRegressor:
 
         # Regressor Configuration
         self.client_name: str = client_name
-        self.checkpoint_file: str = checkpoint_file
-        self.checkpoint_frequency: int = checkpoint_frequency
-        self.checkpoint_overwrite: bool = checkpoint_overwrite
         self.features: List = None
         self.operations: List = None
         self.population_size: int = population_size
@@ -139,7 +136,7 @@ class SymbolicRegressor:
         generation_str = str(self.generation).zfill(
             len(str(self.generations_to_train)))
 
-        if not self.checkpoint_overwrite or not checkpoint_overwrite:
+        if not checkpoint_overwrite:
             file = file + f".gen{generation_str}.sr"
 
         # Dump this object in a pickle file
