@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Tuple, Union
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-import psutil
 from loky import get_reusable_executor
 from scipy.stats import spearmanr
 
@@ -136,7 +135,7 @@ class SymbolicRegressor:
                      'time_tree_diversity_computation',]
         )
 
-    def save_model(self, file: str):
+    def save_model(self, file: str, checkpoint_overwrite: bool = None):
         # Gets the number of the generation padded with zeros to the number
         # of digits of the total number of generations
         generation_str = str(self.generation).zfill(
@@ -195,7 +194,8 @@ class SymbolicRegressor:
             try:
                 c.on_callback_set_init()
             except:
-                logging.warning(f"Callback {c.__class__.__name__} raised an exception on callback set init")
+                logging.warning(
+                    f"Callback {c.__class__.__name__} raised an exception on callback set init")
 
     def compute_hypervolume(self, exclusive: bool = False):
         """
@@ -256,6 +256,8 @@ class SymbolicRegressor:
                                'fpf_hypervolume_reference'] = self.fpf_hypervolume_reference
 
             self.fpf_hypervolume_reference = np.product(references)
+
+            return self.fpf_hypervolume
 
         else:
             try:
@@ -621,12 +623,13 @@ class SymbolicRegressor:
         executor = get_reusable_executor(max_workers=jobs, timeout=100)
 
         if not self.population:
-            
+
             for c in self.callbacks:
                 try:
                     c.on_initialization_start()
                 except:
-                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on initialization start")
+                    logging.warning(
+                        f"Callback {c.__class__.__name__} raised an exception on initialization start")
 
             before = time.perf_counter()
             if self.verbose > 0:
@@ -650,12 +653,13 @@ class SymbolicRegressor:
 
             self.times.loc[self.generation+1,
                            "time_initialization"] = time.perf_counter() - before
-            
+
             for c in self.callbacks:
                 try:
                     c.on_initialization_end()
                 except:
-                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on initialization end")
+                    logging.warning(
+                        f"Callback {c.__class__.__name__} raised an exception on initialization end")
 
         else:
             # if self._force_fitness_recomputation:
@@ -677,7 +681,8 @@ class SymbolicRegressor:
                 try:
                     c.on_generation_start()
                 except:
-                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on generation start")
+                    logging.warning(
+                        f"Callback {c.__class__.__name__} raised an exception on generation start")
 
             start_time_generation = time.perf_counter()
 
@@ -686,17 +691,22 @@ class SymbolicRegressor:
                 p.programs_dominated_by: List[Program] = list()
 
             if self.generation > 0:
-                time_total = datetime.timedelta(seconds=int(self.times['time_generation_total'].sum()))
-                seconds_iter_avg = datetime.timedelta(seconds=int(self.times['time_generation_total'].tail(5).median()))
-                seconds_iter_std = datetime.timedelta(seconds=int(self.times['time_generation_total'].tail(5).std())) if self.generation > 1 else datetime.timedelta(seconds=0)
+                time_total = datetime.timedelta(seconds=int(
+                    self.times['time_generation_total'].sum()))
+                seconds_iter_avg = datetime.timedelta(seconds=int(
+                    self.times['time_generation_total'].tail(5).median()))
+                seconds_iter_std = datetime.timedelta(seconds=int(self.times['time_generation_total'].tail(
+                    5).std())) if self.generation > 1 else datetime.timedelta(seconds=0)
                 time_per_generation = f"{seconds_iter_avg} ± {seconds_iter_std}"
-                expected_time = datetime.timedelta(seconds=int(self.times['time_generation_total'].tail(10).median() * (self.generations_to_train - self.generation)))
+                expected_time = datetime.timedelta(seconds=int(self.times['time_generation_total'].tail(
+                    10).median() * (self.generations_to_train - self.generation)))
             else:
                 time_total = f"00:00:00"
                 time_per_generation = f"00:00:00 ± 00:00:00"
                 expected_time = 'Unknown'
 
-            generation_time = datetime.timedelta(seconds=int(total_generation_time))
+            generation_time = datetime.timedelta(
+                seconds=int(total_generation_time))
             timing_str = f"Generation {generation_time} - On average: {time_per_generation} - Total: {time_total} - To completion: {expected_time}"
 
             self.generation += 1
@@ -715,7 +725,8 @@ class SymbolicRegressor:
                 try:
                     c.on_offspring_generation_start()
                 except:
-                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on offspring generation start")
+                    logging.warning(
+                        f"Callback {c.__class__.__name__} raised an exception on offspring generation start")
 
             offsprings: List[Program] = list()
             procs: List[Process] = list()
@@ -744,18 +755,10 @@ class SymbolicRegressor:
             was_limited_str = ''
             for index, proc in enumerate(procs):
                 proc.start()
-                if psutil.virtual_memory().percent > 90:
-                    logging.warning(
-                        f'Limiting to {index+1} processes due to memory allocation')
-                    was_limited_str = '[limited]'
-                    break
 
             q_size = 0
             while q_size < self.population_size:
                 # Make sure at least some processes are alive
-                if not any([p.is_alive() for p in procs]):
-                    for p in procs[:len(procs)//2]:
-                        p.start()
                 q_size = queue.qsize()
                 if self.verbose > 1:
                     _elapsed = max(1, int(round(time.perf_counter() - before)))
@@ -771,7 +774,7 @@ class SymbolicRegressor:
                         f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
                 for p in procs:
                     if p.is_alive():
-                        p.join(timeout=.5)
+                        p.join(timeout=.1)
 
             for _ in range(self.population_size):
                 offsprings.append(queue.get())
@@ -791,7 +794,8 @@ class SymbolicRegressor:
                 try:
                     c.on_offspring_generation_end()
                 except:
-                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on offspring generation end")
+                    logging.warning(
+                        f"Callback {c.__class__.__name__} raised an exception on offspring generation end")
 
             # Removes all duplicated programs in the population
             before_cleaning = len(self.population)
@@ -834,7 +838,8 @@ class SymbolicRegressor:
                     try:
                         c.on_refill_start()
                     except:
-                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on refill start")
+                        logging.warning(
+                            f"Callback {c.__class__.__name__} raised an exception on refill start")
 
                 refill: List[Program] = list()
                 procs: List[Process] = list()
@@ -876,7 +881,7 @@ class SymbolicRegressor:
                             f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!', flush=True)
                     for p in procs:
                         if p.is_alive():
-                            p.join(timeout=.2)
+                            p.join(timeout=.1)
 
                 for _ in range(missing_elements):
                     refill.append(queue.get())
@@ -894,7 +899,8 @@ class SymbolicRegressor:
                     try:
                         c.on_refill_end()
                     except:
-                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on refill end")
+                        logging.warning(
+                            f"Callback {c.__class__.__name__} raised an exception on refill end")
 
                 # exludes every program in refill with an empty fitness
                 self.population = [
@@ -906,6 +912,13 @@ class SymbolicRegressor:
                                "count_invalid_elements"] = missing_elements
                 self.times.loc[self.generation,
                                "ratio_invalid_elements"] = missing_elements / len(self.population)
+
+            for c in self.callbacks:
+                try:
+                    c.on_pareto_front_computation_start()
+                except:
+                    logging.warning(
+                        f"Callback {c.__class__.__name__} raised an exception on pareto front calculation start")
 
             # Calculates the Pareto front
             before = time.perf_counter()
@@ -941,17 +954,23 @@ class SymbolicRegressor:
 
             for fitness in self.fitness_functions:
                 if fitness.minimize:
-                    best_p = min([p for p in self.first_pareto_front if p.is_valid], key=lambda obj: obj.fitness.get(fitness.label, +float('inf')))
+                    best_p = min([p for p in self.first_pareto_front if p.is_valid],
+                                 key=lambda obj: obj.fitness.get(fitness.label, +float('inf')))
                     if val_data is not None:
-                        best_p_val = min([p for p in self.first_pareto_front if p.is_valid], key=lambda obj: obj.fitness_validation.get(fitness.label, +float('inf')))
+                        best_p_val = min([p for p in self.first_pareto_front if p.is_valid],
+                                         key=lambda obj: obj.fitness_validation.get(fitness.label, +float('inf')))
                 else:
-                    best_p = max([p for p in self.first_pareto_front if p.is_valid], key=lambda obj: obj.fitness.get(fitness.label, -float('inf')))
+                    best_p = max([p for p in self.first_pareto_front if p.is_valid],
+                                 key=lambda obj: obj.fitness.get(fitness.label, -float('inf')))
                     if val_data is not None:
-                        best_p_val = max([p for p in self.first_pareto_front if p.is_valid], key=lambda obj: obj.fitness_validation.get(fitness.label, -float('inf')))
+                        best_p_val = max([p for p in self.first_pareto_front if p.is_valid],
+                                         key=lambda obj: obj.fitness_validation.get(fitness.label, -float('inf')))
 
-                self.best_history['training'][self.generation][fitness.label] = compress(best_p)
+                self.best_history['training'][self.generation][fitness.label] = compress(
+                    best_p)
                 if val_data is not None:
-                    self.best_history['validation'][self.generation][fitness.label] = compress(best_p_val)
+                    self.best_history['validation'][self.generation][fitness.label] = compress(
+                        best_p_val)
 
             self.times.loc[self.generation,
                            "count_average_complexity"] = self.average_complexity
@@ -963,12 +982,14 @@ class SymbolicRegressor:
                     print(
                         f"Training converged after {self.converged_generation} generations.")
 
+            for c in self.callbacks:
+                try:
+                    c.on_pareto_front_computation_end(data=data)
+                except:
+                    logging.warning(
+                        f"Callback {c.__class__.__name__} raised an exception on pareto front calculation end")
+
             if (self.generation == 1) or (self.statistics_computation_frequency == -1 and (self.generation == self.generations_to_train or self.converged_generation)) or (self.statistics_computation_frequency > 0 and self.generation % self.statistics_computation_frequency == 0):
-                for c in self.callbacks:
-                    try:
-                        c.on_stats_computation_start()
-                    except:
-                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on stats calculation start")
 
                 if self.verbose > 1:
                     print(
@@ -989,12 +1010,6 @@ class SymbolicRegressor:
                 self.times.loc[self.generation,
                                "time_spearman_diversity_computation"] = time.perf_counter() - before
 
-                for c in self.callbacks:
-                    try:
-                        c.on_stats_computation_end()
-                    except:
-                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on stats calculation end")
-
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front(verbose=self.verbose)
 
@@ -1006,7 +1021,8 @@ class SymbolicRegressor:
                 try:
                     c.on_generation_end()
                 except:
-                    logging.warning(f"Callback {c.__class__.__name__} raised an exception on generation end")
+                    logging.warning(
+                        f"Callback {c.__class__.__name__} raised an exception on generation end")
 
             if self.checkpoint_file and self.checkpoint_frequency > 0 and (self.generation % self.checkpoint_frequency == 0 or self.generation == self.generations_to_train):
                 try:
@@ -1021,8 +1037,9 @@ class SymbolicRegressor:
                     try:
                         c.on_training_completed()
                     except:
-                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on training completed")
-                
+                        logging.warning(
+                            f"Callback {c.__class__.__name__} raised an exception on training completed")
+
                 print(
                     f"Training completed {self.generation}/{self.generations_to_train} generations")
                 return
@@ -1032,7 +1049,8 @@ class SymbolicRegressor:
                     try:
                         c.on_convergence()
                     except:
-                        logging.warning(f"Callback {c.__class__.__name__} raised an exception on convergence")
+                        logging.warning(
+                            f"Callback {c.__class__.__name__} raised an exception on convergence")
 
                 print(
                     f"Training converged after {self.converged_generation} generations and requested to stop.")
@@ -1364,31 +1382,9 @@ class SymbolicRegressor:
 
         submitted = 0
 
-        kept_alive_when_excess_memory_allocation = False
         jobs = self.n_jobs if self.n_jobs > 0 else os.cpu_count()
 
         while submitted < batch_size * jobs:
-
-            """ The following piece of code manages the case in which the processes allocated too much memory.
-            It happened randomly that the processes allocated more memory than usual and lead to a crash.
-            In situations like this we spot when processes allocate more memory that the system is able to handle for
-            them and, only if the system memory allocation is proximal to 100%, we kill the current process with a likelyhood
-            of 50% so to leave less processes running.
-            This will slow down the current generation but it's unlikely that the phenomena will repeat itself soon,
-            therefore we accept this tradeoff.
-            """
-
-            if queue.qsize() >= len(population):
-                return
-
-            if not kept_alive_when_excess_memory_allocation and \
-                (psutil.virtual_memory().percent > 90) and \
-                    (psutil.Process().memory_info().rss > (psutil.virtual_memory().total/jobs)):
-
-                if random.random() < .5:
-                    return
-
-                kept_alive_when_excess_memory_allocation = True
 
             offspring = self._get_offspring(data=data, val_data=val_data,
                                             genetic_operators_frequency=genetic_operators_frequency,
@@ -1454,13 +1450,15 @@ class SymbolicRegressor:
         """
 
         import plotly.express as px
-        
+
         def format_time(seconds):
             return datetime.datetime.utcfromtimestamp(seconds)
 
-        self.times['time_generation_total_formatted'] = self.times['time_generation_total'].apply(format_time)
+        self.times['time_generation_total_formatted'] = self.times['time_generation_total'].apply(
+            format_time)
 
-        fig = px.line(self.times, y='time_generation_total_formatted', title='Generation Time')
+        fig = px.line(
+            self.times, y='time_generation_total_formatted', title='Generation Time')
         fig.update_yaxes(title='Time', tickformat='%M:%S')
         return fig
 
@@ -1481,25 +1479,27 @@ class SymbolicRegressor:
         if not fitness in [f.label for f in self.fitness_functions]:
             raise ValueError(
                 f'Fitness {fitness} not found in the fitness functions. Please use one of the following: {", ".join([f.label for f in self.fitness_functions])}')
-        
+
         import plotly.express as px
 
         branch = 'validation' if on_val else 'training'
 
         if on_val and not self.best_history.get('validation'):
-            logging.warning(f'No validation data available. Plotting training data instead')
+            logging.warning(
+                f'No validation data available. Plotting training data instead')
             branch = 'training'
 
         data = [
             {'Generation': generation,
-             fitness: decompress(self.best_history[branch][generation][fitness]).fitness[fitness] if on_val else decompress(self.best_history[branch][generation][fitness]).fitness_validation[fitness]
+             fitness: decompress(self.best_history[branch][generation][fitness]).fitness[fitness] if on_val else decompress(
+                 self.best_history[branch][generation][fitness]).fitness_validation[fitness]
              } for generation in self.best_history[branch]
         ]
 
         # Create a scatter plot with the generation on the x-axis and the fitness on the y-axis
         fig = px.scatter(data, x='Generation', y=fitness,
-                        title=f'Best individual on {fitness} for each generation on {branch} set')
-        
+                         title=f'Best individual on {fitness} for each generation on {branch} set')
+
         return fig
 
     def plot_compare_fitness(self, perf_x: str, perf_y: str, pf_rank: int = 1, generation: int = None, on_val: bool = False,
@@ -1558,7 +1558,8 @@ class SymbolicRegressor:
         try:
             iterate_over = decompress(iterate_over)
         except TypeError:
-            logging.warning(f"Legacy version. PF was not compressed. Consider using compress() to save memory and disk space")
+            logging.warning(
+                f"Legacy version. PF was not compressed. Consider using compress() to save memory and disk space")
 
         perf_df = pd.DataFrame()
         for index, p in enumerate(iterate_over):
