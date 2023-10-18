@@ -98,7 +98,6 @@ class SymbolicRegressor:
         # Training Configuration
         self.converged_generation: int = None
         self.fitness_functions: List[BaseFitness] = None
-        # self._force_fitness_recomputation: bool = False
         self.best_history: Dict = dict()
         self.first_pareto_front_history: List = list()
         self.fpf_hypervolume: float = None
@@ -109,7 +108,6 @@ class SymbolicRegressor:
         self.generations_to_train: int = None
         self.generation: int = 0
         self.genetic_operators_frequency: dict = genetic_operators_frequency
-        self.statistics_computation_frequency: int = statistics_computation_frequency
         self.population: Population = Population()
         self.training_duration: int = 0
 
@@ -141,7 +139,7 @@ class SymbolicRegressor:
         generation_str = str(self.generation).zfill(
             len(str(self.generations_to_train)))
 
-        if not self.checkpoint_overwrite:
+        if not self.checkpoint_overwrite or not checkpoint_overwrite:
             file = file + f".gen{generation_str}.sr"
 
         # Dump this object in a pickle file
@@ -563,12 +561,6 @@ class SymbolicRegressor:
         """
         self.features = features
         self.operations = operations
-        # for old_f, new_f in zip(self.fitness_functions, fitness_functions):
-        #     # If any of the elements of their __dict__ is different, the fitness functions are different
-        #     if old_f.__dict__ != new_f.__dict__:
-        #         logging.warning(f"Fitness functions are being changed with {', '.join([f.label for f in fitness_functions])}")
-        #         self._force_fitness_recomputation = True
-        #         break
 
         self.fitness_functions = fitness_functions
         self.generations_to_train = generations_to_train
@@ -662,12 +654,6 @@ class SymbolicRegressor:
                         f"Callback {c.__class__.__name__} raised an exception on initialization end")
 
         else:
-            # if self._force_fitness_recomputation:
-            #     logging.warning("Fitness was changed, recomputing fitness")
-            #     self.compute_fitness_population(fitness_functions=self.fitness_functions, data=data, validation=False, validation_federated=False, simplify=False)
-            #     if val_data is not None:
-            #         self.compute_fitness_population(fitness_functions=self.fitness_functions, data=val_data, validation=True, validation_federated=False, simplify=False)
-            #     self._force_fitness_recomputation = False
             logging.info("Fitting with existing population")
 
         while True:
@@ -918,7 +904,7 @@ class SymbolicRegressor:
                     c.on_pareto_front_computation_start()
                 except:
                     logging.warning(
-                        f"Callback {c.__class__.__name__} raised an exception on pareto front calculation start")
+                        f"Callback {c.__class__.__name__} raised an exception on pareto front computation start")
 
             # Calculates the Pareto front
             before = time.perf_counter()
@@ -987,28 +973,7 @@ class SymbolicRegressor:
                     c.on_pareto_front_computation_end(data=data)
                 except:
                     logging.warning(
-                        f"Callback {c.__class__.__name__} raised an exception on pareto front calculation end")
-
-            if (self.generation == 1) or (self.statistics_computation_frequency == -1 and (self.generation == self.generations_to_train or self.converged_generation)) or (self.statistics_computation_frequency > 0 and self.generation % self.statistics_computation_frequency == 0):
-
-                if self.verbose > 1:
-                    print(
-                        f'Computing statistics for generation {self.generation}')
-                # Calculates the hypervolume
-                before = time.perf_counter()
-                self.compute_hypervolume()
-                self.times.loc[self.generation,
-                               "time_hypervolume_computation"] = time.perf_counter() - before
-
-                before = time.perf_counter()
-                self.tree_diversity()
-                self.times.loc[self.generation,
-                               "time_tree_diversity_computation"] = time.perf_counter() - before
-
-                before = time.perf_counter()
-                self.spearman_diversity(data=data)
-                self.times.loc[self.generation,
-                               "time_spearman_diversity_computation"] = time.perf_counter() - before
+                        f"Callback {c.__class__.__name__} raised an exception on pareto front computation end")
 
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front(verbose=self.verbose)
