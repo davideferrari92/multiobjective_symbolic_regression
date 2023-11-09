@@ -914,40 +914,6 @@ class SymbolicRegressor:
             self.population = Population(
                 self.population[:self.population_size])
 
-            self.first_pareto_front_history.append(
-                compress([copy.deepcopy(p) for p in self.first_pareto_front])
-            )
-
-            if not self.best_history.get('training'):
-                self.best_history['training'] = dict()
-            if not self.best_history['training'].get(self.generation):
-                self.best_history['training'][self.generation] = dict()
-
-            if val_data is not None and not self.best_history.get('validation'):
-                self.best_history['validation'] = dict()
-            if val_data is not None and not self.best_history['validation'].get(self.generation):
-                self.best_history['validation'][self.generation] = dict()
-
-            for fitness in self.fitness_functions:
-                if fitness.minimize:
-                    best_p = min([p for p in self.first_pareto_front if p.is_valid],
-                                 key=lambda obj: obj.fitness.get(fitness.label, +float('inf')))
-                    if val_data is not None:
-                        best_p_val = min([p for p in self.first_pareto_front if p.is_valid],
-                                         key=lambda obj: obj.fitness_validation.get(fitness.label, +float('inf')))
-                else:
-                    best_p = max([p for p in self.first_pareto_front if p.is_valid],
-                                 key=lambda obj: obj.fitness.get(fitness.label, -float('inf')))
-                    if val_data is not None:
-                        best_p_val = max([p for p in self.first_pareto_front if p.is_valid],
-                                         key=lambda obj: obj.fitness_validation.get(fitness.label, -float('inf')))
-
-                self.best_history['training'][self.generation][fitness.label] = compress(
-                    best_p)
-                if val_data is not None:
-                    self.best_history['validation'][self.generation][fitness.label] = compress(
-                        best_p_val)
-
             self.times.loc[self.generation,
                            "count_average_complexity"] = self.average_complexity
 
