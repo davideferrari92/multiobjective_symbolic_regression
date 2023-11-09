@@ -267,34 +267,15 @@ class Program:
                 The fraction of the data to use for each bootstrap iteration
         """
 
-        def _internal_bootstrap(data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization: str, constants_optimization_conf: dict, frac: float = .6) -> 'Program':
-            bs_data = data.sample(frac=frac, replace=True)
-            # !!! Weights should now be adapted to the bs_data target distribution
+        n_constants = len(self.get_constants(return_objects=False))
+        n_features_used = len(self.features_used)
+        if not isinstance(self.program, FeatureNode) and n_constants > 0 and n_features_used > 0:
+            if inplace:
+                return self
+            else:
+                return copy.deepcopy(self)
 
-            # Increase the epochs to be used for the bootstrap
-            constants_optimization_conf = copy.deepcopy(
-                constants_optimization_conf)
-            constants_optimization_conf['epochs'] = max(
-                200, constants_optimization_conf['epochs'])
-
-            recalibrated = copy.deepcopy(self)
-            recalibrated.set_constants(
-                new=list(np.random.uniform(
-                    low=self.const_range[0],
-                    high=self.const_range[1],
-                    size=len(self.get_constants())
-                ))
-            )
-            return recalibrated.optimize(
-                data=bs_data,
-                target=target,
-                weights=weights,
-                constants_optimization=constants_optimization,
-                constants_optimization_conf=constants_optimization_conf,
-                inplace=False
-            ).get_constants(return_objects=False)
-
-        bootstrapped_constants: List[float] = Parallel(n_jobs=-1)(delayed(_internal_bootstrap)(
+        bootstrapped_constants: List[float] = Parallel(n_jobs=-1)(delayed(self._internal_bootstrap)(
             data=data,
             target=target,
             weights=weights,
@@ -450,6 +431,34 @@ class Program:
 
         self.program_hypervolume = _HyperVolume(references).compute(points)
 
+    def predict(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+        """ This function predict the value of the program on the given data.
+        The data can be a dictionary, a pandas Series or a pandas DataFrame.
+
+        Args:
+            - data: dict, pd.Series, pd.DataFrame
+                The data on which the program will be evaluated
+
+        Returns:
+            - int, float
+                The result of the prediction
+        """
+        return self.evaluate(data=data)
+
+    def predict_proba(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+        """ This function predict the value of the program on the given data.
+        The data can be a dictionary, a pandas Series or a pandas DataFrame.
+
+        Args:
+            - data: dict, pd.Series, pd.DataFrame
+                The data on which the program will be evaluated
+
+        Returns:
+            - int, float
+                The result of the prediction
+        """
+        return self.evaluate(data=data, logistic=True)
+
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame], logistic: bool = False, threshold: float = None) -> Union[int, float]:
         """ This function evaluate the program on the given data.
         The data can be a dictionary, a pandas Series or a pandas DataFrame.
@@ -469,9 +478,9 @@ class Program:
 
         if logistic:
             if isinstance(threshold, float) and 0 <= threshold <= 1:
-                return np.where(self.program.to_logistic(inplace=False).evaluate(data=data) > threshold, 1, 0)
+                return np.where(self.to_logistic(inplace=False).evaluate(data=data) > threshold, 1, 0)
 
-            return self.program.to_logistic(inplace=False).evaluate(data=data)
+            return self.to_logistic(inplace=False).evaluate(data=data)
 
         return self.program.evaluate(data=data)
 
@@ -842,9 +851,9 @@ class Program:
 
         task = constants_optimization_conf['task']
 
-        if task not in ['regression:wmse', 'regression:wrrmse', 'binary:logistic']:
+        if task not in ['regression:wmse', 'regression:wrrmse', 'regression:cox', 'binary:logistic']:
             raise AttributeError(
-                f'Task supported are regression:wmse, regression:wrrmse or binary:logistic')
+                f'Task supported are regression:wmse, regression:wrrmse, regression:cox or binary:logistic')
 
         n_constants = len(self.get_constants(return_objects=False))
         n_features_used = len(self.features_used)
@@ -896,6 +905,8 @@ class Program:
                 to_optimize.set_constants(new=final_parameters)
 
             return to_optimize
+
+        return self
 
     def _select_random_node(self, root_node: Union[OperationNode, FeatureNode, InvalidNode], depth: float = .8, only_operations: bool = False) -> Union[OperationNode, FeatureNode]:
         """ This method return a random node of a sub-tree starting from root_node.
