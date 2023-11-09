@@ -2,6 +2,7 @@ astropy
 loky
 numpy
 pandas
+plotly
 pytexit
 scikit-learn
 scipy
