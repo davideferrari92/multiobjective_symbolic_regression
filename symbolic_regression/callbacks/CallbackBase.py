@@ -7,7 +7,7 @@ class MOSRCallbackBase:
             setattr(self, key, value)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.kwargs})"
+        return f"{self.__class__.__name__}({self.__dict__})"
 
     @abstractmethod
     def on_callback_set_init(self, **kwargs):
