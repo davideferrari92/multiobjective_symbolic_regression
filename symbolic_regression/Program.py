@@ -211,6 +211,33 @@ class Program:
     def features_used(self):
         return self.program._get_features(features_list=[])
 
+    def _internal_bootstrap(self, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization: str, constants_optimization_conf: dict, frac: float = .6) -> 'Program':
+        bs_data = data.sample(frac=frac, replace=True)
+        # !!! Weights should now be adapted to the bs_data target distribution
+
+        # Increase the epochs to be used for the bootstrap
+        constants_optimization_conf = copy.deepcopy(
+            constants_optimization_conf)
+        constants_optimization_conf['epochs'] = max(
+            200, constants_optimization_conf['epochs'])
+
+        recalibrated = copy.deepcopy(self)
+        recalibrated.set_constants(
+            new=list(np.random.uniform(
+                low=self.const_range[0],
+                high=self.const_range[1],
+                size=len(self.get_constants())
+            ))
+        )
+        return recalibrated.optimize(
+            data=bs_data,
+            target=target,
+            weights=weights,
+            constants_optimization=constants_optimization,
+            constants_optimization_conf=constants_optimization_conf,
+            inplace=False
+        ).get_constants(return_objects=False)
+
     def bootstrap(self, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization: str, constants_optimization_conf: dict, inplace: bool = False, k: int = 1000, frac: float = .6) -> 'Program':
         """ This method allow to bootstrap a program.
 
