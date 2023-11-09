@@ -5,7 +5,7 @@ from symbolic_regression.callbacks.CallbackBase import MOSRCallbackBase
 
 class MOSRCallbackSaveCheckpoint(MOSRCallbackBase):
 
-    def __init__(self, checkpoint_file, checkpoint_frequency, checkpoint_overwrite, **kwargs):
+    def __init__(self, checkpoint_file, checkpoint_frequency: int = -1, checkpoint_overwrite: bool = True, **kwargs):
         super().__init__(**kwargs)
 
         self.checkpoint_file = checkpoint_file
@@ -18,15 +18,17 @@ class MOSRCallbackSaveCheckpoint(MOSRCallbackBase):
 
         if self.sr.generation % self.checkpoint_frequency == 0:
             self.sr: SymbolicRegressor
+            if self.sr.verbose > 1:
+                print(
+                    f'Saving checkpoint for generation {self.sr.generation}')
             self.sr.save_model(file=f'{self.checkpoint_file}.{self.sr.client_name}',
                                checkpoint_overwrite=self.checkpoint_overwrite)
-
-            print(f"Checkpoint saved at generation {self.sr.generation}.")
 
     def on_training_completed(self):
         if self.checkpoint_frequency == -1 or self.checkpoint_frequency > 0:
             self.sr: SymbolicRegressor
-            self.sr.save_model(file=self.checkpoint_file,
+            if self.sr.verbose > 1:
+                print(
+                    f'Saving checkpoint for training complete on generation {self.sr.generation}')
+            self.sr.save_model(file=f'{self.checkpoint_file}.{self.sr.client_name}',
                                checkpoint_overwrite=self.checkpoint_overwrite)
-
-            print(f"Checkpoint saved at end of training.")
