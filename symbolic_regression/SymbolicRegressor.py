@@ -917,40 +917,6 @@ class SymbolicRegressor:
             self.population = Population(
                 self.population[:self.population_size])
 
-            self.first_pareto_front_history.append(
-                compress([copy.deepcopy(p) for p in self.first_pareto_front])
-            )
-
-            if not self.best_history.get('training'):
-                self.best_history['training'] = dict()
-            if not self.best_history['training'].get(self.generation):
-                self.best_history['training'][self.generation] = dict()
-
-            if val_data is not None and not self.best_history.get('validation'):
-                self.best_history['validation'] = dict()
-            if val_data is not None and not self.best_history['validation'].get(self.generation):
-                self.best_history['validation'][self.generation] = dict()
-
-            for fitness in self.fitness_functions:
-                if fitness.minimize:
-                    best_p = min([p for p in self.first_pareto_front if p.is_valid],
-                                 key=lambda obj: obj.fitness.get(fitness.label, +float('inf')))
-                    if val_data is not None:
-                        best_p_val = min([p for p in self.first_pareto_front if p.is_valid],
-                                         key=lambda obj: obj.fitness_validation.get(fitness.label, +float('inf')))
-                else:
-                    best_p = max([p for p in self.first_pareto_front if p.is_valid],
-                                 key=lambda obj: obj.fitness.get(fitness.label, -float('inf')))
-                    if val_data is not None:
-                        best_p_val = max([p for p in self.first_pareto_front if p.is_valid],
-                                         key=lambda obj: obj.fitness_validation.get(fitness.label, -float('inf')))
-
-                self.best_history['training'][self.generation][fitness.label] = compress(
-                    best_p)
-                if val_data is not None:
-                    self.best_history['validation'][self.generation][fitness.label] = compress(
-                        best_p_val)
-
             self.times.loc[self.generation,
                            "count_average_complexity"] = self.average_complexity
 
@@ -963,7 +929,8 @@ class SymbolicRegressor:
 
             for c in self.callbacks:
                 try:
-                    c.on_pareto_front_computation_end(data=data)
+                    c.on_pareto_front_computation_end(
+                        data=data, val_data=val_data)
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on pareto front computation end")
@@ -1499,11 +1466,12 @@ class SymbolicRegressor:
         if not generation:
             iterate_over = self.extract_pareto_front(rank=pf_rank)
         else:
-            try:
-                iterate_over = self.first_pareto_front_history[generation - 1]
-            except IndexError:
-                iterate_over = self.first_pareto_front_history[-1]
-
+            if not self.first_pareto_front_history.get(generation):
+                raise ValueError(
+                    f"Generation {generation} not found in the history. Please use one of the following: {', '.join([str(g) for g in self.first_pareto_front_history.keys()])}")
+                
+            iterate_over = self.first_pareto_front_history[generation]
+            
         try:
             iterate_over = decompress(iterate_over)
         except TypeError:
