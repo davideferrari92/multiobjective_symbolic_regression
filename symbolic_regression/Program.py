@@ -758,19 +758,11 @@ class Program:
             - bool
                 True if the two programs are equivalent, False otherwise.
         """
-        # for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
-        #                                               other.fitness.items()):
-        #     # One difference is enough for them not to be identical
-
-        #     if round(a_fit, 3) != round(b_fit, 3):
-        #         return False
-
-        a_hash: List = self.hash
-        b_hash: List = other.hash
-
-        # If the element-wise comparison of the hash is not equal, the programs are not identical
-        if not np.array_equal(a_hash, b_hash):
-            return False
+        for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
+                                                      other.fitness.items()):
+            # One difference is enough for them not to be identical
+            if round(a_fit, 3) != round(b_fit, 3):
+                return False
 
         return True
 
