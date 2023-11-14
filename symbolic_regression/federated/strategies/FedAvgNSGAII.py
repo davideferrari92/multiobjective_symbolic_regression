@@ -47,6 +47,11 @@ class FedAvgNSGAII(FedNSGAII):
         super().__init__(
             name=kwargs['name'], mode=kwargs['mode'], configuration=kwargs['configuration'])
 
+        self.hypervolume_selection: bool = kwargs['configuration']['federated'].get(
+            'hypervolume_selection', False)
+        self.compatibility_check: bool = kwargs['configuration']['federated'].get(
+            'compatibility_check', False)
+
         self.stage: int = 1
         self.federated_round_is_terminated: bool = False
 
@@ -85,9 +90,19 @@ class FedAvgNSGAII(FedNSGAII):
                     logging.info(
                         f'Incorporating {client_name} regressor population')
 
-                    for r in range(1, self.federated_configuration.get('max_rank_aggregation', 2) + 1):
+                    if self.hypervolume_selection:
+                        num_selected_programs = int(
+                            self.symbolic_regressor_configuration['population_size'] / len(self.regressors))
+
+                        client_regressor.population.sort(
+                            key=lambda program: program.hypervolume, reverse=True)
                         self.regressor.population.extend(
-                            client_regressor.extract_pareto_front(rank=r))
+                            client_regressor.population[:num_selected_programs])
+
+                    else:
+                        for r in range(1, self.federated_configuration.get('max_rank_aggregation', 2) + 1):
+                            self.regressor.population.extend(
+                                client_regressor.extract_pareto_front(rank=r))
 
                 logging.debug(
                     f'Incorporated population size: {len(self.regressor.population)}')
@@ -120,19 +135,42 @@ class FedAvgNSGAII(FedNSGAII):
                         for program in ith_programs:
                             program._override_is_valid = False
 
+                """ This next for loop implements a weighted average of the constants of the programs in ith_programs
+                and sets the constants of the new program to the average. The weights are the relative size of the
+                dataset of the training set of each client.
+                """
+
+                regressors_weights = [regressor.data_shape[0]
+                                      for regressor in self.regressors.values()]
+                regressors_weights = np.array(
+                    regressors_weights) / np.sum(regressors_weights)
+
                 for index, programs in enumerate(zip(*[regressor.population for regressor in self.regressors.values()])):
 
                     if len(programs[0].get_constants()) == 0:
                         continue
 
+                    new_constants = []
+                    for constant_index in range(0, len(programs[0].get_constants())):
+                        ith_constants = np.array(
+                            [program.get_constants()[constant_index] for program in programs])
+
+                        # Element-wise multiplication of the constants with the weights of the regressors
+                        ith_constant_final = np.sum(
+                            ith_constants * regressors_weights)
+
+                        # Sum the weighted constants
+                        new_constants.append(ith_constant_final)
+
                     self.regressor.population[index].set_constants(
-                        [sum([program.get_constants()[i] for program in programs]) / len(programs) for i in range(len(programs[0].get_constants()))])
+                        new_constants)
 
                 self.stage = 1
                 self.federated_round_is_terminated = True
 
                 if self.training_configuration.get('verbose', 0) > 0:
-                    logging.info(f"Ineligible: {ineligible}/{len(self.regressor.population)}")
+                    logging.info(
+                        f"Ineligible: {ineligible}/{len(self.regressor.population)}")
             else:
                 raise ValueError(f'Invalid stage {self.stage}')
 
@@ -166,19 +204,27 @@ class FedAvgNSGAII(FedNSGAII):
 
                 logging.debug(f'Client {self.name} is executing stage 2')
 
-                for program in self.regressor.population:
-                    program.bootstrap(
-                        data=data,
-                        target=self.training_configuration['target'],
-                        weights=self.training_configuration['weights'],
-                        constants_optimization=self.training_configuration['constants_optimization'],
-                        constants_optimization_conf=self.training_configuration[
-                            'constants_optimization_conf'],
-                        k=self.training_configuration.get('bootstrap_k', 100),
-                        frac=self.training_configuration.get(
-                            'bootstrap_frac', 0.6),
-                        inplace=True
-                    )
+                if self.compatibility_check:
+                    for program in self.regressor.population:
+                        program.bootstrap(
+                            data=data,
+                            target=self.training_configuration['target'],
+                            weights=self.training_configuration['weights'],
+                            constants_optimization=self.training_configuration['constants_optimization'],
+                            constants_optimization_conf=self.training_configuration[
+                                'constants_optimization_conf'],
+                            k=self.training_configuration.get(
+                                'bootstrap_k', 100),
+                            frac=self.training_configuration.get(
+                                'bootstrap_frac', 0.6),
+                            inplace=True
+                        )
+
+                else:
+                    self.regressor.compute_fitness_population(
+                        data=data, validation=False, validation_federated=False, simplify=False)
+                    self.regressor.compute_fitness_population(
+                        data=val_data, validation=True, validation_federated=False, simplify=False)
 
                 self.federated_round_is_terminated = False
 

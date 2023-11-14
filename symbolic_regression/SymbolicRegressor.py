@@ -87,6 +87,7 @@ class SymbolicRegressor:
         self.tournament_size: int = tournament_size
 
         # Training Configuration
+        self.data_shape: tuple = None
         self.converged_generation: int = None
         self.fitness_functions: List[BaseFitness] = None
         self.generations_to_train: int = None
@@ -450,18 +451,27 @@ class SymbolicRegressor:
                 If True the population is updated, if False a new list is returned
         """
 
-        for index, p in enumerate(self.population):
+        complexities_index = np.argsort([p.complexity for p in self.population])
+
+        for index, complexity_index in enumerate(complexities_index):
+            p = self.population[complexity_index]
+            
             if p.is_valid and not p._is_duplicated:
-                for p_confront in self.population[index + 1:]:
-                    if p.is_duplicate(p_confront):
-                        p_confront._is_duplicated = True  # Makes p.is_valid = False
+
+                other_indices = [complexities_index[l] for l in range(
+                    index + 1, len(complexities_index))]
+                
+                for j in other_indices:
+                    p_confront = self.population[j]
+                    if p_confront.is_valid and not p_confront._is_duplicated:
+                        p_confront._is_duplicated = p.is_duplicate(p_confront)
 
         if inplace:
             self.population: Population = Population(
                 filter(lambda p: p._is_duplicated == False, self.population))
             return self.population
 
-        return list(
+        return Population(
             filter(lambda p: p._is_duplicated == False, self.population))
 
     def drop_invalids(self, inplace: bool = False) -> list:
@@ -555,6 +565,8 @@ class SymbolicRegressor:
         """
         self.features = features
         self.operations = operations
+
+        self.data_shape = data.shape
 
         self.fitness_functions = fitness_functions
         self.generations_to_train = generations_to_train
