@@ -4,7 +4,9 @@ import json
 import logging
 import os
 import pickle
+import platform
 import random
+import signal
 import time
 import zlib
 from itertools import repeat
@@ -77,6 +79,7 @@ class SymbolicRegressor:
         self.population_size: int = population_size
 
         # Population Configuration
+        self.population: Population = Population()
         self._average_complexity: float = None
         self.const_range: tuple = const_range
         self.parsimony: float = parsimony
@@ -86,20 +89,21 @@ class SymbolicRegressor:
         # Training Configuration
         self.converged_generation: int = None
         self.fitness_functions: List[BaseFitness] = None
+        self.generations_to_train: int = None
+        self.generation: int = 0
+        self.genetic_operators_frequency: dict = genetic_operators_frequency
+
+        # Statistics
         self.best_history: Dict = dict()
-        self.first_pareto_front_history: List = list()
+        self.first_pareto_front_history: Dict = dict()
         self.fpf_hypervolume: float = None
         self.fpf_hypervolume_reference: float = None
         self.fpf_tree_diversity: float = None
         self.fpf_spearman_diversity: float = None
         self.fpf_stats: pd.DataFrame = pd.DataFrame()
-        self.generations_to_train: int = None
-        self.generation: int = 0
-        self.genetic_operators_frequency: dict = genetic_operators_frequency
-        self.population: Population = Population()
         self.training_duration: int = 0
 
-        self._callbacks = list()
+        self._callbacks: List[MOSRCallbackBase] = list()
         self.callbacks: List[MOSRCallbackBase] = callbacks
 
         self.times: pd.DataFrame = pd.DataFrame(
@@ -566,6 +570,9 @@ class SymbolicRegressor:
             self.status = "Interrupted by KeyboardInterrupt"
             logging.warning(f"Training terminated by a KeyboardInterrupt")
 
+            if not isinstance(self.population, Population):
+                self.population = Population(self.population)
+
         stop = time.perf_counter()
         self.training_duration += stop - start
 
@@ -646,7 +653,10 @@ class SymbolicRegressor:
         else:
             logging.info("Fitting with existing population")
 
+
         while True:
+            self.status = "Training"
+
             if self.generation > 0 and self.generations_to_train <= self.generation:
                 logging.info(
                     f"The model already had trained for {self.generation} generations")
@@ -704,9 +714,12 @@ class SymbolicRegressor:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on offspring generation start")
 
+            self.status = "Generating Offsprings"
+
             offsprings: List[Program] = list()
             procs: List[Process] = list()
             queue: Queue = Queue(maxsize=self.population_size)
+
             for _ in range(jobs):
                 try:
                     population_to_pass = self.population.as_binary()
@@ -757,7 +770,10 @@ class SymbolicRegressor:
 
             for proc in procs:
                 try:
-                    proc.kill()
+                    if platform.system() == 'Windows':
+                        proc.send_signal(signal.SIGABRT)
+                    else:
+                        proc.kill()
                 except:
                     pass
 
@@ -803,11 +819,13 @@ class SymbolicRegressor:
 
             # Integrate population in case of too many invalid programs
             if len(self.population) < self.population_size * 2:
+                self.status = "Refilling Individuals"
+
                 before = time.perf_counter()
                 missing_elements = 2*self.population_size - \
                     len(self.population)
 
-                logging.info(
+                logging.debug(
                     f"Population of {len(self.population)} elements is less than 2*population_size:{self.population_size*2}. Integrating with {missing_elements} new elements")
 
                 for c in self.callbacks:
@@ -820,6 +838,7 @@ class SymbolicRegressor:
                 refill: List[Program] = list()
                 procs: List[Process] = list()
                 queue: Queue = Queue(maxsize=missing_elements)
+
                 for _ in range(jobs):
                     proc = Process(
                         target=self.generate_individual_batch,
@@ -864,7 +883,10 @@ class SymbolicRegressor:
 
                 for proc in procs:
                     try:
-                        proc.kill()
+                        if platform.system() == 'Windows':
+                            proc.send_signal(signal.SIGABRT)
+                        else:
+                            proc.kill()
                     except:
                         pass
 
@@ -895,6 +917,8 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on pareto front computation start")
+
+            self.status = "NSGA-II Pareto Front Computation"
 
             # Calculates the Pareto front
             before = time.perf_counter()
@@ -1060,6 +1084,9 @@ class SymbolicRegressor:
 
         submitted = 0
         while submitted < batch_size * 3:
+
+            if not self.status == "Refilling Individuals":
+                return
 
             new_p = self.generate_individual(data=data, features=features, operations=operations,
                                              fitness_functions=fitness_functions, const_range=const_range,
@@ -1301,6 +1328,9 @@ class SymbolicRegressor:
 
         while submitted < batch_size * jobs:
 
+            if not self.status == "Generating Offsprings":
+                return
+
             offspring = self._get_offspring(data=data, val_data=val_data,
                                             genetic_operators_frequency=genetic_operators_frequency,
                                             fitness_functions=fitness_functions, population=population,
@@ -1404,8 +1434,8 @@ class SymbolicRegressor:
 
         data = [
             {'Generation': generation,
-             fitness: decompress(self.best_history[branch][generation][fitness]).fitness[fitness] if on_val else decompress(
-                 self.best_history[branch][generation][fitness]).fitness_validation[fitness]
+             fitness: decompress(self.best_history[branch][generation][fitness]).fitness_validation[fitness] if on_val else decompress(
+                 self.best_history[branch][generation][fitness]).fitness[fitness]
              } for generation in self.best_history[branch]
         ]
 
