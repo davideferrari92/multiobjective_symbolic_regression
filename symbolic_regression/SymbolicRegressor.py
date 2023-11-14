@@ -84,6 +84,7 @@ class SymbolicRegressor:
         self.tournament_size: int = tournament_size
 
         # Training Configuration
+        self.data_shape: tuple = None
         self.converged_generation: int = None
         self.fitness_functions: List[BaseFitness] = None
         self.best_history: Dict = dict()
@@ -551,6 +552,8 @@ class SymbolicRegressor:
         """
         self.features = features
         self.operations = operations
+
+        self.data_shape = data.shape
 
         self.fitness_functions = fitness_functions
         self.generations_to_train = generations_to_train
