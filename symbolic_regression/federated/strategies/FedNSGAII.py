@@ -53,10 +53,6 @@ class FedNSGAII(BaseStrategy):
 
             self.regressor: SymbolicRegressor = SymbolicRegressor(
                 client_name=self.name,
-                checkpoint_file=self.symbolic_regressor_configuration[
-                    'checkpoint_file'] + f'.{self.name}',
-                checkpoint_frequency=self.symbolic_regressor_configuration[
-                    'checkpoint_frequency'],
                 const_range=self.symbolic_regressor_configuration['const_range'],
                 genetic_operators_frequency=self.symbolic_regressor_configuration[
                     'genetic_operators_frequency'],
@@ -64,6 +60,7 @@ class FedNSGAII(BaseStrategy):
                 parsimony_decay=self.symbolic_regressor_configuration['parsimony_decay'],
                 population_size=self.symbolic_regressor_configuration['population_size'],
                 tournament_size=self.symbolic_regressor_configuration['tournament_size'],
+                callbacks=self.symbolic_regressor_configuration.get('callbacks', list())
             )
 
             # Overrides this regressor's configuration with the configuration of the strategy
@@ -79,10 +76,6 @@ class FedNSGAII(BaseStrategy):
                     f'Initializing the symbolic regressor for {self.name} with size {self.symbolic_regressor_configuration["population_size"]}')
                 self.regressor: SymbolicRegressor = SymbolicRegressor(
                     client_name=self.name,
-                    checkpoint_file=self.symbolic_regressor_configuration[
-                        'checkpoint_file'] + f'.{self.name}',
-                    checkpoint_frequency=self.symbolic_regressor_configuration[
-                        'checkpoint_frequency'],
                     const_range=self.symbolic_regressor_configuration['const_range'],
                     genetic_operators_frequency=self.symbolic_regressor_configuration[
                         'genetic_operators_frequency'],
@@ -90,6 +83,7 @@ class FedNSGAII(BaseStrategy):
                     parsimony_decay=self.symbolic_regressor_configuration['parsimony_decay'],
                     population_size=self.symbolic_regressor_configuration['population_size'],
                     tournament_size=self.symbolic_regressor_configuration['tournament_size'],
+                    callbacks=self.symbolic_regressor_configuration.get('callbacks', list())
                 )
 
             self.regressor.population: Population = self.regressor.population.as_program()
