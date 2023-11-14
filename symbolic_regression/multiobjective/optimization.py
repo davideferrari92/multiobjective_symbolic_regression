@@ -260,7 +260,7 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
 
     if weights:
         if bootstrap:
-            if task == 'regression:wmse' or task == 'regression:wrrmse':
+            if task == 'regression:wmse' or task == 'regression:wrrmse' or task == 'regression:cox':
                 w = create_regression_weights(
                     data=data, target=target, bins=10)
             elif task == 'binary:logistic':

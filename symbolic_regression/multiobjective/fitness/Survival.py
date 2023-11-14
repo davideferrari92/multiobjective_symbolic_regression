@@ -17,6 +17,9 @@ class CoxEfron(BaseFitness):
         """
         super().__init__(**kwargs)
 
+        assert hasattr(
+            self, 'status'), "Status must be specified. In a Cox model, it is whether the event happened or not."
+
     def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
         if not program.is_valid:
@@ -25,7 +28,7 @@ class CoxEfron(BaseFitness):
         if not validation:
             program = self.optimize(program=program, data=data)
 
-        status = self.constants_optimization_conf['status']
+        status = self.status
         unique_target = np.sort(
             data[self.target].loc[data[status] == True].unique())
 
@@ -80,6 +83,9 @@ class CoxAkaike(BaseFitness):
         """
         super().__init__(**kwargs)
 
+        assert hasattr(
+            self, 'status'), "Status must be specified. In a Cox model, it is whether the event happened or not."
+
     def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
         if not program.is_valid:
@@ -88,7 +94,7 @@ class CoxAkaike(BaseFitness):
         if not validation:
             program = self.optimize(program=program, data=data)
 
-        status = self.constants_optimization_conf['status']
+        status = self.status
         unique_target = np.sort(
             data[self.target].loc[data[status] == True].unique())
 
@@ -126,8 +132,7 @@ class CoxAkaike(BaseFitness):
 
             nconstants = len(program.get_constants())
             nll = -LogLikelihood
-            AIC = 2*(nconstants+nll) / \
-                len(data) if not validation else 2*(nconstants+nll)
+            AIC = 2*(nconstants+nll)
             return AIC
 
         except TypeError:
