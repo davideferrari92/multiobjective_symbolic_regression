@@ -451,16 +451,17 @@ class SymbolicRegressor:
                 If True the population is updated, if False a new list is returned
         """
 
-        complexities_index = np.argsort([p.complexity for p in self.population])
+        complexities_index = np.argsort(
+            [p.complexity for p in self.population])
 
         for index, complexity_index in enumerate(complexities_index):
             p = self.population[complexity_index]
-            
+
             if p.is_valid and not p._is_duplicated:
 
                 other_indices = [complexities_index[l] for l in range(
                     index + 1, len(complexities_index))]
-                
+
                 for j in other_indices:
                     p_confront = self.population[j]
                     if p_confront.is_valid and not p_confront._is_duplicated:
@@ -665,7 +666,6 @@ class SymbolicRegressor:
         else:
             logging.info("Fitting with existing population")
 
-
         while True:
             self.status = "Training"
 
@@ -782,10 +782,7 @@ class SymbolicRegressor:
 
             for proc in procs:
                 try:
-                    if platform.system() == 'Windows':
-                        proc.send_signal(signal.SIGABRT)
-                    else:
-                        proc.kill()
+                    proc.kill()
                 except:
                     pass
 
@@ -895,10 +892,7 @@ class SymbolicRegressor:
 
                 for proc in procs:
                     try:
-                        if platform.system() == 'Windows':
-                            proc.send_signal(signal.SIGABRT)
-                        else:
-                            proc.kill()
+                        proc.kill()
                     except:
                         pass
 
@@ -1224,109 +1218,84 @@ class SymbolicRegressor:
 
             return best_member
 
-        import signal
-        from contextlib import contextmanager
-
-        class TimeoutException(Exception):
-            pass
-
-        @contextmanager
-        def time_limit(seconds):
-            def signal_handler(signum, frame):
-                raise TimeoutException("Timed out!")
-            signal.signal(signal.SIGALRM, signal_handler)
-            signal.alarm(seconds)
-            try:
-                yield
-            finally:
-                signal.alarm(0)
-
         # Select the genetic operation to apply
         # The frequency of each operation is determined by the dictionary
         # genetic_operators_frequency. The higher the number the likelier the operation will be chosen.
 
-        timeout = 20
-        try:
-            with time_limit(timeout):
-                ops = list()
-                for op, freq in genetic_operators_frequency.items():
-                    ops += [op] * freq
-                gen_op = random.choice(ops)
+        ops = list()
+        for op, freq in genetic_operators_frequency.items():
+            ops += [op] * freq
+        gen_op = random.choice(ops)
 
-                program1 = _tournament_selection(
-                    population=population, tournament_size=tournament_size, generation=generation)
+        program1 = _tournament_selection(
+            population=population, tournament_size=tournament_size, generation=generation)
 
-                if program1 is None or not program1.is_valid:
-                    # If the program is not valid, we return a the same program without any alteration
-                    # because it would be unlikely to generate a valid offspring.
-                    # This program will be removed from the population later.
-                    program1.init_program()
-                    program1.compute_fitness(
-                        fitness_functions=fitness_functions, data=data, validation=False, simplify=True)
-                    if val_data is not None:
-                        program1.compute_fitness(
-                            fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
-                    return program1
-
-                _offspring: Program = None
-                if gen_op == 'crossover':
-                    program2 = _tournament_selection(
-                        population=population, tournament_size=tournament_size, generation=generation)
-                    if program2 is None or not program2.is_valid:
-                        return program1
-                    _offspring = program1.cross_over(
-                        other=program2, inplace=False)
-
-                elif gen_op == 'randomize':
-                    # Will generate a new tree as other
-                    _offspring = program1.cross_over(other=None, inplace=False)
-
-                elif gen_op == 'mutation':
-                    _offspring = program1.mutate(inplace=False)
-
-                elif gen_op == 'delete_node':
-                    _offspring = program1.delete_node(inplace=False)
-
-                elif gen_op == 'insert_node':
-                    _offspring = program1.insert_node(inplace=False)
-
-                elif gen_op == 'mutate_operator':
-                    _offspring = program1.mutate_operator(inplace=False)
-
-                elif gen_op == 'mutate_leaf':
-                    _offspring = program1.mutate_leaf(inplace=False)
-
-                elif gen_op == 'simplification':
-                    _offspring = program1.simplify(inplace=False)
-
-                elif gen_op == 'recalibrate':
-                    _offspring = program1.recalibrate(inplace=False)
-
-                elif gen_op == 'do_nothing':
-                    _offspring = program1
-                else:
-                    logging.warning(
-                        f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize'
-                    )
-
-                    return program1
-
-                # Add the fitness to the object after the cross_over or mutation
-                _offspring.compute_fitness(
-                    fitness_functions=fitness_functions, data=data, simplify=True)
-                if val_data is not None:
-                    _offspring.compute_fitness(
-                        fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
-
-                # Reset the hash to force the re-computation
-                _offspring._hash = None
-
-                return _offspring
-
-        except TimeoutException:
-            logging.debug(
-                f'Genetic operation {gen_op} timed out after {timeout} seconds')
+        if program1 is None or not program1.is_valid:
+            # If the program is not valid, we return a the same program without any alteration
+            # because it would be unlikely to generate a valid offspring.
+            # This program will be removed from the population later.
+            program1.init_program()
+            program1.compute_fitness(
+                fitness_functions=fitness_functions, data=data, validation=False, simplify=True)
+            if val_data is not None:
+                program1.compute_fitness(
+                    fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
             return program1
+
+        _offspring: Program = None
+        if gen_op == 'crossover':
+            program2 = _tournament_selection(
+                population=population, tournament_size=tournament_size, generation=generation)
+            if program2 is None or not program2.is_valid:
+                return program1
+            _offspring = program1.cross_over(
+                other=program2, inplace=False)
+
+        elif gen_op == 'randomize':
+            # Will generate a new tree as other
+            _offspring = program1.cross_over(other=None, inplace=False)
+
+        elif gen_op == 'mutation':
+            _offspring = program1.mutate(inplace=False)
+
+        elif gen_op == 'delete_node':
+            _offspring = program1.delete_node(inplace=False)
+
+        elif gen_op == 'insert_node':
+            _offspring = program1.insert_node(inplace=False)
+
+        elif gen_op == 'mutate_operator':
+            _offspring = program1.mutate_operator(inplace=False)
+
+        elif gen_op == 'mutate_leaf':
+            _offspring = program1.mutate_leaf(inplace=False)
+
+        elif gen_op == 'simplification':
+            _offspring = program1.simplify(inplace=False)
+
+        elif gen_op == 'recalibrate':
+            _offspring = program1.recalibrate(inplace=False)
+
+        elif gen_op == 'do_nothing':
+            _offspring = program1
+        else:
+            logging.warning(
+                f'Supported genetic operations: crossover, delete_node, do_nothing, insert_node, mutate_leaf, mutate_operator, simplification, mutation and randomize'
+            )
+
+            return program1
+
+        # Add the fitness to the object after the cross_over or mutation
+        _offspring.compute_fitness(
+            fitness_functions=fitness_functions, data=data, simplify=True)
+        if val_data is not None:
+            _offspring.compute_fitness(
+                fitness_functions=fitness_functions, data=val_data, validation=True, simplify=False)
+
+        # Reset the hash to force the re-computation
+        _offspring._hash = None
+
+        return _offspring
 
     def _get_offspring_batch(self, data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: Population, tournament_size: int, generation: int,
                              batch_size: int, queue: Queue = None, val_data: Union[Dict, pd.Series, pd.DataFrame] = None) -> Program:
@@ -1500,7 +1469,8 @@ class SymbolicRegressor:
             raise ValueError(
                 "Cannot plot pareto fronts beyond the first for historic generations")
 
-        generation = self.generation if not generation else generation
+        generation = max(self.first_pareto_front_history.keys()
+                         ) if not generation else generation
 
         if not generation:
             iterate_over = self.extract_pareto_front(rank=pf_rank)
@@ -1508,9 +1478,9 @@ class SymbolicRegressor:
             if not self.first_pareto_front_history.get(generation):
                 raise ValueError(
                     f"Generation {generation} not found in the history. Please use one of the following: {', '.join([str(g) for g in self.first_pareto_front_history.keys()])}")
-                
+
             iterate_over = self.first_pareto_front_history[generation]
-            
+
         try:
             iterate_over = decompress(iterate_over)
         except TypeError:
