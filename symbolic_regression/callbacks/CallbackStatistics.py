@@ -67,9 +67,11 @@ class MOSRHistory(MOSRCallbackBase):
         super().__init__(**kwargs)
 
         self.history_fpf_frequency = kwargs.get('history_fpf_frequency', -1)
+        self.history_best_fitness_frequency = kwargs.get(
+            'history_best_fitness_frequency', -1)
 
     def on_pareto_front_computation_end(self, **kwargs):
-        
+
         if (self.sr.generation == 1) or \
             (self.history_fpf_frequency == -1 and (self.sr.generation == self.sr.generations_to_train or self.sr.converged_generation)) or \
                 (self.history_fpf_frequency > 0 and self.sr.generation % self.history_fpf_frequency == 0):
@@ -87,6 +89,10 @@ class MOSRHistory(MOSRCallbackBase):
 
             self.sr.first_pareto_front_history[self.sr.generation] = compress(
                 [p for p in self.sr.first_pareto_front])
+
+        if (self.sr.generation == 1) or \
+            (self.history_best_fitness_frequency == -1 and (self.sr.generation == self.sr.generations_to_train or self.sr.converged_generation)) or \
+                (self.history_best_fitness_frequency > 0 and self.sr.generation % self.history_best_fitness_frequency == 0):
 
             if not self.sr.best_history.get('training'):
                 self.sr.best_history['training'] = dict()
