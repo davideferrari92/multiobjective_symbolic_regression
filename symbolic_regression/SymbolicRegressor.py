@@ -2,11 +2,10 @@ import copy
 import datetime
 import json
 import logging
+import multiprocessing
 import os
 import pickle
-import platform
 import random
-import signal
 import time
 import zlib
 from itertools import repeat
@@ -730,7 +729,8 @@ class SymbolicRegressor:
 
             offsprings: List[Program] = list()
             procs: List[Process] = list()
-            queue: Queue = Queue(maxsize=self.population_size)
+
+            queue = multiprocessing.Manager().Queue(maxsize=self.population_size)
 
             for _ in range(jobs):
                 try:
@@ -846,7 +846,7 @@ class SymbolicRegressor:
 
                 refill: List[Program] = list()
                 procs: List[Process] = list()
-                queue: Queue = Queue(maxsize=missing_elements)
+                queue = multiprocessing.Manager().Queue(maxsize=missing_elements)
 
                 for _ in range(jobs):
                     proc = Process(
