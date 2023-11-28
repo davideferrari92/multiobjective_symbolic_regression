@@ -11,7 +11,7 @@ from pytexit import py2tex
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
-from symbolic_regression.multiobjective.optimization import (ADAM, ADAM2FOLD,
+from symbolic_regression.multiobjective.optimization import (ADAM, ADAM2FOLD, SCIPY,
                                                              SGD)
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
@@ -874,6 +874,11 @@ class Program:
                 # Here there can be more than one target so need the index
                 f_opt = ADAM2FOLD
                 self.to_affine(data=data, target=target[0], inplace=True)
+
+            elif constants_optimization == 'scipy':
+                f_opt = SCIPY
+                self.to_affine(data=data, target=target, inplace=True)
+
             else:
                 raise AttributeError(
                     f'Constants optimization method {constants_optimization} not supported')

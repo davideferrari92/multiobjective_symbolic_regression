@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import sympy as sym
 from sympy.utilities.lambdify import lambdify
+from scipy.optimize import minimize
 
 from symbolic_regression.multiobjective.fitness.Regression import create_regression_weights
 
@@ -556,3 +557,107 @@ def ADAM2FOLD(program, data: Union[dict, pd.Series, pd.DataFrame], target: list,
         loss.append(av_loss)
 
     return constants, loss, log
+
+
+def SCIPY(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weights: str, constants_optimization_conf: dict, task: str, bootstrap: bool = False):
+    ''' ADAM with analytic derivatives
+
+    Args:
+        - program: Program
+            The program to optimize
+        - data: dict, pd.Series, pd.DataFrame
+            The data to fit the program
+        - target: str
+            The target column name
+        - weights: str
+            The weights column name
+        - constants_optimization_conf: Not required
+
+        - task: str
+            The task to optimize
+        - bootstrap: bool
+            When bootstrapping is used, the weights are recalculated each time
+
+    Returns:
+        - constants: np.array
+            The optimized constants
+        - loss: list
+            The loss at each epoch
+        - log: list
+            The constants at each epoch
+    '''
+
+    if not program.is_valid:  # No constants in program
+        return [], [], []
+
+    n_features = len(program.features)
+    constants = np.array(
+        [item.feature for item in program.get_constants(return_objects=True)])
+    n_constants = constants.size
+
+    if n_constants == 0:  # No constants in program
+        return [], [], []
+
+    # Initialize symbols for variables and constants
+    x_sym = ''
+    for f in program.features:
+        x_sym += f'{f},'
+    x_sym = sym.symbols(x_sym)
+    c_sym = sym.symbols('c0:{}'.format(n_constants))
+
+    y_true = np.reshape(data[target].to_numpy(), (data[target].shape[0], 1))
+    X_data = data[program.features].to_numpy()
+
+    p_sym = program.program.render(format_diff=True)
+    pyf_prog = lambdify([x_sym, c_sym], p_sym)
+
+    if weights:
+        if bootstrap:
+            if task == 'regression:wmse' or task == 'regression:wrrmse' or task == 'regression:cox':
+                w = create_regression_weights(
+                    data=data, target=target, bins=10)
+            elif task == 'binary:logistic':
+                w = np.where(y_true == 1, 1./(2*y_true.mean()),
+                             1./(2*(1-y_true.mean())))
+            w = np.reshape(w, (w.shape[0], 1))
+        else:
+            w = np.reshape(data[weights].to_numpy(),
+                           (data[weights].shape[0], 1))
+    else:
+        w = np.ones_like(y_true)
+
+    def nll_min_regression(c, y, X, pyf_prog, weights=None):
+        n_features = X.shape[1]
+        n_constants = len(c)
+        split_X = np.split(X, n_features, 1)
+        split_c = np.split(c*np.ones_like(y), n_constants, 1)
+        y_pred = pyf_prog(tuple(split_X), tuple(split_c))
+        residual = (y_true-y_pred)
+
+        if weights is not None:
+            return np.mean(weights*residual**2)
+        return np.mean(residual**2)
+
+    def nll_min_binary(c, y, X, pyf_prog, weights=None):
+        n_features = X.shape[1]
+        n_constants = len(c)
+        split_X = np.split(X, n_features, 1)
+        split_c = np.split(c*np.ones_like(y), n_constants, 1)
+        y_pred = pyf_prog(tuple(split_X), tuple(split_c))
+        sigma = 1. / (1. + np.exp(-y_pred))
+
+        if weights is not None:
+            return -np.mean(weights*(y*np.log(sigma+1e-20) + (1.-y)*np.log(1.-sigma+1e-20)))
+        return -np.mean(y*np.log(sigma+1e-20) + (1.-y)*np.log(1.-sigma+1e-20))
+        
+    if task == 'regression:wmse' or task == 'regression:wrrmse' or task == 'regression:cox':
+        res = minimize(nll_min_regression, x0=constants, args=(
+            y_true, X_data, pyf_prog, w), method='L-BFGS-B')
+        constants = res.x
+    
+    elif task == 'binary:logistic':
+        res = minimize(nll_min_binary, x0=constants, args=(
+            y_true, X_data, pyf_prog, w), method='L-BFGS-B')
+        constants = res.x
+
+    return constants, None, None
