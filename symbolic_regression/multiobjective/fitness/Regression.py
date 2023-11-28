@@ -2,8 +2,14 @@ import numpy as np
 import pandas as pd
 from astropy import stats
 from sklearn.preprocessing import MinMaxScaler
+from sympy import lambdify
+import sympy as sym
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+
+
+def DiracDeltaV(x):
+    return np.where(np.abs(x) < 1e-7, 1e7, 0)
 
 
 class WeightedMeanSquaredError(BaseFitness):
@@ -68,7 +74,7 @@ class WeightedMeanAbsoluteError(BaseFitness):
             pred = program_to_evaluate.evaluate(data=data)
 
         if self.weights not in data.columns:
-            data[self.weights] = self._create_regression_weights(
+            data[self.weights] = create_regression_weights(
                 data=data, target=self.target, bins=self.bins)
 
         try:
@@ -105,7 +111,7 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
             pred = program_to_evaluate.evaluate(data=data)
 
         if self.weights not in data.columns:
-            data[self.weights] = self._create_regression_weights(
+            data[self.weights] = create_regression_weights(
                 data=data, target=self.target, bins=self.bins)
 
         try:
@@ -185,7 +191,7 @@ class MaxAbsoluteError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, pred=None, **kwargs) -> float:
+    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
 
         if pred is None:
             if not program.is_valid:
@@ -240,15 +246,126 @@ class WMSEAkaike(BaseFitness):
         try:
             k = len(program_to_evaluate.get_constants())
 
-            WSSE = (((pred - data[self.target])**2) * data[self.weights]
-                    ).sum() if self.weights else ((pred - data[self.target])**2).sum()
+            if self.weights is not None:
+                WMSE = (((pred - data[self.target])**2)
+                        * data[self.weights]).mean()
+            else:
+                WMSE = ((pred - data[self.target])**2).mean()
 
-            AIC = 2*k+WSSE
+            NLL = len(data[self.target]) / 2 * (1 + np.log(WMSE))
+
+            AIC = (2 * k) + (2 * NLL)
             return AIC
 
         except TypeError:
             return np.inf
         except ValueError:
+            return np.inf
+        except NameError:
+            return np.inf
+
+
+class RegressionMinimumDescriptionLength(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        """ This fitness requires the following arguments:
+
+        - target: str
+        - weights: str
+
+        """
+        super().__init__(**kwargs)
+
+    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                program = self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            pred = program_to_evaluate.evaluate(data=data)
+
+        if np.isnan(pred).any():
+            return np.inf
+
+        try:
+            if self.weights is not None:
+                WMSE = (((pred - data[self.target])**2)
+                        * data[self.weights]).mean()
+            else:
+                WMSE = ((pred - data[self.target])**2).mean()
+
+            NLL = len(data[self.target]) / 2 * (1 + np.log(WMSE))
+
+            n_features = len(program.features)
+            constants = np.array(
+                [item.feature for item in program.get_constants(return_objects=True)])
+            n_constants = constants.size
+
+            node_states = len(program.operations)+len(program.features)+1
+            tree_complexity = program.complexity*np.log(node_states)
+
+            if n_constants == 0:  # No constants in program
+                MDL = NLL + tree_complexity
+                return MDL
+
+            # Initialize symbols for variables and constants
+            x_sym = ''
+            for f in program.features:
+                x_sym += f'{f},'
+            x_sym = sym.symbols(x_sym)
+            c_sym = sym.symbols('c0:{}'.format(n_constants))
+            p_sym = program.program.render(format_diff=True)
+
+            split_c = np.split(
+                constants*np.ones_like(data[[self.target]]), n_constants, 1)
+            split_X = np.split(
+                data[program.features].to_numpy(), n_features, 1)
+
+            grad = []
+            diag_hess = []
+            for i in range(n_constants):
+                grad.append(sym.diff(p_sym, f'c{i}'))
+                diag_hess.append(sym.diff(sym.diff(p_sym, f'c{i}'), f'c{i}'))
+
+            pyf_grad = lambdify([x_sym, c_sym], grad, modules=[
+                                'numpy', {'DiracDelta': DiracDeltaV, 'Sqrt': np.sqrt}])
+            pyf_diag_hess = lambdify([x_sym, c_sym], diag_hess, modules=[
+                                     'numpy', {'DiracDelta': DiracDeltaV}])
+            num_grad = pyf_grad(tuple(split_X), tuple(split_c))
+            num_diag_hess = pyf_diag_hess(tuple(split_X), tuple(split_c))
+
+            residual = data[self.target] - pred
+            residual = np.reshape(residual, (data[self.target].shape[0], 1))
+
+            if self.weights is not None:
+                w = data[[self.weights]].to_numpy()
+                FIM_diag = [np.sum(w**2 * gr**2 - w**2 * residual*hess) /
+                            WMSE for (gr, hess) in zip(num_grad, num_diag_hess)]
+            else:
+                FIM_diag = [np.sum(gr**2 - residual*hess) /
+                            WMSE for (gr, hess) in zip(num_grad, num_diag_hess)]
+
+            Delta = [min(np.sqrt(12/fi), np.abs(c))
+                     for fi, c in zip(FIM_diag, constants)]
+
+            constant_complexities = [np.log(np.abs(
+                c)/d) + np.log(2) if np.abs(c) != d else 0 for c, d in zip(constants, Delta)]
+            constant_complexity = np.sum(constant_complexities)
+
+            MDL = NLL + tree_complexity + constant_complexity
+            return MDL
+
+        except TypeError:
+            return np.inf
+        except ValueError:
+            return np.inf
+        except NameError:
             return np.inf
 
 

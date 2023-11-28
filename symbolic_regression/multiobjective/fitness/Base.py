@@ -14,6 +14,7 @@ class BaseFitness:
                  label: str,
                  logistic: bool = False,
                  one_minus: bool = False,
+                 smaller_is_better: bool = True,
                  minimize: bool = True,
                  convergence_threshold: float = None,
                  constants_optimization: str = None,
@@ -24,6 +25,8 @@ class BaseFitness:
         self.label: str = label
         self.logistic: bool = logistic
         self.one_minus: bool = one_minus
+        self.smaller_is_better: bool = smaller_is_better
+
         self.minimize: bool = minimize
         self.convergence_threshold: float = convergence_threshold
         self.constants_optimization: str = constants_optimization
@@ -56,5 +59,5 @@ class BaseFitness:
                 constants_optimization_conf=self.constants_optimization_conf,
                 inplace=True
             )
-            
+
         return program
