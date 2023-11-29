@@ -2,11 +2,17 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import (accuracy_score, average_precision_score,
                              confusion_matrix, f1_score, log_loss,
-                             precision_score, recall_score, roc_auc_score,
+                             recall_score, roc_auc_score,
                              roc_curve)
+from sympy import lambdify
+import sympy as sym
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.Program import Program
+
+
+def DiracDeltaV(x):
+    return np.where(np.abs(x) < 1e-7, 1e7, 0)
 
 
 class BaseClassification(BaseFitness):
@@ -308,10 +314,8 @@ class BCEAkaike(BaseFitness):
 
             pred = np.array(program_to_evaluate.evaluate(data=data))
 
-        ground_truth = data[self.target]
-
         try:
-            BCE = log_loss(y_true=ground_truth,
+            BCE = log_loss(y_true=data[self.target],
                            y_pred=pred,
                            sample_weight=data[self.weights] if (self.weights and not validation) else None)
 
@@ -338,3 +342,110 @@ class AkaikeInformationCriteriaBCE(BCEAkaike):
 
         """
         super().__init__(**kwargs)
+
+
+class ClassificationMinimumDescriptionLength(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        """ This fitness requires the following arguments:
+
+        - target: str
+        - weights: str
+
+        """
+        super().__init__(**kwargs)
+
+    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                program = self.optimize(program=program, data=data)
+
+            sigmoid_to_evaluate = program.to_logistic(
+                inplace=False)
+
+            sigmoid_pred = sigmoid_to_evaluate.evaluate(data=data)
+
+        if np.isnan(sigmoid_pred).any():
+            return np.inf
+
+        try:
+            if self.weights is not None:
+                BCE = log_loss(y_true=data[self.target],
+                               y_pred=sigmoid_pred,
+                               sample_weight=data[self.weights])
+            else:
+                BCE = log_loss(y_true=data[self.target],
+                               y_pred=sigmoid_pred,
+                               sample_weight=None)
+
+            NLL = len(data) * BCE
+
+            n_features = len(program.features)
+            constants = np.array(
+                [item.feature for item in program.get_constants(return_objects=True)])
+            n_constants = constants.size
+
+            node_states = len(program.operations)+len(program.features)+1
+            tree_complexity = program.complexity*np.log(node_states)
+
+            if n_constants == 0:  # No constants in program
+                MDL = NLL + tree_complexity
+                return MDL
+
+            # Initialize symbols for variables and constants
+            x_sym = ''
+            for f in program.features:
+                x_sym += f'{f},'
+            x_sym = sym.symbols(x_sym)
+            c_sym = sym.symbols('c0:{}'.format(n_constants))
+            p_sym = program.program.render(format_diff=True)
+
+            split_c = np.split(
+                constants*np.ones_like(data[[self.target]]), n_constants, 1)
+            split_X = np.split(
+                data[program.features].to_numpy(), n_features, 1)
+
+            grad = []
+            diag_hess = []
+            for i in range(n_constants):
+                grad.append(sym.diff(p_sym, f'c{i}'))
+                diag_hess.append(sym.diff(sym.diff(p_sym, f'c{i}'), f'c{i}'))
+
+            pyf_grad = lambdify([x_sym, c_sym], grad, modules=[
+                                'numpy', {'DiracDelta': DiracDeltaV, 'Sqrt': np.sqrt}])
+            pyf_diag_hess = lambdify([x_sym, c_sym], diag_hess, modules=[
+                'numpy', {'DiracDelta': DiracDeltaV}])
+            num_grad = pyf_grad(tuple(split_X), tuple(split_c))
+            num_diag_hess = pyf_diag_hess(tuple(split_X), tuple(split_c))
+
+            sigmoid_pred = np.reshape(
+                sigmoid_pred, (data[self.target].shape[0], 1))
+
+            if self.weights is not None:
+                w = data[[self.weights]].to_numpy()
+                FIM_diag = [np.sum(w*((sigmoid_pred-data[[self.target]].to_numpy())*hess +
+                                      (1-sigmoid_pred)*sigmoid_pred*gr**2)) for (gr, hess) in zip(num_grad, num_diag_hess)]
+            else:
+                FIM_diag = [np.sum((sigmoid_pred-data[[self.target]].to_numpy())*hess +
+                                   (1-sigmoid_pred)*sigmoid_pred*gr**2) for (gr, hess) in zip(num_grad, num_diag_hess)]
+
+            Delta = [min(np.sqrt(12/fi), np.abs(c))
+                     for fi, c in zip(FIM_diag, constants)]
+
+            constant_complexities = [np.log(np.abs(
+                c)/d) + np.log(2) if np.abs(c) != d else 0 for c, d in zip(constants, Delta)]
+            constant_complexity = np.sum(constant_complexities)
+
+            MDL = NLL + tree_complexity + constant_complexity
+            return MDL
+
+        except TypeError:
+            return np.inf
+        except ValueError:
+            return np.inf
+        except NameError:
+            return np.inf
