@@ -345,7 +345,7 @@ class RegressionMinimumDescriptionLength(BaseFitness):
 
             if self.weights is not None:
                 w = data[[self.weights]].to_numpy()
-                FIM_diag = [np.sum(w**2 * gr**2 - w**2 * residual*hess) /
+                FIM_diag = [np.sum(w * gr**2 - w * residual*hess) /
                             WMSE for (gr, hess) in zip(num_grad, num_diag_hess)]
             else:
                 FIM_diag = [np.sum(gr**2 - residual*hess) /
