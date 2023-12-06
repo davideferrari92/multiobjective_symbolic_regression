@@ -105,21 +105,24 @@ class MOSRHistory(MOSRCallbackBase):
                 self.sr.best_history['validation'][self.sr.generation] = dict()
 
             for fitness in self.sr.fitness_functions:
-                if fitness.minimize:
-                    best_p = min([p for p in self.sr.first_pareto_front if p.is_valid],
-                                 key=lambda obj: obj.fitness.get(fitness.label, +float('inf')))
-                    if val_data is not None:
-                        best_p_val = min([p for p in self.sr.first_pareto_front if p.is_valid],
-                                         key=lambda obj: obj.fitness_validation.get(fitness.label, +float('inf')))
-                else:
-                    best_p = max([p for p in self.sr.first_pareto_front if p.is_valid],
-                                 key=lambda obj: obj.fitness.get(fitness.label, -float('inf')))
-                    if val_data is not None:
-                        best_p_val = max([p for p in self.sr.first_pareto_front if p.is_valid],
-                                         key=lambda obj: obj.fitness_validation.get(fitness.label, -float('inf')))
+                try:
+                    if fitness.minimize:
+                        best_p = min([p for p in self.sr.first_pareto_front if p.is_valid],
+                                    key=lambda obj: obj.fitness.get(fitness.label, +float('inf')))
+                        if val_data is not None:
+                            best_p_val = min([p for p in self.sr.first_pareto_front if p.is_valid],
+                                            key=lambda obj: obj.fitness_validation.get(fitness.label, +float('inf')))
+                    else:
+                        best_p = max([p for p in self.sr.first_pareto_front if p.is_valid],
+                                    key=lambda obj: obj.fitness.get(fitness.label, -float('inf')))
+                        if val_data is not None:
+                            best_p_val = max([p for p in self.sr.first_pareto_front if p.is_valid],
+                                            key=lambda obj: obj.fitness_validation.get(fitness.label, -float('inf')))
 
-                self.sr.best_history['training'][self.sr.generation][fitness.label] = compress(
-                    best_p)
-                if val_data is not None:
-                    self.sr.best_history['validation'][self.sr.generation][fitness.label] = compress(
-                        best_p_val)
+                    self.sr.best_history['training'][self.sr.generation][fitness.label] = compress(
+                        best_p)
+                    if val_data is not None:
+                        self.sr.best_history['validation'][self.sr.generation][fitness.label] = compress(
+                            best_p_val)
+                except ValueError:  # Case of empty min()
+                    pass
