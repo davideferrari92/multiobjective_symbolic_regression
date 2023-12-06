@@ -1,14 +1,13 @@
 import copy
 import logging
-import random
-from typing import List
 import numpy as np
 
 import pandas as pd
+from symbolic_regression.callbacks.CallbackSave import MOSRCallbackSaveCheckpoint
 
 from symbolic_regression.federated.strategies.FedNSGAII import FedNSGAII
 from symbolic_regression.Population import Population
-from symbolic_regression.Program import Program
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 
 
 class FedAvgNSGAII(FedNSGAII):
@@ -46,11 +45,6 @@ class FedAvgNSGAII(FedNSGAII):
     def __init__(self, **kwargs) -> None:
         super().__init__(
             name=kwargs['name'], mode=kwargs['mode'], configuration=kwargs['configuration'])
-
-        self.hypervolume_selection: bool = kwargs['configuration']['federated'].get(
-            'hypervolume_selection', False)
-        self.compatibility_check: bool = kwargs['configuration']['federated'].get(
-            'compatibility_check', False)
 
         self.stage: int = 1
         self.federated_round_is_terminated: bool = False
@@ -90,12 +84,12 @@ class FedAvgNSGAII(FedNSGAII):
                     logging.info(
                         f'Incorporating {client_name} regressor population')
 
-                    if self.hypervolume_selection:
+                    if self.configuration['federated'].get('hypervolume_selection', False):
                         num_selected_programs = int(
                             self.symbolic_regressor_configuration['population_size'] / len(self.regressors))
 
                         client_regressor.population.sort(
-                            key=lambda program: program.hypervolume, reverse=True)
+                            key=lambda program: program.program_hypervolume, reverse=True)
                         self.regressor.population.extend(
                             client_regressor.population[:num_selected_programs])
 
@@ -114,34 +108,50 @@ class FedAvgNSGAII(FedNSGAII):
 
                 logging.debug(f'Server {self.name} is executing stage 2')
 
-                self.regressor.population: Population = copy.deepcopy(
-                    self.regressors[list(self.regressors.keys())[0]].population)
+                ineligible = []
 
-                ineligible = 0
-
-                for ith_programs in zip(*[regressor.population for regressor in self.regressors.values()]):
+                for k, ith_programs in enumerate(zip(*[regressor.population for regressor in self.regressors.values()])):
                     """ Apply constants_confidence_intervals_overlap() to each pair of programs in ith_programs.
                     If any one return False, then all of them are set is_valid=False 
                     """
-                    stop = False
+                    is_ineligible = False
                     for i in range(len(ith_programs)):
                         for j in range(i + 1, len(ith_programs)):
                             if not ith_programs[i].is_valid or not ith_programs[j].is_valid or not ith_programs[i].constants_confidence_intervals_overlap(ith_programs[j]):
-                                stop = True
-                                break
+                                is_ineligible = True
 
-                    if stop:
-                        ineligible += 1
-                        for program in ith_programs:
-                            program._override_is_valid = False
+                    if is_ineligible:
+                        ineligible.append(k)
+
+                """ Copy the population of the first client in the aggregated regressor. I just need the blueprint of
+                the models because I will replace the constants with the average of the constants of the programs in
+                ith_programs. We need to copy it here because we want to bring forward the invalidity of the models
+                that was calculated just before.
+                """
+
+                self.regressor.population: Population = copy.deepcopy(
+                    self.regressors[list(self.regressors.keys())[0]].population)
+
+                aggregated_population_size = len(self.regressor.population)
+
+                # Iterate in iverse order the ineligible programs and remove them from the population
+                for i in sorted(ineligible, reverse=True):
+                    del self.regressor.population[i]
+                    for reg in self.regressors.values():
+                        del reg.population[i]
+
+                print(
+                    f'######### Ineligible: {len([p for p in self.regressor.population if not p.is_valid])}/{aggregated_population_size}')
 
                 """ This next for loop implements a weighted average of the constants of the programs in ith_programs
                 and sets the constants of the new program to the average. The weights are the relative size of the
                 dataset of the training set of each client.
                 """
 
-                regressors_weights = [regressor.data_shape[0]
-                                      for regressor in self.regressors.values()]
+                regressors_weights = [r.data_shape[0]
+                                      for k, r in self.regressors.items()]
+
+                logging.info(f'Regressor weights: {regressors_weights}')
                 regressors_weights = np.array(
                     regressors_weights) / np.sum(regressors_weights)
 
@@ -170,7 +180,44 @@ class FedAvgNSGAII(FedNSGAII):
 
                 if self.training_configuration.get('verbose', 0) > 0:
                     logging.info(
-                        f"Ineligible: {ineligible}/{len(self.regressor.population)}")
+                        f"Ineligible: {len(ineligible)}/{aggregated_population_size}")
+
+                if self.federated_configuration.get('track_performance'):
+                    ################################################################################
+                    ############################# PERFORMANCE LOGGING ##############################
+                    if self.federated_rounds_executed > 0:
+                        for cb in self.symbolic_regressor_configuration.get('callbacks'):
+                            if isinstance(cb, MOSRCallbackSaveCheckpoint):
+                                path = cb.checkpoint_file + \
+                                    f'.{self.name}.ineligible_df.csv'
+                        try:
+                            ineligible_df = pd.read_csv(path)
+                        except:
+                            ineligible_df = pd.DataFrame()
+
+                        complexities = [
+                            p.complexity for p in self.regressor.population]
+
+                        if len(complexities) == 0:
+                            complexities = [-1]
+
+                        ineligible_df = pd.concat(
+                            [ineligible_df, pd.DataFrame([{'Client': self.name,
+                                                           'Federated Round': self.federated_rounds_executed,
+                                                           'Ineligible': len(ineligible),
+                                                           'Population size': len(self.regressor.population),
+                                                           'Ineligible / Population size ratio': len(ineligible) / aggregated_population_size * 100,
+                                                           'Complexity Min': np.min(complexities),
+                                                           'Complexity 25th percentile': np.percentile(complexities, 25),
+                                                           'Complexity Median': np.median(complexities),
+                                                           'Complexity 75th percentile': np.percentile(complexities, 75),
+                                                           'Complexity Max': np.max(complexities),
+                                                           'Complexity Mean': np.mean(complexities),
+                                                           'Complexity Std': np.std(complexities),
+                                                           }])], ignore_index=True)
+
+                        ineligible_df.to_csv(path, index=False)
+
             else:
                 raise ValueError(f'Invalid stage {self.stage}')
 
@@ -185,6 +232,98 @@ class FedAvgNSGAII(FedNSGAII):
                 self.regressor.compute_fitness_population(
                     data=val_data, validation=True, validation_federated=True, simplify=False)
 
+                if self.federated_configuration.get('track_performance'):
+                    ################################################################################
+                    ############################# PERFORMANCE LOGGING ##############################
+                    if self.federated_rounds_executed > 0:
+                        for cb in self.symbolic_regressor_configuration.get('callbacks'):
+                            if isinstance(cb, MOSRCallbackSaveCheckpoint):
+                                path = cb.checkpoint_file + \
+                                    f'.{self.name}.performance.csv'
+
+                        try:
+                            performance = pd.read_csv(path)
+                        except:
+                            performance = pd.DataFrame()
+
+                        extracted = []
+                        to_append = {'client': self.name,
+                                     'federated_round': self.federated_rounds_executed}
+
+                        get_best_k = 5
+
+                        for fitness in self.regressor.fitness_functions:
+                            fitness: BaseFitness
+                            if fitness.smaller_is_better:
+                                best_p = sorted([p for p in self.regressor.first_pareto_front],
+                                                key=lambda obj: obj.fitness.get(fitness.label, +float('inf')))[:get_best_k]
+
+                                best_p_validation = sorted([p for p in self.regressor.first_pareto_front],
+                                                           key=lambda obj: obj.fitness_validation.get(fitness.label, +float('inf')))[:get_best_k]
+
+                            else:
+                                best_p = sorted([p for p in self.regressor.first_pareto_front],
+                                                key=lambda obj: obj.fitness.get(fitness.label, -float('inf')), reverse=True)[:get_best_k]
+
+                                best_p_validation = sorted([p for p in self.regressor.first_pareto_front],
+                                                           key=lambda obj: obj.fitness_validation.get(fitness.label, -float('inf')), reverse=True)[:get_best_k]
+
+                            for i, p in enumerate(best_p):
+
+                                to_append = {
+                                    'client': self.name, 'federated_round': self.federated_rounds_executed}
+                                to_append['index'] = i + 1
+                                to_append[f'Complexity'] = p.complexity
+                                for fitness_inner in self.regressor.fitness_functions:
+                                    to_append[f'{fitness_inner.label} on training'] = p.fitness.get(
+                                        fitness_inner.label, np.nan)
+                                    to_append[f'{fitness_inner.label} on validation'] = p.fitness_validation.get(
+                                        fitness_inner.label, np.nan)
+                                    to_append[f'best_of'] = f'Best {get_best_k} by {fitness.label} on training'
+                                extracted.append(to_append.copy())
+
+                            for i, p in enumerate(best_p_validation):
+
+                                to_append = {
+                                    'client': self.name, 'federated_round': self.federated_rounds_executed}
+                                to_append['index'] = i + 1
+                                to_append[f'Complexity'] = p.complexity
+                                for fitness_inner in self.regressor.fitness_functions:
+                                    to_append[f'{fitness_inner.label} on training'] = p.fitness.get(
+                                        fitness_inner.label, np.nan)
+                                    to_append[f'{fitness_inner.label} on validation'] = p.fitness_validation.get(
+                                        fitness_inner.label, np.nan)
+                                    to_append[f'best_of'] = f'Best {get_best_k} by {fitness.label} on validation'
+                                extracted.append(to_append.copy())
+
+                        to_append = {'client': self.name,
+                                     'federated_round': self.federated_rounds_executed}
+
+                        least_complexity = sorted([p for p in self.regressor.first_pareto_front],
+                                                  key=lambda obj: obj.complexity)[:get_best_k]
+
+                        to_append = {'client': self.name,
+                                     'federated_round': self.federated_rounds_executed}
+                        for i, p in enumerate(least_complexity):
+                            to_append['index'] = i
+                            to_append[f'Complexity'] = p.complexity
+                            to_append[f'best_of'] = f'Best {get_best_k} by complexity'
+
+                            for fitness in self.regressor.fitness_functions:
+                                to_append[f'{fitness.label} on training'] = p.fitness.get(
+                                    fitness.label, np.nan)
+                                to_append[f'{fitness.label} on validation'] = p.fitness_validation.get(
+                                    fitness.label, np.nan)
+                            extracted.append(to_append.copy())
+
+                        performance = pd.concat(
+                            [performance, pd.DataFrame(extracted)], ignore_index=True)
+
+                        performance.to_csv(path, index=False)
+
+                    ############################# PERFORMANCE LOGGING ##############################
+                    ################################################################################
+
                 self.regressor.fit(
                     data=data,
                     val_data=val_data,
@@ -197,6 +336,10 @@ class FedAvgNSGAII(FedNSGAII):
                     verbose=self.training_configuration['verbose'],
                 )
 
+                # Print how many programs have is_valid=False
+                print(
+                    f'######### Invalid: {len([p for p in self.regressor.population if not p.is_valid])}/{len(self.regressor.population)}')
+
                 # This is needed to not increment the federated round at the end of the MOSR in the client
                 self.federated_round_is_terminated = False
 
@@ -204,7 +347,9 @@ class FedAvgNSGAII(FedNSGAII):
 
                 logging.debug(f'Client {self.name} is executing stage 2')
 
-                if self.compatibility_check:
+                self.regressor.data_shape = data.shape
+
+                if self.configuration['federated'].get('compatibility_check', False):
                     for program in self.regressor.population:
                         program.bootstrap(
                             data=data,
