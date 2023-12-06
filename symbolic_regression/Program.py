@@ -303,8 +303,12 @@ class Program:
         for self_constant, other_constant in zip(self.get_constants(return_objects=True), other.get_constants(return_objects=True)):
             if self_constant.feature_confidence_intervals == [np.nan, np.nan] or other_constant.feature_confidence_intervals == [np.nan, np.nan]:
                 return False
-            overlap = max(0, min(self_constant.feature_confidence_intervals[1], other_constant.feature_confidence_intervals[1]) - max(
-                self_constant.feature_confidence_intervals[0], other_constant.feature_confidence_intervals[0]))
+            overlap = max(
+                0,
+                min(self_constant.feature_confidence_intervals[1], other_constant.feature_confidence_intervals[1]) -
+                max(self_constant.feature_confidence_intervals[0],
+                    other_constant.feature_confidence_intervals[0])
+            )
             if overlap <= 1e-7:
                 return False
 
