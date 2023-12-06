@@ -3,6 +3,8 @@ import pickle
 from datetime import datetime
 from multiprocessing.connection import Client
 from typing import Dict, List
+from symbolic_regression.SymbolicRegressor import SymbolicRegressor
+from symbolic_regression.callbacks.CallbackBase import MOSRCallbackBase
 
 from symbolic_regression.federated.Communication import \
     FederatedDataCommunication
@@ -11,7 +13,7 @@ from symbolic_regression.federated.strategies.BaseStrategy import BaseStrategy
 
 class FederatedAgent:
 
-    def __init__(self, name: str, address: str, port: int, orchestrator_address: str, orchestrator_port: int, save_path: str = None) -> None:
+    def __init__(self, name: str, address: str, port: int, orchestrator_address: str, orchestrator_port: int, save_path: str = None, callbacks: List[MOSRCallbackBase] = list()) -> None:
         """ This class implement a Federated Agent
 
         Args:
@@ -57,7 +59,7 @@ class FederatedAgent:
                 Strategy used for federated aggregation
             - save_path: str
                 Path to save the results
-                
+
         Returns:
             - None
         """
@@ -79,6 +81,8 @@ class FederatedAgent:
         self._federated_aggregation_strategy: BaseStrategy = None
 
         self.save_path = save_path
+
+        self.callbacks = callbacks
 
     #############################################
     # Properties
@@ -102,6 +106,9 @@ class FederatedAgent:
             f'Setting federated aggregation strategy mode: {self.mode}')
         self._federated_aggregation_strategy.mode = self.mode
         self._federated_aggregation_strategy.name = self.name
+
+        if isinstance(self._federated_aggregation_strategy.regressor, SymbolicRegressor):
+            self._federated_aggregation_strategy.regressor.callbacks = self.callbacks
 
     @property
     def status(self):
@@ -397,7 +404,7 @@ class FederatedAgent:
                 )
                 logging.warning(
                     f'Agent {agent_name} is not reachable')
-                
+
             conn.close()
 
             logging.debug(
