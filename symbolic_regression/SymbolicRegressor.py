@@ -663,7 +663,33 @@ class SymbolicRegressor:
                         f"Callback {c.__class__.__name__} raised an exception on initialization end")
 
         else:
-            logging.info("Fitting with existing population")
+            self.population = [
+                program for program in self.population if program.is_valid]
+
+            logging.info(
+                f"Fitting with existing population of {len(self.population)} valid elements")
+
+            if len(self.population) < self.population_size:
+                logging.info(
+                    f"Population of {len(self.population)} elements is less than population_size:{self.population_size}. Integrating with new elements")
+                new_individuals = self.population_size - len(self.population)
+                refill_training_start = Population(executor.map(
+                    lambda p: self.generate_individual(*p),
+                    zip(
+                        repeat(copy.deepcopy(data), new_individuals),
+                        repeat(self.features, new_individuals),
+                        repeat(self.operations, new_individuals),
+                        repeat(copy.deepcopy(self.fitness_functions),
+                               new_individuals),
+                        repeat(self.const_range, new_individuals),
+                        repeat(self.parsimony, new_individuals),
+                        repeat(self.parsimony_decay, new_individuals),
+                        repeat(copy.deepcopy(val_data), new_individuals),
+                    )
+                ))
+
+                self.population.extend(refill_training_start)
+                self.population = Population(self.population)
 
         while True:
             self.status = "Training"
