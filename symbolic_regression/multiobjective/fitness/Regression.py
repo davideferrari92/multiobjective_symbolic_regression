@@ -340,9 +340,9 @@ class RegressionMinimumDescriptionLength(BaseFitness):
             num_grad = pyf_grad(tuple(split_X), tuple(split_c))
             num_diag_hess = pyf_diag_hess(tuple(split_X), tuple(split_c))
 
-            residual = data[self.target] - pred
-            residual = np.reshape(residual, (data[self.target].shape[0], 1))
-
+            residual = data[self.target] - pred    
+            residual = np.expand_dims(residual, -1)
+            
             if self.weights is not None:
                 w = data[[self.weights]].to_numpy()
                 FIM_diag = [np.sum(w * gr**2 - w * residual*hess) /
