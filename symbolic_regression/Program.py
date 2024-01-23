@@ -1251,11 +1251,6 @@ class Program:
                             parsimony_decay=self.parsimony_decay)
             other.init_program()
 
-        if self.complexity == 1 or other.complexity == 1:
-            new = copy.deepcopy(self)
-            new.mutate(inplace=True)
-            return new
-
         if not isinstance(other, Program):
             raise TypeError(
                 f'Can cross-over only using another Program object: {type(other)} provided'
@@ -1273,17 +1268,17 @@ class Program:
 
         cross_over_point1 = self._select_random_node(root_node=offspring)
 
-        if not cross_over_point1:
-            return self
-
         cross_over_point2 = copy.deepcopy(
             self._select_random_node(root_node=other.program))
 
+        if not cross_over_point1 or not cross_over_point2:
+            return self
+
         cross_over_point2.father = cross_over_point1.father
 
-        if cross_over_point2.father:
-            cross_over_point2.father.operands[
-                cross_over_point2.father.operands.index(
+        if cross_over_point1.father:
+            cross_over_point1.father.operands[
+                cross_over_point1.father.operands.index(
                     cross_over_point1)] = cross_over_point2
         else:
             offspring = cross_over_point2
@@ -1326,13 +1321,18 @@ class Program:
                           parsimony_decay=self.parsimony_decay)
 
             new.init_program()
+
+            if inplace:
+                self.program = new
+                return self
+
             return new
 
         offspring = copy.deepcopy(self.program)
 
         mutate_point = self._select_random_node(root_node=offspring)
 
-        if not mutate_point:
+        if (not mutate_point) or not (mutate_point.father):
             new = Program(operations=self.operations,
                           features=self.features,
                           const_range=self.const_range,
@@ -1340,14 +1340,19 @@ class Program:
                           parsimony_decay=self.parsimony_decay)
 
             new.init_program()
+
+            if inplace:
+                self.program = new
+                return self
+
             return new
 
         mutated = self._generate_tree(
             father=mutate_point.father, parsimony=self.parsimony, parsimony_decay=self.parsimony_decay)
 
-        if mutate_point.father:
-            mutate_point.father.operands[
-                mutate_point.father.operands.index(mutate_point)] = mutated
+        mutate_point.father.operands[
+            mutate_point.father.operands.index(mutate_point)] = mutated
+
         if inplace:
             self.program = offspring
             return self
@@ -1362,7 +1367,7 @@ class Program:
         return new
 
     def insert_node(self, inplace: bool = False) -> 'Program':
-        """ This method allow to insert a FeatureNode in a random spot in the program
+        """ This method allow to insert a OperationNode in a random spot in the program
 
         The insertion of a OperationNode must comply with the arity of the existing
         one and must link to the existing operands.
@@ -1386,6 +1391,11 @@ class Program:
                           parsimony_decay=self.parsimony_decay)
 
             new.init_program()
+
+            if inplace:
+                self.program = new
+                return self
+
             return new
 
         new_node = self._generate_tree(father=mutate_point.father, depth=1)
@@ -1399,11 +1409,12 @@ class Program:
         # The new_node is already a tree with depth = 1 so, in case of arity=2
         # operations the other operator is already set.
         new_node.operands[random.randint(0, new_node.arity - 1)] = mutate_point
-        mutate_point.father = new_node
 
         # If the new_node is also the new root, offspring need to be updated.
         if not mutate_point.father:
             offspring = new_node
+
+        mutate_point.father = new_node
 
         if inplace:
             self.program = offspring
@@ -1433,10 +1444,8 @@ class Program:
                 The new program after the deletion is applied
         """
         offspring = copy.deepcopy(self.program)
-        mutate_point = self._select_random_node(root_node=offspring)
-
-        if isinstance(mutate_point, FeatureNode):
-            return self
+        mutate_point = self._select_random_node(
+            root_node=offspring, only_operations=True)
 
         if mutate_point:
             mutate_father = mutate_point.father
@@ -1466,7 +1475,7 @@ class Program:
         return new
 
     def mutate_leaf(self, inplace: bool = False) -> 'Program':
-        """ This method select a random FeatureNode and change the associated feature
+        """ This method selects a random FeatureNode and changes the associated feature
 
         The new FeatureNode will replace one random leaf among features and constants.
 
@@ -1502,7 +1511,7 @@ class Program:
         return offspring
 
     def mutate_operator(self, inplace: bool = False) -> 'Program':
-        """ This method select a random OperationNode and change the associated operation
+        """ This method selects a random OperationNode and changes the associated operation
 
         The new OperationNode will replace one random leaf among features and constants.
 
@@ -1520,12 +1529,17 @@ class Program:
             root_node=offspring, only_operations=True)
 
         if not mutate_point:  # Only a FeatureNode without any OperationNode
-            new = Program(program=offspring,
-                          operations=self.operations,
+            new = Program(operations=self.operations,
                           features=self.features,
                           const_range=self.const_range,
                           parsimony=self.parsimony,
                           parsimony_decay=self.parsimony_decay)
+
+            new.init_program()
+
+            if inplace:
+                self.program = new
+                return self
 
             return new
 
