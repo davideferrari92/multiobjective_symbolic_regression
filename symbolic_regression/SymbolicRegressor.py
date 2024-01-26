@@ -427,8 +427,7 @@ class SymbolicRegressor:
                 except KeyError:
                     break
 
-                d = abs(p1_fitness) - \
-                    abs(p2_fitness)
+                d = p1_fitness - p2_fitness
 
                 if d < 0:
                     at_least_one_less_than_zero = True
