@@ -43,10 +43,10 @@ class WeightedMeanSquaredError(BaseFitness):
         try:
             wmse = (((pred - data[self.target])**2) * data[self.weights]
                     ).mean() if self.weights and not validation else ((pred - data[self.target])**2).mean()
-            
+
             if isinstance(self.max_error, float) and wmse > self.max_error:
                 return np.inf
-            
+
             return wmse
         except TypeError:
             return np.inf
@@ -75,10 +75,6 @@ class WeightedMeanAbsoluteError(BaseFitness):
                 inplace=False) if self.logistic else program
 
             pred = program_to_evaluate.evaluate(data=data)
-
-        if self.weights not in data.columns:
-            data[self.weights] = create_regression_weights(
-                data=data, target=self.target, bins=self.bins)
 
         try:
             wmae = (np.abs(pred - data[self.target]) * data[self.weights]
@@ -115,10 +111,6 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
                 inplace=False) if self.logistic else program
 
             pred = program_to_evaluate.evaluate(data=data)
-
-        if self.weights not in data.columns:
-            data[self.weights] = create_regression_weights(
-                data=data, target=self.target, bins=self.bins)
 
         try:
             if self.weights:
@@ -346,9 +338,9 @@ class RegressionMinimumDescriptionLength(BaseFitness):
             num_grad = pyf_grad(tuple(split_X), tuple(split_c))
             num_diag_hess = pyf_diag_hess(tuple(split_X), tuple(split_c))
 
-            residual = data[self.target] - pred    
+            residual = data[self.target] - pred
             residual = np.expand_dims(residual, -1)
-            
+
             if self.weights is not None:
                 w = data[[self.weights]].to_numpy()
                 FIM_diag = [np.sum(w * gr**2 - w * residual*hess) /
