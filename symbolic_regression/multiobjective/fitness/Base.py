@@ -37,6 +37,7 @@ class BaseFitness:
         self.bins: int = None
         self.epsilon: float = None
         self.hypervolume_reference: float = None
+        self.max_error: float = None
 
         for key, value in kwargs.items():
             setattr(self, key, value)
