@@ -42,8 +42,11 @@ class WeightedMeanSquaredError(BaseFitness):
 
         try:
             wmse = (((pred - data[self.target])**2) * data[self.weights]
-                    ).mean() if self.weights else ((pred - data[self.target])**2).mean()
-
+                    ).mean() if self.weights and not validation else ((pred - data[self.target])**2).mean()
+            
+            if isinstance(self.max_error, float) and wmse > self.max_error:
+                return np.inf
+            
             return wmse
         except TypeError:
             return np.inf
@@ -79,7 +82,10 @@ class WeightedMeanAbsoluteError(BaseFitness):
 
         try:
             wmae = (np.abs(pred - data[self.target]) * data[self.weights]
-                    ).mean() if self.weights else np.abs(pred - data[self.target]).mean()
+                    ).mean() if self.weights and not validation else np.abs(pred - data[self.target]).mean()
+
+            if isinstance(self.max_error, float) and wmae > self.max_error:
+                return np.inf
 
             return wmae
         except TypeError:
