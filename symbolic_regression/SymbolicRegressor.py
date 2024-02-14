@@ -23,6 +23,7 @@ from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
 from symbolic_regression.Population import Population
 from symbolic_regression.Program import Program
+from joblib import Parallel, delayed
 
 backend_parallel = 'loky'
 
@@ -147,6 +148,9 @@ class SymbolicRegressor:
         # Dump the self.metadata in a json file
         with open(file + ".metadata.json", "w") as f:
             json.dump(self.metadata, f)
+
+        with open(file + ".summary.csv", "w") as f:
+            self.summary.to_csv(f)
 
     def load_model(self, file: str):
         with open(file, "rb") as f:
@@ -573,10 +577,20 @@ class SymbolicRegressor:
         self.stop_at_convergence = stop_at_convergence
         self.verbose = verbose
 
+        self.procs: List[Process] = list()
+
         start = time.perf_counter()
         try:
             self._fit(data=data, val_data=val_data)
         except KeyboardInterrupt:
+            for proc in self.procs:
+                try:
+                    proc.kill()
+                except:
+                    pass
+
+            self.procs = list()
+
             self.generation -= 1  # The increment is applied even if the generation is interrupted
             self.status = "Interrupted by KeyboardInterrupt"
             logging.warning(f"Training terminated by a KeyboardInterrupt")
@@ -662,9 +676,11 @@ class SymbolicRegressor:
                         f"Callback {c.__class__.__name__} raised an exception on initialization end")
 
         else:
-            self.population = [
-                program for program in self.population if program.is_valid]
+            # self.population = [
+            #     program for program in self.population if program.is_valid]
 
+            if self.verbose > 0:
+                print(f"Fitting with existing population")
             logging.info(
                 f"Fitting with existing population of {len(self.population)} valid elements")
 
@@ -675,15 +691,15 @@ class SymbolicRegressor:
                 refill_training_start = Population(executor.map(
                     lambda p: self.generate_individual(*p),
                     zip(
-                        repeat(copy.deepcopy(data), new_individuals),
+                        repeat(data, new_individuals),
                         repeat(self.features, new_individuals),
                         repeat(self.operations, new_individuals),
-                        repeat(copy.deepcopy(self.fitness_functions),
+                        repeat(self.fitness_functions,
                                new_individuals),
                         repeat(self.const_range, new_individuals),
                         repeat(self.parsimony, new_individuals),
                         repeat(self.parsimony_decay, new_individuals),
-                        repeat(copy.deepcopy(val_data), new_individuals),
+                        repeat(val_data, new_individuals),
                     )
                 ))
 
@@ -753,7 +769,7 @@ class SymbolicRegressor:
             self.status = "Generating Offsprings"
 
             offsprings: List[Program] = list()
-            procs: List[Process] = list()
+            self.procs: List[Process] = list()
 
             queue = multiprocessing.Manager().Queue(maxsize=self.population_size)
 
@@ -765,7 +781,7 @@ class SymbolicRegressor:
                 proc = Process(
                     target=self._get_offspring_batch,
                     args=(
-                        copy.deepcopy(data),
+                        data,
                         self.genetic_operators_frequency,
                         self.fitness_functions,
                         population_to_pass,
@@ -776,10 +792,10 @@ class SymbolicRegressor:
                         val_data
                     )
                 )
-                procs.append(proc)
+                self.procs.append(proc)
 
             was_limited_str = ''
-            for index, proc in enumerate(procs):
+            for index, proc in enumerate(self.procs):
                 proc.start()
 
             q_size = 0
@@ -787,29 +803,33 @@ class SymbolicRegressor:
                 # Make sure at least some processes are alive
                 q_size = queue.qsize()
                 if self.verbose > 1:
-                    _elapsed = max(1, int(round(time.perf_counter() - before)))
+                    _elapsed_s = max(1, int(round(time.perf_counter() - before)))
+                    _elapsed = datetime.timedelta(seconds=_elapsed_s)
                     print(
-                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s) {was_limited_str}   ', end='\r', flush=True)
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}   ', end='\r', flush=True)
                 time.sleep(.2)
 
             else:
                 q_size = queue.qsize()
                 if self.verbose > 1:
-                    _elapsed = max(1, int(round(time.perf_counter() - before)))
+                    _elapsed_s = max(1, int(round(time.perf_counter() - before)))
+                    _elapsed = datetime.timedelta(seconds=_elapsed_s)
                     print(
-                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
-                for p in procs:
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
+                for p in self.procs:
                     if p.is_alive():
                         p.join(timeout=.1)
 
             for _ in range(self.population_size):
                 offsprings.append(queue.get())
 
-            for proc in procs:
+            for proc in self.procs:
                 try:
                     proc.kill()
                 except:
                     pass
+            
+            self.procs = list()
 
             self.times.loc[self.generation,
                            "time_offsprings_generation"] = time.perf_counter() - before
@@ -870,7 +890,7 @@ class SymbolicRegressor:
                             f"Callback {c.__class__.__name__} raised an exception on refill start")
 
                 refill: List[Program] = list()
-                procs: List[Process] = list()
+                self.procs: List[Process] = list()
                 queue = multiprocessing.Manager().Queue(maxsize=missing_elements)
 
                 for _ in range(jobs):
@@ -889,37 +909,39 @@ class SymbolicRegressor:
                             val_data
                         )
                     )
-                    procs.append(proc)
+                    self.procs.append(proc)
                     proc.start()
 
                 q_size = 0
                 while q_size < missing_elements:
                     q_size = queue.qsize()
                     if self.verbose > 1:
-                        _elapsed = max(
-                            1, int(round(time.perf_counter() - before)))
+                        _elapsed_s = max(1, int(round(time.perf_counter() - before)))
+                        _elapsed = datetime.timedelta(seconds=_elapsed_s)
                         print(
-                            f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s)', end='\r', flush=True)
+                            f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s)', end='\r', flush=True)
                     time.sleep(.5)
 
                 else:
                     if self.verbose > 1:
-                        _elapsed = max(
-                            1, int(round(time.perf_counter() - before)))
+                        _elapsed_s = max(1, int(round(time.perf_counter() - before)))
+                        _elapsed = datetime.timedelta(seconds=_elapsed_s)
                         print(
-                            f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed} s, {round(q_size/_elapsed, 2)} /s). Completed!', flush=True)
-                    for p in procs:
+                            f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!', flush=True)
+                    for p in self.procs:
                         if p.is_alive():
                             p.join(timeout=.1)
 
                 for _ in range(missing_elements):
                     refill.append(queue.get())
 
-                for proc in procs:
+                for proc in self.procs:
                     try:
                         proc.kill()
                     except:
                         pass
+                
+                self.procs = list()
 
                 self.population: Population = Population(
                     self.population + refill)
@@ -1325,7 +1347,11 @@ class SymbolicRegressor:
     def _get_offspring_batch(self, data: Union[dict, pd.DataFrame, pd.Series], genetic_operators_frequency: Dict[str, float], fitness_functions: List[BaseFitness], population: Population, tournament_size: int, generation: int,
                              batch_size: int, queue: Queue = None, val_data: Union[Dict, pd.Series, pd.DataFrame] = None) -> Program:
 
-        population = population.as_program()
+        try:
+            population = population.as_program()
+        except AttributeError:
+            population = population
+
         offsprings: List[Program] = list()
 
         submitted = 0
@@ -1674,17 +1700,23 @@ class SymbolicRegressor:
         for index, p in enumerate(self.population):
             p: 'Program'
             row = dict()
-            row['index'] = index + 1
-            row['program'] = p.program
-            row['complexity'] = p.complexity
-            row['rank'] = p.rank
+            row["Info Index"] = index + 1
+            row["Info Program"] = p.program
+            row["Info Complexity"] = p.complexity
+            row["Info Rank"] = p.rank
 
+            columns = []
             for f_k, f_v in p.fitness.items():
-                row[f_k] = f_v
+                row[f"Train {f_k}"] = f_v
+
+            if hasattr(p, 'fitness_validation'):
+                for f_k, f_v in p.fitness_validation.items():
+                    row[f"Validation {f_k}"] = f_v
 
             istances.append(row)
 
-        return pd.DataFrame(istances)
+        df = pd.DataFrame(istances)
+        return df
 
     @property
     def _total_time(self) -> float:
