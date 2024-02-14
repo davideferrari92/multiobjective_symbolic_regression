@@ -41,6 +41,7 @@ class WeightedMeanSquaredError(BaseFitness):
             return np.inf
 
         try:
+
             wmse = (((pred - data[self.target])**2) * data[self.weights]
                     ).mean() if self.weights and not validation else ((pred - data[self.target])**2).mean()
 
@@ -75,6 +76,9 @@ class WeightedMeanAbsoluteError(BaseFitness):
                 inplace=False) if self.logistic else program
 
             pred = program_to_evaluate.evaluate(data=data)
+
+        if np.isnan(pred).any():
+            return np.inf
 
         try:
             wmae = (np.abs(pred - data[self.target]) * data[self.weights]
@@ -112,6 +116,9 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
 
             pred = program_to_evaluate.evaluate(data=data)
 
+        if np.isnan(pred).any():
+            return np.inf
+        
         try:
             if self.weights:
                 y_av = 1e-20+(data[self.target] *
@@ -154,7 +161,7 @@ class MeanAveragePercentageError(BaseFitness):
 
             pred = pd.Series(program_to_evaluate.evaluate(data=data))
 
-        if len(pred.dropna()) < len(pred):
+        if np.isnan(pred).any():
             return np.inf
 
         try:
@@ -200,7 +207,7 @@ class MaxAbsoluteError(BaseFitness):
 
             pred = pd.Series(program_to_evaluate.evaluate(data=data))
 
-        if len(pred.dropna()) < len(pred):
+        if np.isnan(pred).any():
             return np.inf
 
         try:
