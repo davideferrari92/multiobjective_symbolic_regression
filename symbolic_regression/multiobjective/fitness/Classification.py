@@ -84,7 +84,7 @@ class BinaryCrossentropy(BaseFitness):
             if self.logistic:
                 program_to_evaluate = program.to_logistic(inplace=False)
 
-            pred = np.array(program_to_evaluate.evaluate(data=data))
+                pred = np.array(program_to_evaluate.evaluate(data=data))
 
         ground_truth = data[self.target]
 
@@ -165,6 +165,94 @@ class Sensitivity(Recall):
 
 class Specificity(BaseFitness):
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP_train = cm[0][0]
+            TN_train = cm[1][1]
+            FP_train = cm[0][1]
+            FN_train = cm[1][0]
+
+            metric = TN_train / (TN_train + FP_train)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
+
+
+class PPV(BaseClassification):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP_train = cm[0][0]
+            TN_train = cm[1][1]
+            FP_train = cm[0][1]
+            FN_train = cm[1][0]
+
+            metric = TP_train / (TP_train + FP_train)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
+
+
+class NPV(BaseClassification):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
