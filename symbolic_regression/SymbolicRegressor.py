@@ -143,7 +143,9 @@ class SymbolicRegressor:
             p.programs_dominates: List[Program] = list()
 
         with open(file, "wb") as f:
-            pickle.dump(compress(self), f)
+            self_copy = copy.deepcopy(self)
+            self_copy.callbacks = list()
+            pickle.dump(compress(self_copy), f)
 
         # Dump the self.metadata in a json file
         with open(file + ".metadata.json", "w") as f:
