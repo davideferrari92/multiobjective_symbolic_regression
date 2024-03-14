@@ -7,11 +7,13 @@ import os
 import pickle
 import random
 import time
+import traceback
 import zlib
 from itertools import repeat
 from multiprocessing import Process, Queue
 from typing import Any, Dict, List, Tuple, Union
 
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
@@ -23,7 +25,6 @@ from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
 from symbolic_regression.Population import Population
 from symbolic_regression.Program import Program
-from joblib import Parallel, delayed
 
 backend_parallel = 'loky'
 
@@ -93,6 +94,12 @@ class SymbolicRegressor:
         self.generations_to_train: int = None
         self.generation: int = 0
         self.genetic_operators_frequency: dict = genetic_operators_frequency
+        self._stop_at_convergence: bool = False
+        self._convergence_rolling_window: int = None
+        self._convergence_rolling_window_threshold: float = 0.01
+        self._nadir_points: Dict = dict()
+        self._ideal_points: Dict = dict()
+        self._fpf_fitness_history: Dict = dict()
 
         # Statistics
         self.best_history: Dict = dict()
@@ -195,6 +202,67 @@ class SymbolicRegressor:
                 logging.warning(
                     f"Callback {c.__class__.__name__} raised an exception on callback set init")
 
+    @property
+    def stop_at_convergence(self):
+        if not hasattr(self, '_stop_at_convergence'):
+            self._stop_at_convergence = False
+        return self._stop_at_convergence
+
+    @stop_at_convergence.setter
+    def stop_at_convergence(self, stop_at_convergence: bool):
+        self._stop_at_convergence = stop_at_convergence
+
+    @property
+    def convergence_rolling_window(self):
+        if not hasattr(self, '_convergence_rolling_window'):
+            self._convergence_rolling_window = None
+        return self._convergence_rolling_window
+
+    @convergence_rolling_window.setter
+    def convergence_rolling_window(self, convergence_rolling_window: int):
+        self.converged_generation = None
+        self._convergence_rolling_window = convergence_rolling_window
+
+    @property
+    def convergence_rolling_window_threshold(self):
+        if not hasattr(self, '_convergence_rolling_window_threshold'):
+            self._convergence_rolling_window_threshold = 0.01
+        return self._convergence_rolling_window_threshold
+
+    @convergence_rolling_window_threshold.setter
+    def convergence_rolling_window_threshold(self, convergence_rolling_window_threshold: float):
+        self._convergence_rolling_window_threshold = convergence_rolling_window_threshold
+
+    @property
+    def nadir_points(self):
+        if not hasattr(self, '_nadir_points'):
+            self._nadir_points = dict()
+        return self._nadir_points
+
+    @nadir_points.setter
+    def nadir_points(self, nadir_points: Dict):
+        self._nadir_points = nadir_points
+
+    @property
+    def ideal_points(self):
+        if not hasattr(self, '_ideal_points'):
+            self._ideal_points = dict()
+        return self._ideal_points
+
+    @ideal_points.setter
+    def ideal_points(self, ideal_points: Dict):
+        self._ideal_points = ideal_points
+
+    @property
+    def fpf_fitness_history(self):
+        if not hasattr(self, '_fpf_fitness_history'):
+            self._fpf_fitness_history = dict()
+        return self._fpf_fitness_history
+
+    @fpf_fitness_history.setter
+    def fpf_fitness_history(self, fpf_fitness_history: Dict):
+        self._fpf_fitness_history = fpf_fitness_history
+
     def compute_hypervolume(self, exclusive: bool = False):
         """
         This method computes the hypervolume of the current population
@@ -233,6 +301,11 @@ class SymbolicRegressor:
 
         points = np.array([np.array([p.fitness[ftn.label] for ftn in fitness_to_hypervolume])
                            for p in self.first_pareto_front])
+
+        max_nadir = np.max(
+            [np.max([self._nadir_points[gen][ftn.label] for gen in self._nadir_points.keys()]) for ftn in self.fitness_functions if ftn.minimize])
+        min_ideal = np.min(
+            [np.min([self._ideal_points[gen][ftn.label] for gen in self._ideal_points.keys()]) for ftn in self.fitness_functions if ftn.minimize])
 
         references = np.array(
             [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
@@ -533,7 +606,7 @@ class SymbolicRegressor:
         """
         return [p for p in self.population if p.rank == 1]
 
-    def fit(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], generations_to_train: int, n_jobs: int = -1, stop_at_convergence: bool = False, verbose: int = 0, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> None:
+    def fit(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], generations_to_train: int, n_jobs: int = -1, stop_at_convergence: bool = False, convergence_rolling_window: int = None, convergence_rolling_window_threshold: float = 0.01, verbose: int = 0, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> None:
         """
         This method trains the population.
 
@@ -560,6 +633,10 @@ class SymbolicRegressor:
                 The number of jobs to be used in the training
             - stop_at_convergence: bool (default False)
                 If True the training stops when the population converges
+            - convergence_rolling_window: int (default None)
+                The number of generations to consider for the convergence
+            - convergence_rolling_window_threshold: float (default 0.01)
+                The threshold to consider the population converged
             - verbose: int (default 0)
                 The verbosity level of the training
             - val_data: Union[dict, pd.DataFrame, pd.Series] (default None)
@@ -577,6 +654,8 @@ class SymbolicRegressor:
         self.generations_to_train = generations_to_train
         self.n_jobs = n_jobs
         self.stop_at_convergence = stop_at_convergence
+        self.convergence_rolling_window = convergence_rolling_window
+        self.convergence_rolling_window_threshold = convergence_rolling_window_threshold
         self.verbose = verbose
 
         self.procs: List[Process] = list()
@@ -646,6 +725,8 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on initialization start")
+                    logging.warning(
+                        traceback.format_exc())
 
             before = time.perf_counter()
             if self.verbose > 0:
@@ -676,6 +757,8 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on initialization end")
+                    logging.warning(
+                        traceback.format_exc())
 
         else:
             # self.population = [
@@ -723,12 +806,14 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on generation start")
+                    logging.warning(
+                        traceback.format_exc())
 
             start_time_generation = time.perf_counter()
 
             for p in self.population:
-                p.programs_dominates: List[Program] = list()
-                p.programs_dominated_by: List[Program] = list()
+                p.programs_dominates: List[Program] = list()  # type: ignore
+                p.programs_dominated_by: List[Program] = list()  # type: ignore
 
             if self.generation > 0:
                 time_total = datetime.timedelta(seconds=int(
@@ -767,6 +852,8 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on offspring generation start")
+                    logging.warning(
+                        traceback.format_exc())
 
             self.status = "Generating Offsprings"
 
@@ -805,7 +892,8 @@ class SymbolicRegressor:
                 # Make sure at least some processes are alive
                 q_size = queue.qsize()
                 if self.verbose > 1:
-                    _elapsed_s = max(1, int(round(time.perf_counter() - before)))
+                    _elapsed_s = max(
+                        1, int(round(time.perf_counter() - before)))
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
                     print(
                         f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}   ', end='\r', flush=True)
@@ -814,7 +902,8 @@ class SymbolicRegressor:
             else:
                 q_size = queue.qsize()
                 if self.verbose > 1:
-                    _elapsed_s = max(1, int(round(time.perf_counter() - before)))
+                    _elapsed_s = max(
+                        1, int(round(time.perf_counter() - before)))
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
                     print(
                         f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
@@ -830,7 +919,7 @@ class SymbolicRegressor:
                     proc.kill()
                 except:
                     pass
-            
+
             self.procs = list()
 
             self.times.loc[self.generation,
@@ -844,6 +933,8 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on offspring generation end")
+                    logging.warning(
+                        traceback.format_exc())
 
             # Removes all duplicated programs in the population
             before_cleaning = len(self.population)
@@ -890,6 +981,8 @@ class SymbolicRegressor:
                     except:
                         logging.warning(
                             f"Callback {c.__class__.__name__} raised an exception on refill start")
+                        logging.warning(
+                            traceback.format_exc())
 
                 refill: List[Program] = list()
                 self.procs: List[Process] = list()
@@ -918,7 +1011,8 @@ class SymbolicRegressor:
                 while q_size < missing_elements:
                     q_size = queue.qsize()
                     if self.verbose > 1:
-                        _elapsed_s = max(1, int(round(time.perf_counter() - before)))
+                        _elapsed_s = max(
+                            1, int(round(time.perf_counter() - before)))
                         _elapsed = datetime.timedelta(seconds=_elapsed_s)
                         print(
                             f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s)', end='\r', flush=True)
@@ -926,7 +1020,8 @@ class SymbolicRegressor:
 
                 else:
                     if self.verbose > 1:
-                        _elapsed_s = max(1, int(round(time.perf_counter() - before)))
+                        _elapsed_s = max(
+                            1, int(round(time.perf_counter() - before)))
                         _elapsed = datetime.timedelta(seconds=_elapsed_s)
                         print(
                             f'Duplicates/invalid refilled: {q_size}/{missing_elements} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!', flush=True)
@@ -942,7 +1037,7 @@ class SymbolicRegressor:
                         proc.kill()
                     except:
                         pass
-                
+
                 self.procs = list()
 
                 self.population: Population = Population(
@@ -954,6 +1049,8 @@ class SymbolicRegressor:
                     except:
                         logging.warning(
                             f"Callback {c.__class__.__name__} raised an exception on refill end")
+                        logging.warning(
+                            traceback.format_exc())
 
                 # exludes every program in refill with an empty fitness
                 self.population = [
@@ -972,6 +1069,8 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on pareto front computation start")
+                    logging.warning(
+                        traceback.format_exc())
 
             self.status = "NSGA-II Pareto Front Computation"
 
@@ -996,12 +1095,31 @@ class SymbolicRegressor:
             self.times.loc[self.generation,
                            "count_average_complexity"] = self.average_complexity
 
-            if any(p.converged for p in self.population):
+            ###### Convergence check START ######
+            self._fpf_fitness_history[self.generation] = [
+                {f.label: pr.fitness[f.label] for f in self.fitness_functions if f.minimize == True} for pr in self.first_pareto_front]
+            current_nadir = self._compute_nadir_point(
+                population=self.first_pareto_front)
+            current_ideal = self._compute_ideal_point(
+                population=self.first_pareto_front)
+
+            self._nadir_points[self.generation] = current_nadir
+            self._ideal_points[self.generation] = current_ideal
+
+            if self.convergence_rolling_window is None and any(p.converged for p in self.population):
                 if not self.converged_generation:
                     self.converged_generation = self.generation
                 if self.verbose > 1:
                     print(
-                        f"Training converged after {self.converged_generation} generations.")
+                        f"Training converged after {self.converged_generation} generations (performance threshold reached).")
+
+            elif isinstance(self.convergence_rolling_window, int) and self.convergence_rolling_window > 0 and self._rolling_window_termination_criterion():
+                if not self.converged_generation:
+                    self.converged_generation = self.generation
+                if self.verbose > 1:
+                    print(
+                        f"Training converged after {self.converged_generation} generations (rolling window threshold reached).")
+            ###### Convergence check END ######
 
             for c in self.callbacks:
                 try:
@@ -1010,6 +1128,8 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on pareto front computation end")
+                    logging.warning(
+                        traceback.format_exc())
 
             end_time_generation = time.perf_counter()
             self._print_first_pareto_front(verbose=self.verbose)
@@ -1024,6 +1144,8 @@ class SymbolicRegressor:
                 except:
                     logging.warning(
                         f"Callback {c.__class__.__name__} raised an exception on generation end")
+                    logging.warning(
+                        traceback.format_exc())
 
             # Use generations = -1 to rely only on convergence (risk of infinite loop)
             if self.generations_to_train > 0 and self.generation == self.generations_to_train:
@@ -1033,6 +1155,8 @@ class SymbolicRegressor:
                     except:
                         logging.warning(
                             f"Callback {c.__class__.__name__} raised an exception on training completed")
+                        logging.warning(
+                            traceback.format_exc())
 
                 print(
                     f"Training completed {self.generation}/{self.generations_to_train} generations")
@@ -1045,6 +1169,8 @@ class SymbolicRegressor:
                     except:
                         logging.warning(
                             f"Callback {c.__class__.__name__} raised an exception on convergence")
+                        logging.warning(
+                            traceback.format_exc())
 
                 print(
                     f"Training converged after {self.converged_generation} generations and requested to stop.")
@@ -1415,6 +1541,215 @@ class SymbolicRegressor:
 
         return metadata
 
+    def _compute_nadir_point(self, population: List) -> Dict[str, float]:
+        """
+        This method returns the nadir point of the current population.
+        The nadir point is the worst point of the current population.
+
+        Args:
+            - None
+
+        Returns:
+            - nadir: Dict[str, float]
+                The nadir point of the current population
+        """
+
+        nadir = dict()
+        for f in self.fitness_functions:
+            if not f.minimize:
+                continue
+            nadir[f.label] = max([p.fitness[f.label] for p in population])
+
+        return nadir
+
+    def _compute_ideal_point(self, population: List) -> Dict[str, float]:
+        """
+        This method returns the ideal point of the current population.
+        The ideal point is the best point of the current population.
+
+        Args:
+            - None
+
+        Returns:
+            - ideal: Dict[str, float]
+                The ideal point of the current population
+        """
+
+        ideal = dict()
+        for f in self.fitness_functions:
+            if not f.minimize:
+                continue
+            ideal[f.label] = min([p.fitness[f.label] for p in population])
+
+        return ideal
+
+    def _delta_nadir(self, generation: int) -> float:
+        """
+        This method returns the delta nadir of the current population.
+        The delta nadir is the difference between the nadir point of the current
+        population and the nadir point of the previous population normalized by the
+        nadir point minus the ideal point of the current population.
+
+        Args:
+            - generation: int
+
+
+        Returns:
+            - delta_nadir: float
+                The delta nadir of the current population
+        """
+
+        nadir_prev: Dict = self.nadir_points[generation-1]
+        nadir: Dict = self.nadir_points[generation]
+        ideal: Dict = self.ideal_points[generation]
+
+        delta_nadir = max([(nadir_prev[f] - nadir[f]) / (nadir[f] - ideal[f] if nadir[f] -
+                          ideal[f] != 0 else 1) for f in list(nadir.keys())])
+
+        return delta_nadir
+
+    def _rolling_delta_nadir(self, rolling_window: int) -> float:
+        """
+        This method returns the rolling delta nadir of the current population.
+        The rolling delta nadir is the difference between the nadir point of the current
+        population and the nadir point of the previous population normalized by the
+        nadir point minus the ideal point of the current population.
+
+        Args:
+            - rolling_window: int
+                The rolling window to use to compute the rolling delta nadir
+
+        Returns:
+            - rolling_delta_nadir: float
+                The rolling delta nadir of the current population
+        """
+
+        gen_start = max(self.generation - rolling_window + 1, 1)
+        rolling_delta_nadir = []
+        for gen in range(gen_start, self.generation + 1):
+            rolling_delta_nadir.append(self._delta_nadir(gen))
+
+        return rolling_delta_nadir
+
+    def _delta_ideal(self, generation: int) -> float:
+        """
+        This method returns the delta ideal of the current population.
+        The delta ideal is the difference between the ideal point of the current
+        population and the ideal point of the previous population normalized by the
+        nadir point minus the ideal point of the current population.
+
+        Args:
+            - generation: int
+                The generation for which to compute the delta ideal
+
+        Returns:
+            - delta_ideal: float
+                The delta ideal of the current population
+        """
+
+        nadir: Dict = self.nadir_points[generation]
+        ideal_prev: Dict = self.ideal_points[generation-1]
+        ideal: Dict = self.ideal_points[generation]
+
+        delta_ideal = max([(ideal_prev[f] - ideal[f]) / (nadir[f] - ideal[f] if nadir[f] -
+                          ideal[f] != 0 else 1) for f in list(nadir.keys())])
+
+        return delta_ideal
+
+    def _rolling_delta_ideal(self, rolling_window: int) -> float:
+        """
+        This method returns the rolling delta ideal of the current population.
+        The rolling delta ideal is the difference between the ideal point of the current
+        population and the ideal point of the previous population normalized by the
+        nadir point minus the ideal point of the current population.
+
+        Args:
+            - rolling_window: int
+                The rolling window to use to compute the rolling delta nadir
+
+        Returns:
+            - rolling_delta_ideal: float
+                The rolling delta ideal of the current population
+        """
+
+        gen_start = max(self.generation - rolling_window + 1, 1)
+        rolling_delta_ideal = []
+        for gen in range(gen_start, self.generation + 1):
+            rolling_delta_ideal.append(self._delta_ideal(gen))
+
+        return rolling_delta_ideal
+
+    def _rolling_inverted_generational_distance_plus(self, rolling_window: int) -> float:
+        """
+        This method returns the inverted generational distance plus of the current population.
+        The inverted generational distance plus is the sum of the distances between the
+        current population and the previous population.
+
+        Args:
+            - rolling_window: int
+                The rolling window to use to compute the rolling delta nadir
+
+        Returns:
+            - inverted_generational_distance_plus: float
+                The inverted generational distance plus of the current population
+        """
+        from pymoo.indicators.igd_plus import IGDPlus
+
+        max_nadir = {ftn.label: np.max([self.nadir_points[gen][ftn.label] for gen in self.nadir_points.keys(
+        )]) for ftn in self.fitness_functions if ftn.minimize}
+        min_ideal = {ftn.label: np.min([self.ideal_points[gen][ftn.label] for gen in self.ideal_points.keys(
+        )]) for ftn in self.fitness_functions if ftn.minimize}
+
+        gen_start = max(self.generation - rolling_window, 1)
+
+        # For each element of self._fpf_fitness_history[gen_start] and for each fitness function
+        # we rescale the value using min_ideal and max_nadir
+
+        rescale_ref = dict()
+
+        for gen in range(gen_start, self.generation + 1):
+            rescale_ref[gen] = list()
+            for point in self._fpf_fitness_history[gen]:
+                rescale_ref[gen].append([(f_value - min_ideal[f_label]) / (
+                    max_nadir[f_label] - min_ideal[f_label]) for f_label, f_value in point.items()])
+
+        igd_window = []
+        for gen in range(gen_start + 1, self.generation + 1):
+            metric = IGDPlus(np.array(rescale_ref[gen]), zero_to_one=True)
+            igd = metric.do(np.array(rescale_ref[gen - 1]))
+            igd_window.append(igd)
+
+        return igd_window
+
+    def _rolling_window_termination_criterion(self) -> bool:
+        """
+        Check if the termination criterion for the rolling window has been met.
+
+        Returns:
+            bool: True if the termination criterion is met, False otherwise.
+        """
+        if self.convergence_rolling_window is None or self.generation < (self.convergence_rolling_window + 1):
+            return False
+
+        max_roll_delta_nadir = max(self._rolling_delta_nadir(
+            rolling_window=self.convergence_rolling_window))
+        max_roll_delta_ideal = max(self._rolling_delta_ideal(
+            rolling_window=self.convergence_rolling_window))
+        max_roll_igd = max(self._rolling_inverted_generational_distance_plus(
+            rolling_window=self.convergence_rolling_window))
+
+        print(f"Rolling window: {self.generation}/{self.generations_to_train} - Delta Nadir: {max_roll_delta_nadir} - Delta Ideal: {max_roll_delta_ideal} - IGD: {max_roll_igd}")
+        if max_roll_delta_nadir > self.convergence_rolling_window_threshold:
+            return False
+
+        if max_roll_delta_ideal > self.convergence_rolling_window_threshold:
+            return False
+
+        if max_roll_igd > self.convergence_rolling_window_threshold:
+            return False
+
+        return True
+
     def plot_generations_time(self):
         """ This method plots the time spent in each generation
 
@@ -1625,6 +1960,27 @@ class SymbolicRegressor:
         )
 
         return fig
+
+    def plot_convergence(self, logy: bool = True):
+
+        df = pd.DataFrame(index=range(1, self.generation))
+
+        df['IGD+'] = self._rolling_inverted_generational_distance_plus(
+            rolling_window=self.generation-1)
+        df['Ideal'] = self._rolling_delta_ideal(
+            rolling_window=self.generation-1)
+        df['Nadir'] = self._rolling_delta_nadir(
+            rolling_window=self.generation-1)
+
+        df.rolling(window=self.convergence_rolling_window).max().plot()
+
+        plt.title('Convergence')
+        plt.xlabel('Generation')
+        plt.ylabel('Value')
+        if logy:
+            plt.yscale('log')
+        plt.grid()
+        return plt
 
     def _print_first_pareto_front(self, verbose: int = 3):
         """
