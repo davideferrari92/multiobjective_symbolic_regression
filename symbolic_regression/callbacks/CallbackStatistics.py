@@ -99,6 +99,8 @@ class MOSRHistory(MOSRCallbackBase):
             if not self.sr.best_history['training'].get(self.sr.generation):
                 self.sr.best_history['training'][self.sr.generation] = dict()
 
+            val_data = kwargs.get('val_data', None)
+
             if val_data is not None and not self.sr.best_history.get('validation'):
                 self.sr.best_history['validation'] = dict()
             if val_data is not None and not self.sr.best_history['validation'].get(self.sr.generation):
