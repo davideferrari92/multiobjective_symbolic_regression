@@ -99,6 +99,7 @@ class Program:
         self._is_duplicated: bool = False
         self._program_depth: int = 0
         self._complexity: int = 0
+        self._exclusive_hypervolume: float = np.nan
 
         # Pareto Front Attributes
         self.rank: int = np.inf
@@ -200,6 +201,16 @@ class Program:
     @all_operations.getter
     def all_operations(self):
         return self.program._get_all_operations(all_operations=[])
+
+    @property
+    def exclusive_hypervolume(self):
+        """ This allow to get the exclusive hypervolume of the program
+        """
+        return self._exclusive_hypervolume
+
+    @exclusive_hypervolume.setter
+    def exclusive_hypervolume(self, value):
+        self._exclusive_hypervolume = value
 
     @property
     def features_used(self):

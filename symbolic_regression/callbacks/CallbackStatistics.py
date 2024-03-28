@@ -20,7 +20,7 @@ class MOSRStatisticsComputation(MOSRCallbackBase):
 
     def _hypervolume(self):
         before = time.perf_counter()
-        self.sr.compute_hypervolume(exclusive=True)
+        self.sr.compute_hypervolume()
         self.sr.times.loc[self.sr.generation,
                           "time_hypervolume_computation"] = time.perf_counter() - before
 
