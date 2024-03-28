@@ -1,8 +1,10 @@
 astropy
 loky
+matplotlib
 numpy
 pandas
 plotly
+pymoo
 pytexit
 scikit-learn
 scipy
