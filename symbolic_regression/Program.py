@@ -857,8 +857,10 @@ class Program:
             return self
         
         task = constants_optimization_conf['task']
+        n_constants = len(self.get_constants(return_objects=False))
+        n_features_used = len(self.features_used)
         
-        if len(self.get_constants) > 500:
+        if n_constants > 500:
             logging.debug('Program has more than 500 constants. Optimizing using ADAM')
             constants_optimization = 'ADAM'
             constants_optimization_conf = {
@@ -878,9 +880,6 @@ class Program:
         if task not in ['regression:wmse', 'regression:wrrmse', 'regression:cox', 'binary:logistic']:
             raise AttributeError(
                 f'Task supported are regression:wmse, regression:wrrmse, regression:cox or binary:logistic')
-
-        n_constants = len(self.get_constants(return_objects=False))
-        n_features_used = len(self.features_used)
 
         if not isinstance(self.program, FeatureNode) and n_constants > 0 and n_features_used > 0:
             ''' Rationale for the conditions:
