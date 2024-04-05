@@ -855,8 +855,25 @@ class Program:
         """
         if not constants_optimization or not self.is_valid:
             return self
-
+        
         task = constants_optimization_conf['task']
+        
+        if len(self.get_constants) > 500:
+            logging.debug('Program has more than 500 constants. Optimizing using ADAM')
+            constants_optimization = 'ADAM'
+            constants_optimization_conf = {
+                'task': task,
+                'learning_rate': 1e-4,
+                'batch_size': int(np.ceil(len(data)/10)),
+                'epochs': 200,
+                'verbose': 0,
+                'gradient_clip': False,
+                'beta_1': 0.9,
+                'beta_2': 0.999,
+                'epsilon': 1e-7,
+                'l1_param': 0,
+                'l2_param': 0,
+            }
 
         if task not in ['regression:wmse', 'regression:wrrmse', 'regression:cox', 'binary:logistic']:
             raise AttributeError(
