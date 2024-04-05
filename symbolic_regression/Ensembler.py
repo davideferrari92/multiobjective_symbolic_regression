@@ -1,6 +1,9 @@
 import logging
+from typing import Dict, List, Union
 import numpy as np
 import pandas as pd
+
+from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 
 
 class SymbolicEnsembler:
@@ -33,14 +36,14 @@ class SymbolicEnsembler:
         else:
             return predictions.mean(axis=1)
 
-    def compute_fitness(self, data, fitness_functions):
+    def compute_fitness(self, data: Union[pd.DataFrame, pd.Series, Dict], fitness_functions: List[BaseFitness], validation: bool = False):
         """
         Computes the fitness of the ensembler model on the given data using the specified fitness functions.
 
         Args:
             data: Union[pd.DataFrame, pd.Series, Dict]
                 The input data for which fitness needs to be computed.
-            fitness_functions: List[FitnessFunction]
+            fitness_functions: List[BaseFitness]
                 A list of fitness functions to be used for computing the fitness.
 
         Returns:
@@ -56,7 +59,7 @@ class SymbolicEnsembler:
                              threshold=fitness_function.threshold if hasattr(fitness_function, 'threshold') else None))
             try:
                 fitness[fitness_function.label] = fitness_function.evaluate(
-                    program=None, data=data, validation=False, pred=predictions)
+                    program=None, data=data, validation=validation, pred=predictions)
             except Exception as e:
                 logging.warning(
                     f'Unable to compute fitness {fitness_function.label}')
