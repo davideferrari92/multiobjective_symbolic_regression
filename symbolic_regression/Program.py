@@ -1,6 +1,7 @@
 import copy
 import logging
 import random
+import signal
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
@@ -860,8 +861,8 @@ class Program:
         n_constants = len(self.get_constants(return_objects=False))
         n_features_used = len(self.features_used)
         
-        if n_constants > 500:
-            logging.debug('Program has more than 500 constants. Optimizing using ADAM')
+        if n_constants > 100:
+            logging.debug('Program has more than 100 constants. Optimizing using ADAM')
             constants_optimization = 'ADAM'
             constants_optimization_conf = {
                 'task': task,
@@ -916,6 +917,16 @@ class Program:
 
             to_optimize = self if inplace else copy.deepcopy(self)
 
+            def handler(signum, frame):
+                raise TimeoutError("Operation timed out")
+            
+            class TimeoutError(Exception):
+                def __str__(self):
+                    return ""
+            
+            signal.signal(signal.SIGALRM, handler)
+            signal.alarm(60)
+
             try:
                 final_parameters, _, _ = f_opt(
                     program=to_optimize,
@@ -928,6 +939,10 @@ class Program:
                 )
             except NameError:
                 return to_optimize
+            except TimeoutError:
+                return to_optimize
+            finally:
+                signal.alarm(0)
 
             if len(final_parameters) > 0:
                 to_optimize.set_constants(new=final_parameters)
