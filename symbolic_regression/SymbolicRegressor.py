@@ -1631,6 +1631,7 @@ class SymbolicRegressor:
             'fpf_tree_diversity': self.fpf_tree_diversity,
             'generation': self.generation,
             'generations_to_train': self.generations_to_train,
+            'genetic_algorithm': self.genetic_algorithm,
             'genetic_operators_frequency': self.genetic_operators_frequency,
             'operations': [op['symbol'] for op in self.operations],
             'parsimony_decay': self.parsimony_decay,
