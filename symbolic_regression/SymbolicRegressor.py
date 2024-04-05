@@ -430,7 +430,7 @@ class SymbolicRegressor:
 
             pareto_front = next_pareto_front
 
-    def _crowding_distance(self):
+    def _crowding_distance(self, population: Population, rank_iter: int = 1):
         """
         This method calculates the crowding distance for each program in the population
         The crowding distance is used to identify the most diverse programs in the population
@@ -440,8 +440,7 @@ class SymbolicRegressor:
         The higher the crowding distance the more diverse the program is with respect to the other programs in the same pareto front
         """
 
-        rank_iter = 1
-        pareto_front: List[Program] = self.extract_pareto_front(rank=rank_iter)
+        pareto_front: List[Program] = self.extract_pareto_front(population=population, rank=rank_iter)
 
         while pareto_front:  # Exits when extract_pareto_front return an empty list
             for ftn in self.fitness_functions:
@@ -468,37 +467,58 @@ class SymbolicRegressor:
                         program.crowding_distance = delta / norm
 
             rank_iter += 1
-            pareto_front = self.extract_pareto_front(rank=rank_iter)
+            pareto_front = self.extract_pareto_front(population=population, rank=rank_iter)
 
-    def _exclusive_hypervolume(self):
-        """
-        """
+    def _exclusive_hypervolume(self, population: Population, rank_iter: int = 1):
+            """
+            Calculate the exclusive hypervolume for the given population and rank iteration.
 
-        fitness_to_hypervolume = [
-            fitness for fitness in self.fitness_functions if fitness.hypervolume_reference and fitness.minimize]
-        references = np.array(
-            [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
+            Parameters:
+            - population (Population): The population for which to calculate the exclusive hypervolume.
+            - rank_iter (int): The rank iteration to consider.
 
-        rank_iter = 1
-        pareto_front: List[Program] = self.extract_pareto_front(rank=rank_iter)
-        while pareto_front:
-            points = np.array([np.array([p.fitness[ftn.label] for ftn in fitness_to_hypervolume])
-                               for p in pareto_front])
+            Returns:
+            None
 
-            try:
-                points = points[np.sum((references - points)
-                                       >= 0, axis=1) == points.shape[1]]
-                hypervolume = _HyperVolume(references).exclusive(points)
-            except ValueError:
-                hypervolume = [np.inf] * len(pareto_front)
-                logging.warning(
-                    f"ValueError computing hypervolume for rank {rank_iter}")
+            This method calculates the exclusive hypervolume for a given population and rank iteration.
+            It uses the fitness functions with hypervolume reference and minimize set to True.
+            The exclusive hypervolume is calculated using the points from the Pareto front of the population
+            and the hypervolume references. The calculated hypervolume values are then assigned to the
+            corresponding programs in the Pareto front.
 
-            for program, hypervolume in zip(pareto_front, hypervolume):
-                program.exclusive_hypervolume = hypervolume
+            If a ValueError occurs during the calculation, the hypervolume for the corresponding program
+            is set to infinity and a warning message is logged.
 
-            rank_iter += 1
-            pareto_front = self.extract_pareto_front(rank=rank_iter)
+            The rank iteration is incremented after each calculation, and the process continues until
+            there are no more programs in the Pareto front.
+
+            Note: This method assumes that the `extract_pareto_front` method is implemented correctly.
+
+            """
+            fitness_to_hypervolume = [
+                fitness for fitness in self.fitness_functions if fitness.hypervolume_reference and fitness.minimize]
+            references = np.array(
+                [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
+
+            pareto_front: List[Program] = self.extract_pareto_front(population=population, rank=rank_iter)
+            while pareto_front:
+                points = np.array([np.array([p.fitness[ftn.label] for ftn in fitness_to_hypervolume])
+                                   for p in pareto_front])
+
+                try:
+                    points = points[np.sum((references - points)
+                                           >= 0, axis=1) == points.shape[1]]
+                    hypervolume = _HyperVolume(references).exclusive(points)
+                except ValueError:
+                    hypervolume = [np.inf] * len(pareto_front)
+                    logging.warning(
+                        f"ValueError computing hypervolume for rank {rank_iter}")
+
+                for program, hypervolume in zip(pareto_front, hypervolume):
+                    program.exclusive_hypervolume = hypervolume
+
+                rank_iter += 1
+                pareto_front = self.extract_pareto_front(population=population, rank=rank_iter)
 
     @staticmethod
     def dominance(program1: Program, program2: Program) -> bool:
@@ -602,7 +622,7 @@ class SymbolicRegressor:
 
         return list(filter(lambda p: p.is_valid == True, self.population))
 
-    def extract_pareto_front(self, rank: int):
+    def extract_pareto_front(self, population: Population, rank: int):
         """
         This method extracts the programs in the population that are in the pareto front
         of the specified rank
@@ -615,7 +635,7 @@ class SymbolicRegressor:
             - pareto_front: List
                 The list of programs in the pareto front of the specified rank
         """
-        pareto_front = [p for p in self.population if p.rank == rank and p.is_valid]
+        pareto_front = [p for p in population if p.rank == rank and p.is_valid]
 
         return pareto_front
 
@@ -633,7 +653,7 @@ class SymbolicRegressor:
             - first_pareto_front: list
                 The first Pareto Front of the population
         """
-        return self.extract_pareto_front(rank=1)
+        return self.extract_pareto_front(population=self.population, rank=1)
 
     def fit(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], generations_to_train: int, n_jobs: int = -1, stop_at_convergence: bool = False, convergence_rolling_window: int = None, convergence_rolling_window_threshold: float = 0.01, verbose: int = 0, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> None:
         """
@@ -1129,7 +1149,7 @@ class SymbolicRegressor:
             # Calculates the crowding distance
             before = time.perf_counter()
             if self.genetic_algorithm == 'NSGA-II':
-                self._crowding_distance()
+                self._crowding_distance(population=self.population, rank_iter=1)
                 self.population.sort(
                     key=lambda p: p.crowding_distance, reverse=True)
             elif self.genetic_algorithm == 'SMS-EMOEA':
@@ -1139,13 +1159,41 @@ class SymbolicRegressor:
                 self.population.sort(
                     key=lambda p: p.exclusive_hypervolume, reverse=True)
 
+            self.population.sort(key=lambda p: p.rank, reverse=False)
+
+            rank_at_population_size = self.population[self.population_size - 1].rank
+
+            population_to_finalize = [p for p in self.population if p.rank <= rank_at_population_size-1]
+            p_in_last_rank = self.extract_pareto_front(population=self.population, rank=rank_at_population_size)
+
+            if len(population_to_finalize) + len(p_in_last_rank) == self.population_size:
+                self.population = population_to_finalize + p_in_last_rank
+            
+            else:
+
+                number_p_to_remove = len(population_to_finalize) + len(p_in_last_rank) - self.population_size
+                
+                for _ in range(number_p_to_remove):
+                    p_in_last_rank.pop()
+                    
+                    if self.genetic_algorithm == 'NSGA-II':
+                        self._crowding_distance(population=p_in_last_rank, rank_iter=rank_at_population_size)
+                        p_in_last_rank.sort(
+                            key=lambda p: p.crowding_distance, reverse=True)
+                    
+                    elif self.genetic_algorithm == 'SMS-EMOEA':
+                        _ = self._compute_nadir_point(population=p_in_last_rank)
+                        
+                        self._exclusive_hypervolume(population=p_in_last_rank, rank_iter=rank_at_population_size)
+                        p_in_last_rank.sort(
+                            key=lambda p: p.exclusive_hypervolume, reverse=True)
+                        
+                self.population = population_to_finalize + p_in_last_rank
+
             self.times.loc[self.generation,
                            "time_second_selection_criterion_computation"] = time.perf_counter() - before
 
-            self.population.sort(key=lambda p: p.rank, reverse=False)
-
-            self.population = Population(
-                self.population[:self.population_size])
+            self.population = Population(self.population)
 
             self.times.loc[self.generation,
                            "count_average_complexity"] = self.average_complexity
@@ -1794,7 +1842,8 @@ class SymbolicRegressor:
         max_roll_igd = max(self._rolling_inverted_generational_distance_plus(
             rolling_window=self.convergence_rolling_window))
 
-        print(f"Rolling window: {self.generation}/{self.generations_to_train} - Delta Nadir: {max_roll_delta_nadir:3f} - Delta Ideal: {max_roll_delta_ideal:3f} - IGD: {max_roll_igd:3f}")
+        if self.verbose > 2:
+            print(f"Convergence rolling window: {self.generation}/{self.generations_to_train} - Delta Nadir: {max_roll_delta_nadir:3f} - Delta Ideal: {max_roll_delta_ideal:3f} - IGD: {max_roll_igd:3f}")
         if max_roll_delta_nadir > self.convergence_rolling_window_threshold:
             return False
 
@@ -1917,7 +1966,7 @@ class SymbolicRegressor:
                          ) if not generation else generation
 
         if not generation:
-            iterate_over = self.extract_pareto_front(rank=pf_rank)
+            iterate_over = self.extract_pareto_front(population=self.population, rank=pf_rank)
         else:
             if not self.first_pareto_front_history.get(generation):
                 raise ValueError(
