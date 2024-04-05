@@ -5,12 +5,12 @@ import pandas as pd
 
 class SymbolicEnsembler:
 
-    def __init__(self, programs_election) -> None:
-        self.programs_election = programs_election
+    def __init__(self, programs_selection) -> None:
+        self.programs_selection = programs_selection
 
     def predict(self, data):
         predictions = []
-        for program in self.programs_election:
+        for program in self.programs_selection:
             predictions.append(program.predict(data))
         return np.mean(predictions, axis=0)
     
