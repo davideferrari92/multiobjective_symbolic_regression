@@ -156,6 +156,10 @@ class SymbolicRegressor:
             p.programs_dominated_by: List[Program] = list()
             p.programs_dominates: List[Program] = list()
 
+        directory = os.path.dirname(file)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+            
         with open(file, "wb") as f:
             self_copy = copy.deepcopy(self)
             self_copy.callbacks = list()
