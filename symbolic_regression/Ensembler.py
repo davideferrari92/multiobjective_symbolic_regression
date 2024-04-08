@@ -35,6 +35,9 @@ class SymbolicEnsembler:
             return predictions.mean(axis=1).astype(int)
         else:
             return predictions.mean(axis=1)
+        
+    def evaluate(self, data, threshold: float = None):
+        return self.predict(data, threshold)
 
     def compute_fitness(self, data: Union[pd.DataFrame, pd.Series, Dict], fitness_functions: List[BaseFitness], validation: bool = False):
         """
@@ -58,8 +61,13 @@ class SymbolicEnsembler:
                 self.predict(data,
                              threshold=fitness_function.threshold if hasattr(fitness_function, 'threshold') else None))
             try:
-                fitness[fitness_function.label] = fitness_function.evaluate(
+                fitness_ret = fitness_function.evaluate(
                     program=None, data=data, validation=validation, pred=predictions)
+
+                if isinstance(fitness_ret, tuple):
+                    fitness[fitness_function.label] = fitness_ret[0]
+                else:
+                    fitness[fitness_function.label] = fitness_ret
             except Exception as e:
                 logging.warning(
                     f'Unable to compute fitness {fitness_function.label}')
