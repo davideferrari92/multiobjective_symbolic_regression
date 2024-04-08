@@ -1155,7 +1155,7 @@ class SymbolicRegressor:
             elif self.genetic_algorithm == 'SMS-EMOEA':
                 _ = self._compute_nadir_point(population=self.population)
                 
-                self._exclusive_hypervolume()
+                self._exclusive_hypervolume(population=self.population)
                 self.population.sort(
                     key=lambda p: p.exclusive_hypervolume, reverse=True)
 
