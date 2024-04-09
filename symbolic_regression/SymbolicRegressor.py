@@ -326,7 +326,7 @@ class SymbolicRegressor:
         try:
             points = points[np.sum((points - references)
                                    <= 0, axis=1) == points.shape[1]]
-            self.fpf_hypervolume = _HyperVolume(references).compute(points)
+            self.fpf_hypervolume = _HyperVolume(references).compute(points.copy().tolist())
 
         except ValueError:
             self.fpf_hypervolume = np.nan
@@ -508,7 +508,7 @@ class SymbolicRegressor:
                 try:
                     points = points[np.sum((references - points)
                                            >= 0, axis=1) == points.shape[1]]
-                    hypervolume = _HyperVolume(references).exclusive(points)
+                    hypervolume = _HyperVolume(references).exclusive(points.copy().tolist())
                 except ValueError:
                     hypervolume = [np.inf] * len(pareto_front)
                     logging.warning(
