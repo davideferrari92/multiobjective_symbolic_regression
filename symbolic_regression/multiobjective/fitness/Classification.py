@@ -452,22 +452,22 @@ class ClassificationMinimumDescriptionLength(BaseFitness):
             if not validation:
                 program = self.optimize(program=program, data=data)
 
-            sigmoid_to_evaluate = program.to_logistic(
+            to_evaluate = program.to_logistic(
                 inplace=False)
 
-            sigmoid_pred = sigmoid_to_evaluate.evaluate(data=data)
+            pred = to_evaluate.evaluate(data=data)
 
-        if np.isnan(sigmoid_pred).any():
+        if np.isnan(pred).any():
             return np.inf
 
         try:
-            if self.weights is not None:
+            if self.weights is not None and not validation:
                 BCE = log_loss(y_true=data[self.target],
-                               y_pred=sigmoid_pred,
+                               y_pred=pred,
                                sample_weight=data[self.weights])
             else:
                 BCE = log_loss(y_true=data[self.target],
-                               y_pred=sigmoid_pred,
+                               y_pred=pred,
                                sample_weight=None)
 
             NLL = len(data) * BCE
@@ -510,16 +510,16 @@ class ClassificationMinimumDescriptionLength(BaseFitness):
             num_grad = pyf_grad(tuple(split_X), tuple(split_c))
             num_diag_hess = pyf_diag_hess(tuple(split_X), tuple(split_c))
 
-            sigmoid_pred = np.reshape(
-                sigmoid_pred, (data[self.target].shape[0], 1))
+            pred = np.reshape(
+                pred, (data[self.target].shape[0], 1))
 
             if self.weights is not None:
                 w = data[[self.weights]].to_numpy()
-                FIM_diag = [np.sum(w*((sigmoid_pred-data[[self.target]].to_numpy())*hess +
-                                      (1-sigmoid_pred)*sigmoid_pred*gr**2)) for (gr, hess) in zip(num_grad, num_diag_hess)]
+                FIM_diag = [np.sum(w*((pred-data[[self.target]].to_numpy())*hess +
+                                      (1-pred)*pred*gr**2)) for (gr, hess) in zip(num_grad, num_diag_hess)]
             else:
-                FIM_diag = [np.sum((sigmoid_pred-data[[self.target]].to_numpy())*hess +
-                                   (1-sigmoid_pred)*sigmoid_pred*gr**2) for (gr, hess) in zip(num_grad, num_diag_hess)]
+                FIM_diag = [np.sum((pred-data[[self.target]].to_numpy())*hess +
+                                   (1-pred)*pred*gr**2) for (gr, hess) in zip(num_grad, num_diag_hess)]
 
             Delta = [min(np.sqrt(12/fi), np.abs(c))
                      for fi, c in zip(FIM_diag, constants)]
