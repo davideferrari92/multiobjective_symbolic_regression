@@ -96,7 +96,7 @@ class FedAvgNSGAII(FedNSGAII):
                     else:
                         for r in range(1, self.federated_configuration.get('max_rank_aggregation', 2) + 1):
                             self.regressor.population.extend(
-                                client_regressor.extract_pareto_front(rank=r))
+                                client_regressor.extract_pareto_front(population=client_regressor.population, rank=r))
 
                 logging.debug(
                     f'Incorporated population size: {len(self.regressor.population)}')
@@ -185,13 +185,14 @@ class FedAvgNSGAII(FedNSGAII):
                 if self.federated_configuration.get('track_performance'):
                     ################################################################################
                     ############################# PERFORMANCE LOGGING ##############################
+                    ineligible_path = f"./{self.name}.ineligible_df.csv"
                     if self.federated_rounds_executed > 0:
-                        for cb in self.symbolic_regressor_configuration.get('callbacks'):
+                        for cb in self.symbolic_regressor_configuration.get('callbacks', list()):
                             if isinstance(cb, MOSRCallbackSaveCheckpoint):
-                                path = cb.checkpoint_file + \
+                                ineligible_path = cb.checkpoint_file + \
                                     f'.{self.name}.ineligible_df.csv'
                         try:
-                            ineligible_df = pd.read_csv(path)
+                            ineligible_df = pd.read_csv(ineligible_path)
                         except:
                             ineligible_df = pd.DataFrame()
 
@@ -216,7 +217,7 @@ class FedAvgNSGAII(FedNSGAII):
                                                            'Complexity Std': np.std(complexities),
                                                            }])], ignore_index=True)
 
-                        ineligible_df.to_csv(path, index=False)
+                        ineligible_df.to_csv(ineligible_path, index=False)
 
             else:
                 raise ValueError(f'Invalid stage {self.stage}')
@@ -235,14 +236,16 @@ class FedAvgNSGAII(FedNSGAII):
                 if self.federated_configuration.get('track_performance'):
                     ################################################################################
                     ############################# PERFORMANCE LOGGING ##############################
+                    performance_path = f"./{self.name}.performance.csv"
                     if self.federated_rounds_executed > 0:
-                        for cb in self.symbolic_regressor_configuration.get('callbacks'):
+
+                        for cb in self.symbolic_regressor_configuration.get('callbacks', list()):
                             if isinstance(cb, MOSRCallbackSaveCheckpoint):
-                                path = cb.checkpoint_file + \
+                                performance_path = cb.checkpoint_file + \
                                     f'.{self.name}.performance.csv'
 
                         try:
-                            performance = pd.read_csv(path)
+                            performance = pd.read_csv(performance_path)
                         except:
                             performance = pd.DataFrame()
 
