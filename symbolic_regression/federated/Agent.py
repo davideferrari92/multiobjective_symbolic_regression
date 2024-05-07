@@ -300,11 +300,30 @@ class FederatedAgent:
                 )
             )
             conn.close()
+        except ConnectionResetError:
+                
+            self.log_activity(
+                agent_name=self.name,
+                activity='ConnectionResetError',
+                details='ConnectionResetError while sending message'
+            )
+            logging.warning(
+                f'Orchestrator is not reachable')
+
         except ConnectionRefusedError:
             self.log_activity(
                 agent_name=self.name,
                 activity='ConnectionRefusedError',
                 details='ConnectionRefusedError while sending message'
+            )
+            logging.warning(
+                f'Orchestrator is not reachable')
+            
+        except TimeoutError:
+            self.log_activity(
+                agent_name=self.name,
+                activity='TimeoutError',
+                details='TimeoutError while sending message'
             )
             logging.warning(
                 f'Orchestrator is not reachable')
@@ -328,6 +347,8 @@ class FederatedAgent:
         Returns:
             - None         
         """
+        logging.info(f'Sending message {comm_type} to all servers: {", ".join(list(self.servers.keys()))}')
+
         for fed_server in self.servers:
             self._send_to_agent(
                 agent_name=fed_server,
@@ -347,6 +368,8 @@ class FederatedAgent:
         Returns:
             - None
         """
+        logging.info(f'Sending message {comm_type} to all clients: {", ".join(list(self.clients.keys()))}')
+
         for fed_client in self.clients:
             self._send_to_agent(
                 agent_name=fed_client,
@@ -354,7 +377,7 @@ class FederatedAgent:
                 payload=payload
             )
 
-    def _send_to_agent(self, agent_name: str, comm_type: str, payload: object = None) -> None:
+    def _send_to_agent(self, agent_name: str, comm_type: str, payload: object = None, attempts: int = 5) -> None:
         """ Send a message to a specific agent
 
         Args:
@@ -372,21 +395,21 @@ class FederatedAgent:
             logging.warning(f'Agent {agent_name} not registered')
             return
 
-        try:
-            if self.is_client(agent_name):
-                agent_type = 'client'
-                conn = Client(
-                    (self.clients[agent_name]['address'], self.clients[agent_name]['port']))
-            elif self.is_server(agent_name):
-                agent_type = 'server'
-                conn = Client(
-                    (self.servers[agent_name]['address'], self.servers[agent_name]['port']))
-            elif self.is_orchestrator(agent_name):
-                agent_type = 'orchestrator'
-                conn = Client(
-                    (self.orchestrator_address, self.orchestrator_port))
-
+        for _ in range(attempts):
             try:
+                if self.is_client(agent_name):
+                    agent_type = 'client'
+                    conn = Client(
+                        (self.clients[agent_name]['address'], self.clients[agent_name]['port']))
+                elif self.is_server(agent_name):
+                    agent_type = 'server'
+                    conn = Client(
+                        (self.servers[agent_name]['address'], self.servers[agent_name]['port']))
+                elif self.is_orchestrator(agent_name):
+                    agent_type = 'orchestrator'
+                    conn = Client(
+                        (self.orchestrator_address, self.orchestrator_port))
+
                 conn.send(
                     FederatedDataCommunication(
                         sender_name=self.name,
@@ -396,6 +419,23 @@ class FederatedAgent:
                         payload=payload
                     )
                 )
+
+                conn.close()
+
+                logging.debug(
+                    f'Message {comm_type} sent to {agent_name} ({agent_type})')
+                return
+            
+            except ConnectionResetError:
+                
+                self.log_activity(
+                    agent_name=agent_name,
+                    activity='ConnectionResetError',
+                    details='ConnectionResetError while sending message'
+                )
+                logging.warning(
+                    f'Agent {agent_name} is not reachable')
+
             except ConnectionRefusedError:
                 self.log_activity(
                     agent_name=agent_name,
@@ -404,29 +444,15 @@ class FederatedAgent:
                 )
                 logging.warning(
                     f'Agent {agent_name} is not reachable')
-
-            conn.close()
-
-            logging.debug(
-                f'Message {comm_type} sent to {agent_name} ({agent_type})')
-
-        except TimeoutError:
-            self.log_activity(
-                agent_name=agent_name,
-                activity='TimeoutError',
-                details='TimeoutError while sending message'
-            )
-            logging.warning(
-                f'Agent {agent_name} is not reachable')
-
-        except ConnectionRefusedError:
-            self.log_activity(
-                agent_name=agent_name,
-                activity='ConnectionRefusedError',
-                details='ConnectionRefusedError while sending message'
-            )
-            logging.warning(
-                f'Agent {agent_name} is not reachable')
+                
+            except TimeoutError:
+                self.log_activity(
+                    agent_name=agent_name,
+                    activity='TimeoutError',
+                    details='TimeoutError while sending message'
+                )
+                logging.warning(
+                    f'Agent {agent_name} is not reachable')
 
     def sync_status(self):
         """ Send the status of the client to the orchestrator
