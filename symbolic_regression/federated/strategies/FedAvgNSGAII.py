@@ -323,7 +323,7 @@ class FedAvgNSGAII(FedNSGAII):
                         performance = pd.concat(
                             [performance, pd.DataFrame(extracted)], ignore_index=True)
 
-                        performance.to_csv(path, index=False)
+                        performance.to_csv(performance_path, index=False)
 
                     ############################# PERFORMANCE LOGGING ##############################
                     ################################################################################
