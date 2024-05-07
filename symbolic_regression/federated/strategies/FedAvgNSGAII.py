@@ -3,6 +3,7 @@ import logging
 import numpy as np
 
 import pandas as pd
+from symbolic_regression.Program import Program
 from symbolic_regression.callbacks.CallbackSave import MOSRCallbackSaveCheckpoint
 
 from symbolic_regression.federated.strategies.FedNSGAII import FedNSGAII
@@ -354,6 +355,7 @@ class FedAvgNSGAII(FedNSGAII):
 
                 if self.configuration['federated'].get('compatibility_check', False):
                     for program in self.regressor.population:
+                        program: Program
                         program.bootstrap(
                             data=data,
                             target=self.training_configuration['target'],
