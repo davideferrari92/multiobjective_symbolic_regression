@@ -1,3 +1,4 @@
+from typing import Dict
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (accuracy_score, average_precision_score,
@@ -28,7 +29,7 @@ class BaseClassification(BaseFitness):
         super().__init__(**kwargs)
         self.classification_metric = None
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
@@ -75,7 +76,7 @@ class BinaryCrossentropy(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not validation:
@@ -102,15 +103,8 @@ class Accuracy(BaseClassification):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.classification_metric = accuracy_score
 
-
-class Precision(BaseClassification):
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
@@ -133,12 +127,57 @@ class Precision(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP_train = cm[0][0]
-            TN_train = cm[1][1]
-            FP_train = cm[0][1]
-            FN_train = cm[1][0]
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
 
-            metric = TP_train / (TP_train + FP_train)
+            metric = (TP + TN) / (TP + TN + FP + FN)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
+
+
+class Precision(BaseClassification):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
+
+            metric = TP / (TP + FP)
 
         except ValueError:
             metric = np.nan
@@ -154,21 +193,8 @@ class Recall(BaseClassification):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.classification_metric = recall_score
 
-
-class Sensitivity(Recall):
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-
-class Specificity(BaseFitness):
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
@@ -191,12 +217,153 @@ class Specificity(BaseFitness):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP_train = cm[0][0]
-            TN_train = cm[1][1]
-            FP_train = cm[0][1]
-            FN_train = cm[1][0]
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
 
-            metric = TN_train / (TN_train + FP_train)
+            metric = TP / (TP + FN)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
+
+
+class Sensitivity(Recall):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+
+class Specificity(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
+
+            metric = TN / (TN + FP)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
+
+
+class FPR(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
+
+            metric = FP / (FP + TN)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
+
+
+class FNR(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
+
+            metric = FN / (FN + TP)
 
         except ValueError:
             metric = np.nan
@@ -212,7 +379,7 @@ class PPV(BaseClassification):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
@@ -235,12 +402,12 @@ class PPV(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP_train = cm[0][0]
-            TN_train = cm[1][1]
-            FP_train = cm[0][1]
-            FN_train = cm[1][0]
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
 
-            metric = TP_train / (TP_train + FP_train)
+            metric = TP / (TP + FN)
 
         except ValueError:
             metric = np.nan
@@ -256,7 +423,7 @@ class NPV(BaseClassification):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
@@ -279,12 +446,12 @@ class NPV(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP_train = cm[0][0]
-            TN_train = cm[1][1]
-            FP_train = cm[0][1]
-            FN_train = cm[1][0]
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
 
-            metric = TN_train / (TN_train + FP_train)
+            metric = TN / (TN + FN)
 
         except ValueError:
             metric = np.nan
@@ -300,7 +467,92 @@ class F1Score(BaseClassification):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.classification_metric = f1_score
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
+
+            precision = TP / (TP + FP)
+            recall = TP / (TP + FN)
+
+            metric = 2 * (precision * recall) / (precision + recall)
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        if self.one_minus:
+            return 1 - metric
+        return metric
+
+
+class MCC(BaseFitness):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
+
+        if pred is None:
+            if not program.is_valid:
+                return np.nan
+
+            if not validation:
+                self.optimize(program=program, data=data)
+
+            program_to_evaluate = program.to_logistic(
+                inplace=False) if self.logistic else program
+
+            try:
+                pred = (np.array(program_to_evaluate.evaluate(data=data))
+                        > self.threshold).astype('int')
+            except TypeError:
+                return np.nan
+
+        ground_truth = data[self.target].astype('int')
+
+        try:
+            cm = confusion_matrix(ground_truth, pred)
+
+            TP = cm[0][0]
+            TN = cm[1][1]
+            FP = cm[0][1]
+            FN = cm[1][0]
+
+            metric = (TP * TN - FP * FN) / np.sqrt((TP + FP)
+                                                   * (TP + FN) * (TN + FP) * (TN + FN))
+
+        except ValueError:
+            metric = np.nan
+        except TypeError:  # Singleton array 0 cannot be considered a valid collection.
+            metric = np.nan
+
+        return metric
 
 
 class AUC(BaseClassification):
@@ -309,7 +561,7 @@ class AUC(BaseClassification):
         super().__init__(**kwargs)
         self.classification_metric = roc_auc_score
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not validation:
@@ -389,7 +641,7 @@ class BCEAkaike(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not validation:
@@ -443,7 +695,7 @@ class ClassificationMinimumDescriptionLength(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
