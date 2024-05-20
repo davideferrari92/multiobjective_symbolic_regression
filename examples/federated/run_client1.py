@@ -4,8 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-sys.path.append('../../')
-
+sys.path.append('/data/davide/workspace/multiobjective_symbolic_regression')
 from symbolic_regression.federated.Client import FederatedSRClient
 
 parser = argparse.ArgumentParser(description='Process some integers.')
@@ -28,6 +27,9 @@ address = 'localhost'
 port = 5002
 orchestrator_address = 'localhost'
 orchestrator_port = 5000
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 client = FederatedSRClient(
     name=name,

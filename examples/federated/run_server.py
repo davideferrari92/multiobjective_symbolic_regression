@@ -1,8 +1,7 @@
 import argparse
 import sys
 
-sys.path.append('../../')
-
+sys.path.append('/data/davide/workspace/multiobjective_symbolic_regression')
 from symbolic_regression.federated.Server import FederatedSRServer
 
 parser = argparse.ArgumentParser()
@@ -18,6 +17,9 @@ address = 'localhost'
 port = 5001
 orchestrator_address = 'localhost'
 orchestrator_port = 5000
+
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 server = FederatedSRServer(
     name=name,
