@@ -127,8 +127,8 @@ class Accuracy(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -172,8 +172,8 @@ class Precision(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -217,8 +217,8 @@ class Recall(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -268,8 +268,8 @@ class Specificity(BaseFitness):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -313,8 +313,8 @@ class FPR(BaseFitness):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -358,8 +358,8 @@ class FNR(BaseFitness):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -402,8 +402,8 @@ class PPV(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -446,8 +446,8 @@ class NPV(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -491,8 +491,8 @@ class F1Score(BaseClassification):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 
@@ -539,8 +539,8 @@ class MCC(BaseFitness):
         try:
             cm = confusion_matrix(ground_truth, pred)
 
-            TP = cm[0][0]
-            TN = cm[1][1]
+            TN = cm[0][0]
+            TP = cm[1][1]
             FP = cm[0][1]
             FN = cm[1][0]
 

@@ -1,8 +1,6 @@
 from abc import abstractmethod
 
-import numpy as np
 import pandas as pd
-from astropy import stats
 
 
 class BaseFitness:
@@ -31,6 +29,7 @@ class BaseFitness:
         self.convergence_threshold: float = convergence_threshold
         self.constants_optimization: str = constants_optimization
         self.constants_optimization_conf: dict = constants_optimization_conf
+        self.export: bool = False
 
         self.target: str = None
         self.weights: str = None

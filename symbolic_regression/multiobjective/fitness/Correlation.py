@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pandas as pd
 from scipy.stats import kendalltau, pearsonr, spearmanr
@@ -16,6 +17,10 @@ class BaseCorrelation(BaseFitness):
         """
         super().__init__(**kwargs)
         self.correlation_function: callable = None
+
+        if not kwargs.get('one_minus', False) and kwargs.get('smaller_is_better', False):
+            logging.warning(
+                'Correlations one_minus=False (default) should have smaller_is_better=False (default).')
 
     def evaluate(self, program: Program, data: pd.DataFrame, pred=None, **kwargs) -> float:
 

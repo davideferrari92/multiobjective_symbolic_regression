@@ -1,3 +1,4 @@
+from typing import Dict
 import numpy as np
 import pandas as pd
 from astropy import stats
@@ -18,7 +19,9 @@ class Wasserstein(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program: Program, data: pd.DataFrame, validation: bool = False, pred: pd.DataFrame = None, inject: Dict = dict()) -> float:
+
+        pred = inject.get('pred', pred)
 
         if pred is None:
             if not hasattr(self, 'F_y'):

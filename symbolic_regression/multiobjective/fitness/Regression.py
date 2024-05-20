@@ -1,3 +1,4 @@
+from typing import Dict
 import numpy as np
 import pandas as pd
 from astropy import stats
@@ -23,11 +24,13 @@ class WeightedMeanSquaredError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program=None, data: pd.DataFrame = None, validation: bool = False, pred: pd.DataFrame = None, inject: Dict = dict()) -> float:
+
+        pred = inject.get('pred', pred)
 
         if pred is None:
             if not program.is_valid:
-                return np.nan
+                return np.nan if not self.export else (np.nan, {'pred': np.nan})
 
             if not validation:
                 program = self.optimize(program=program, data=data)
@@ -38,7 +41,7 @@ class WeightedMeanSquaredError(BaseFitness):
             pred = program_to_evaluate.evaluate(data=data)
 
         if np.isnan(pred).any():
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
 
         try:
 
@@ -46,13 +49,13 @@ class WeightedMeanSquaredError(BaseFitness):
                     ).mean() if self.weights and not validation else ((pred - data[self.target])**2).mean()
 
             if isinstance(self.max_error, float) and wmse > self.max_error:
-                return np.inf
+                return np.inf if not self.export else (np.inf, {'pred': pred})
 
-            return wmse
+            return wmse if not self.export else (wmse, {'pred': pred})
         except TypeError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
         except ValueError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
 
 
 class WeightedMeanAbsoluteError(BaseFitness):
@@ -66,7 +69,9 @@ class WeightedMeanAbsoluteError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program=None, data: pd.DataFrame = None, validation: bool = False, pred: pd.DataFrame = None, inject: Dict = dict()) -> float:
+
+        pred = inject.get('pred', pred)
 
         if pred is None:
             if not validation:
@@ -78,20 +83,20 @@ class WeightedMeanAbsoluteError(BaseFitness):
             pred = program_to_evaluate.evaluate(data=data)
 
         if np.isnan(pred).any():
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
 
         try:
             wmae = (np.abs(pred - data[self.target]) * data[self.weights]
                     ).mean() if self.weights and not validation else np.abs(pred - data[self.target]).mean()
 
             if isinstance(self.max_error, float) and wmae > self.max_error:
-                return np.inf
+                return np.inf if not self.export else (np.inf, {'pred': pred})
 
-            return wmae
+            return wmae if not self.export else (wmae, {'pred': pred})
         except TypeError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
         except ValueError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
 
 
 class WeightedRelativeRootMeanSquaredError(BaseFitness):
@@ -105,7 +110,7 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program=None, data: pd.DataFrame = None, validation: bool = False, pred: pd.DataFrame = None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not validation:
@@ -118,7 +123,7 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
 
         if np.isnan(pred).any():
             return np.inf
-        
+
         try:
             if self.weights:
                 y_av = 1e-20+(data[self.target] *
@@ -129,9 +134,9 @@ class WeightedRelativeRootMeanSquaredError(BaseFitness):
                 y_av = 1e-20+(data[self.target]).mean()
                 wmse = np.sqrt(
                     (((pred - data[self.target])**2)).mean())*100./y_av
-            return wmse
+            return wmse if not self.export else (wmse, {'pred': pred})
         except TypeError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
         except ValueError:
             return np.inf
 
@@ -147,7 +152,7 @@ class MeanAveragePercentageError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program=None, data: pd.DataFrame = None, validation: bool = False, pred: pd.DataFrame = None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not validation:
@@ -179,11 +184,11 @@ class MeanAveragePercentageError(BaseFitness):
             pred = scaler.transform(np.array(pred).reshape(-1, 1))
 
             mape = np.mean(np.abs((pred - target) / target))
-            return mape
+            return mape if not self.export else (mape, {'pred': pred})
         except TypeError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
         except ValueError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
 
 
 class MaxAbsoluteError(BaseFitness):
@@ -196,11 +201,11 @@ class MaxAbsoluteError(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program=None, data: pd.DataFrame = None, validation: bool = False, pred: pd.DataFrame = None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
-                return np.inf
+                return np.inf if not self.export else (np.inf, {'pred': np.nan})
 
             program_to_evaluate = program.to_logistic(
                 inplace=False) if self.logistic else program
@@ -213,11 +218,11 @@ class MaxAbsoluteError(BaseFitness):
         try:
             ''' Compute the difference between the prediction and the target and extract the maximum value '''
             max_error = np.max(np.abs(pred - data[self.target]))
-            return max_error
+            return max_error if not self.export else (max_error, {'pred': pred})
         except TypeError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
         except ValueError:
-            return np.inf
+            return np.inf if not self.export else (np.inf, {'pred': pred})
 
 
 class WMSEAkaike(BaseFitness):
@@ -231,11 +236,11 @@ class WMSEAkaike(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program=None, data: pd.DataFrame = None, validation: bool = False, pred: pd.DataFrame = None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
-                return np.nan
+                return np.nan if not self.export else (np.nan, {'pred': np.nan})
 
             if not validation:
                 program = self.optimize(program=program, data=data)
@@ -281,11 +286,11 @@ class RegressionMinimumDescriptionLength(BaseFitness):
         """
         super().__init__(**kwargs)
 
-    def evaluate(self, program, data: pd.DataFrame, validation: bool = False, pred=None) -> float:
+    def evaluate(self, program=None, data: pd.DataFrame = None, validation: bool = False, pred: pd.DataFrame = None, inject: Dict = dict()) -> float:
 
         if pred is None:
             if not program.is_valid:
-                return np.nan
+                return np.nan if not self.export else (np.nan, {'pred': np.nan})
 
             if not validation:
                 program = self.optimize(program=program, data=data)
