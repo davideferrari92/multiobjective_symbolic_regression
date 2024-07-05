@@ -1,14 +1,16 @@
 import copy
 import logging
+from typing import List
+
 import numpy as np
-
 import pandas as pd
-from symbolic_regression.Program import Program
-from symbolic_regression.callbacks.CallbackSave import MOSRCallbackSaveCheckpoint
 
+from symbolic_regression.callbacks.CallbackSave import \
+    MOSRCallbackSaveCheckpoint
 from symbolic_regression.federated.strategies.FedNSGAII import FedNSGAII
-from symbolic_regression.Population import Population
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.Population import Population
+from symbolic_regression.Program import Program
 
 
 class FedAvgNSGAII(FedNSGAII):
@@ -115,10 +117,17 @@ class FedAvgNSGAII(FedNSGAII):
                     """ Apply constants_confidence_intervals_overlap() to each pair of programs in ith_programs.
                     If any one return False, then all of them are set is_valid=False 
                     """
+                    ith_programs: List[Program]
                     is_ineligible = False
                     for i in range(len(ith_programs)):
                         for j in range(i + 1, len(ith_programs)):
-                            if not ith_programs[i].is_valid or not ith_programs[j].is_valid or not ith_programs[i].constants_confidence_intervals_overlap(ith_programs[j]):
+                            if not ith_programs[i].is_valid:
+                                print(f"Program {i} is invalid")
+                                is_ineligible = True
+
+                            if not ith_programs[j].is_valid or not ith_programs[i].constants_confidence_intervals_overlap(ith_programs[j]):
+                                print(
+                                    f"Program {i} and {j} are ineligible for constants overlap")
                                 is_ineligible = True
 
                     if is_ineligible:
@@ -354,6 +363,8 @@ class FedAvgNSGAII(FedNSGAII):
                 self.regressor.data_shape = data.shape
 
                 if self.configuration['federated'].get('compatibility_check', False):
+                    logging.info(
+                        f'Client {self.name} is executing compatibility check')
                     for program in self.regressor.population:
                         program: Program
                         program.bootstrap(
@@ -371,6 +382,10 @@ class FedAvgNSGAII(FedNSGAII):
                         )
 
                 else:
+                    logging.info(
+                        f'Client {self.name} is not executing compatibility check')
+                    logging.info(
+                        f'Client {self.name} computing fitness')
                     self.regressor.compute_fitness_population(
                         data=data, validation=False, validation_federated=False, simplify=False)
                     self.regressor.compute_fitness_population(
