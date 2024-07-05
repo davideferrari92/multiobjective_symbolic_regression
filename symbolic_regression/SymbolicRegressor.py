@@ -13,11 +13,11 @@ from itertools import repeat
 from multiprocessing import Process, Queue
 from typing import Any, Dict, List, Tuple, Union
 
-from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
 from loky import get_reusable_executor
+from matplotlib import pyplot as plt
 from scipy.stats import spearmanr
 
 from symbolic_regression.callbacks.CallbackBase import MOSRCallbackBase
@@ -130,11 +130,12 @@ class SymbolicRegressor:
                      'ratio_invalid_elements',
                      'time_crowding_distance_computation',
                      'time_duplicated_drop',
-                     'time_generation_total'
+                     'time_generation_total',
                      'time_hypervolume_computation',
                      'time_initialization',
                      'time_invalids_drop',
                      'time_offsprings_generation',
+                     'time_offsprings_generation_capped',
                      'time_pareto_front_computation',
                      'time_refill_invalid',
                      'time_spearman_diversity_computation',
@@ -159,7 +160,7 @@ class SymbolicRegressor:
 
         directory = os.path.dirname(file)
         if not os.path.exists(directory):
-            os.makedirs(directory)
+            os.makedirs(directory, exist_ok=True)
 
         with open(file, "wb") as f:
             self_copy = copy.deepcopy(self)
@@ -955,18 +956,33 @@ class SymbolicRegressor:
                 proc.start()
 
             q_size = 0
-            while q_size < self.population_size:
-                # Make sure at least some processes are alive
+            _elapsed_s = 1
+
+            too_long = False
+
+            while q_size < self.population_size and not too_long:
                 q_size = queue.qsize()
+                
+                if _elapsed_s > 1800 and q_size/_elapsed_s < 0.15:
+                    too_long = True
+
+                # Make sure at least some processes are alive
                 if self.verbose > 1:
+
                     _elapsed_s = max(
                         1, int(round(time.perf_counter() - before)))
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
+
                     print(
                         f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}   ', end='\r', flush=True)
                 time.sleep(.2)
 
             else:
+                if too_long:
+                    logging.warning(
+                        f"Offsprings generation got too slow and was interrupted: {_elapsed}. {q_size}/{self.population_size} offsprings generated.")
+                    was_limited_str = ' (was limited by time)'
+
                 q_size = queue.qsize()
                 if self.verbose > 1:
                     _elapsed_s = max(
@@ -974,9 +990,9 @@ class SymbolicRegressor:
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
                     print(
                         f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
-                for p in self.procs:
-                    if p.is_alive():
-                        p.join(timeout=.1)
+                # for p in self.procs:
+                #     if p.is_alive():
+                #         p.join(timeout=.1)
 
             for _ in range(self.population_size):
                 offsprings.append(queue.get())
@@ -991,6 +1007,8 @@ class SymbolicRegressor:
 
             self.times.loc[self.generation,
                            "time_offsprings_generation"] = time.perf_counter() - before
+            self.times.loc[self.generation,
+                           "time_offsprings_generation_capped"] = too_long
 
             self.population = Population(self.population + offsprings)
 
