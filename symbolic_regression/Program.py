@@ -231,7 +231,7 @@ class Program:
         constants_optimization_conf = copy.deepcopy(
             constants_optimization_conf)
         constants_optimization_conf['epochs'] = max(
-            200, constants_optimization_conf['epochs'])
+            200, constants_optimization_conf.get('epochs', 100))
 
         recalibrated = copy.deepcopy(self)
         recalibrated.set_constants(
@@ -380,15 +380,33 @@ class Program:
                 return
 
         _converged: List[bool] = list()
+        _export = {}
 
         for ftn in self.fitness_functions:
             try:
                 """ We don't want optimization of the constants in the validation stage, both local (validation)
                 and federated (validation_federated)
                 """
-                fitness_value = round(ftn.evaluate(
-                    program=self, data=data, validation=validation or validation_federated), 5)
+                if ftn.export is True:
+                    fitness_value, _this_export = ftn.evaluate(
+                        program=self, data=data, validation=validation or validation_federated, inject=_export)
+
+                    _export = {**_export, **_this_export}
+
+                else:
+                    fitness_value = ftn.evaluate(
+                        program=self, data=data, pred=_export.get('pred'), validation=validation or validation_federated, inject=_export)
+                
+                fitness_value = round(fitness_value, 5) if not pd.isna(
+                    fitness_value) else fitness_value
+
             except KeyError:
+                import traceback
+                print(traceback.format_exc())
+                fitness_value = np.inf
+            except Exception:
+                import traceback
+                print(traceback.format_exc())
                 fitness_value = np.inf
 
             if pd.isna(fitness_value):
@@ -447,13 +465,18 @@ class Program:
 
         self.program_hypervolume = _HyperVolume(references).compute(points)
 
-    def predict(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
+    def predict(self, data: Union[dict, pd.Series, pd.DataFrame], logistic: bool = False, threshold: float = None) -> Union[int, float]:
         """ This function predict the value of the program on the given data.
         The data can be a dictionary, a pandas Series or a pandas DataFrame.
 
         Args:
             - data: dict, pd.Series, pd.DataFrame
                 The data on which the program will be evaluated
+            - logistic: bool  (default: False)
+                If True, the program will be evaluated using the logistic function
+            - threshold: float  (default: None)
+                The threshold to use for the logistic function
+            
 
         Returns:
             - int, float
@@ -800,7 +823,7 @@ class Program:
                 True if the program is valid, False otherwise.    
         """
 
-        return self.program.is_valid and self._override_is_valid and self.has_valid_fitness
+        return self.program.is_valid and self._override_is_valid
 
     def optimize(self,
                  data: Union[dict, pd.Series, pd.DataFrame],
