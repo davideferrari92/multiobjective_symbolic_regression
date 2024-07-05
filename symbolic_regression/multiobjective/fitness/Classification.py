@@ -649,8 +649,10 @@ class BCEAkaike(BaseFitness):
 
             if self.logistic:
                 program_to_evaluate = program.to_logistic(inplace=False)
+            else:
+                program_to_evaluate = program
 
-            nconstants = len(program.get_constants())
+            nconstants = len(program_to_evaluate.get_constants())
 
             pred = np.array(program_to_evaluate.evaluate(data=data))
 
@@ -669,19 +671,6 @@ class BCEAkaike(BaseFitness):
             return np.inf
         except UnboundLocalError:
             return np.inf
-
-
-class AkaikeInformationCriteriaBCE(BCEAkaike):
-
-    def __init__(self, **kwargs) -> None:
-        """ This fitness requires the following arguments:
-
-        - target: str
-        - weights: str
-        - logistic: bool
-
-        """
-        super().__init__(**kwargs)
 
 
 class ClassificationMinimumDescriptionLength(BaseFitness):
