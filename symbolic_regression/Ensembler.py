@@ -1,16 +1,19 @@
 import logging
 from typing import Dict, List, Union
+
+import numpy as np
 import pandas as pd
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
+from symbolic_regression.Program import Program
 
 
 class SymbolicEnsembler:
 
-    def __init__(self, programs_selection) -> None:
+    def __init__(self, programs_selection: List[Program]) -> None:
         self.programs_selection = programs_selection
 
-    def predict(self, data, threshold: float = None, logistic: bool = False):
+    def predict(self, data, threshold: float = None, logistic: bool = False, voting_threshold: float = None):
         """
         Predicts the output for the given input data using the ensemble of programs.
 
@@ -21,12 +24,15 @@ class SymbolicEnsembler:
             The threshold value to be used for binary classification. If None, regression predictions are made.
         - logistic: bool (default=False)
             If True, the logistic function is applied to the predictions.
+        - voting_threshold: float (default=None)
+            The threshold value to be used for voting. If None, regression predictions are made.
 
         Returns:
         - predictions: pd.Series
             The predicted output for the given input data.
 
         """
+
         predictions = pd.DataFrame()
         for index, program in enumerate(self.programs_selection):
             if logistic:
@@ -35,14 +41,24 @@ class SymbolicEnsembler:
             else:
                 predictions[index] = program.predict(data)
 
-        if threshold is not None:
+        if isinstance(threshold, float) and 0 <= threshold <= 1:
             predictions = (predictions > threshold).astype(int)
-            return predictions.mean(axis=1).astype(int)
-        else:
-            return predictions.mean(axis=1)
 
-    def evaluate(self, data, threshold: float = None, logistic: bool = False):
-        return self.predict(data, threshold, logistic)
+            predictions = predictions.mean(axis=1)
+            if isinstance(voting_threshold, float) and 0 <= voting_threshold <= 1:
+                predictions = predictions.apply(lambda x: 1 if x >= voting_threshold else (0 if x <= (1 - voting_threshold) else np.nan))
+            
+        else:
+            predictions = predictions.mean(axis=1)
+
+            if isinstance(voting_threshold, float) and 0 <= voting_threshold <= 1:
+                predictions = predictions.apply(lambda x: 1 if x >= voting_threshold else (0 if x <= (1 - voting_threshold) else np.nan))
+            
+        return predictions
+
+
+    def evaluate(self, data, threshold: float = None, logistic: bool = False, voting_threshold: float = None):
+        return self.predict(data, threshold, logistic, voting_threshold)
 
     def compute_fitness(self, data: Union[pd.DataFrame, pd.Series, Dict], fitness_functions: List[BaseFitness], validation: bool = False):
         """
