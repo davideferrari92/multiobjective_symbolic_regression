@@ -476,7 +476,7 @@ class SymbolicRegressor:
             population=population, rank=rank_iter)
 
         while pareto_front:  # Exits when extract_pareto_front return an empty list
-            
+
             for p in pareto_front:
                 p.crowding_distance = 0
 
@@ -507,13 +507,15 @@ class SymbolicRegressor:
             pareto_front = self.extract_pareto_front(
                 population=population, rank=rank_iter)
 
-    def _exclusive_hypervolume(self, population: Population, rank_iter: int = 1):
+    def _exclusive_hypervolume(self, population: Population, rank: int = 1):
         """
         Calculate the exclusive hypervolume for the given population and rank iteration.
 
-        Parameters:
-        - population (Population): The population for which to calculate the exclusive hypervolume.
-        - rank_iter (int): The rank iteration to consider.
+        Args:
+            - population (Population):
+                The population for which to calculate the exclusive hypervolume.
+            - rank (int):
+                The rank iteration to consider.
 
         Returns:
         None
@@ -539,7 +541,7 @@ class SymbolicRegressor:
             [ftn.hypervolume_reference for ftn in fitness_to_hypervolume])
 
         pareto_front: List[Program] = self.extract_pareto_front(
-            population=population, rank=rank_iter)
+            population=population, rank=rank)
         while pareto_front:
             points = np.array([np.array([p.fitness[ftn.label] for ftn in fitness_to_hypervolume])
                                for p in pareto_front])
@@ -551,15 +553,15 @@ class SymbolicRegressor:
                     references).exclusive(points.copy().tolist())
             except ValueError:
                 hypervolume = [np.inf] * len(pareto_front)
-                logging.warning(
-                    f"ValueError computing hypervolume for rank {rank_iter}")
+                # logging.warning(
+                #     f"ValueError computing hypervolume for rank {rank}")
 
             for program, hypervolume in zip(pareto_front, hypervolume):
                 program.exclusive_hypervolume = hypervolume
 
-            rank_iter += 1
+            rank += 1
             pareto_front = self.extract_pareto_front(
-                population=population, rank=rank_iter)
+                population=population, rank=rank)
 
     @staticmethod
     def dominance(program1: Program, program2: Program) -> bool:
@@ -1208,54 +1210,10 @@ class SymbolicRegressor:
             # Calculates the crowding distance
             before = time.perf_counter()
             if self.genetic_algorithm == 'NSGA-II':
-                self._crowding_distance(
-                    population=self.population, rank_iter=1)
-                self.population.sort(
-                    key=lambda p: p.crowding_distance, reverse=True)
+                self.population = self._select_final_population_NSGAII()
+
             elif self.genetic_algorithm == 'SMS-EMOEA':
-                _ = self._compute_nadir_point(population=self.population)
-
-                self._exclusive_hypervolume(population=self.population)
-                self.population.sort(
-                    key=lambda p: p.exclusive_hypervolume, reverse=True)
-
-            self.population.sort(key=lambda p: p.rank, reverse=False)
-
-            rank_at_population_size = self.population[self.population_size - 1].rank
-
-            population_to_finalize = [
-                p for p in self.population if p.rank <= rank_at_population_size-1]
-            p_in_last_rank = self.extract_pareto_front(
-                population=self.population, rank=rank_at_population_size)
-
-            if len(population_to_finalize) + len(p_in_last_rank) == self.population_size:
-                self.population = population_to_finalize + p_in_last_rank
-
-            else:
-
-                number_p_to_remove = len(
-                    population_to_finalize) + len(p_in_last_rank) - self.population_size
-
-                for _ in range(number_p_to_remove):
-
-                    p_in_last_rank.pop()
-
-                    if self.genetic_algorithm == 'NSGA-II':
-                        self._crowding_distance(
-                            population=p_in_last_rank, rank_iter=rank_at_population_size)
-                        p_in_last_rank.sort(
-                            key=lambda p: p.crowding_distance, reverse=True)
-
-                    elif self.genetic_algorithm == 'SMS-EMOEA':
-                        _ = self._compute_nadir_point(
-                            population=p_in_last_rank)
-
-                        self._exclusive_hypervolume(
-                            population=p_in_last_rank, rank_iter=rank_at_population_size)
-                        p_in_last_rank.sort(
-                            key=lambda p: p.exclusive_hypervolume, reverse=True)
-
-                self.population = population_to_finalize + p_in_last_rank
+                self.population = self._select_final_population_SMS_EMOA()
 
             self.times.loc[self.generation,
                            "time_second_selection_criterion_computation"] = time.perf_counter() - before
@@ -2241,6 +2199,141 @@ class SymbolicRegressor:
             new_population.append(p)
 
         self.population = new_population
+
+    def _select_final_population_NSGAII(self):
+        """
+        This method selects the final population that should propagate to the next generation.  
+        It selects based on rank until it risks saturating population size. Afterward, it recursively remove from the list
+        the worst elements of the reamining front based on secondary selection criteria. 
+
+        Args:
+            - None
+
+        Returns:
+            - survivors: List[Program]
+                The list of programs that will propagate to the next generation
+
+        """
+        survivors = []
+
+        rank_iter = 1
+        pareto_front: List[Program] = self.extract_pareto_front(
+            population=self.population, rank=rank_iter)
+
+        while (len(survivors)+len(pareto_front) <= self.population_size) and pareto_front:
+            survivors += pareto_front
+            rank_iter += 1
+            pareto_front = self.extract_pareto_front(
+                population=self.population, rank=rank_iter)
+
+        if not pareto_front or (len(survivors) == self.population_size):
+            return survivors
+
+        else:
+            self._crowding_distance(
+                population=self.population, rank_iter=rank_iter)
+
+            pareto_front.sort(
+                key=lambda p: p.crowding_distance, reverse=False)
+
+            survivors += pareto_front[:self.population_size-len(survivors)]
+
+        for rank in range(1, rank_iter + 1):
+            self._crowding_distance(
+                population=survivors, rank_iter=rank)
+
+        return survivors
+
+    def _select_final_population_NSGAII_iterative(self):
+        """
+        This method selects the final population that should propagate to the next generation.  
+        It selects based on rank until it risks saturating population size. Afterward, it recursively remove from the list
+        the worst elements of the reamining front based on secondary selection criteria. 
+
+        Args:
+            - None
+
+        Returns:
+            - survivors: List[Program]
+                The list of programs that will propagate to the next generation
+        """
+        survivors = []
+
+        rank_iter = 1
+        pareto_front: List[Program] = self.extract_pareto_front(
+            population=self.population, rank=rank_iter)
+
+        while (len(survivors)+len(pareto_front) <= self.population_size) and pareto_front:
+            survivors += pareto_front
+            rank_iter += 1
+            pareto_front = self.extract_pareto_front(
+                population=self.population, rank=rank_iter)
+
+        if not pareto_front or (len(survivors) == self.population_size):
+            return survivors
+
+        else:
+            while len(survivors) + len(pareto_front) > self.population_size:
+                self._crowding_distance(
+                    population=pareto_front, rank_iter=rank_iter)
+
+                pareto_front.sort(
+                    key=lambda p: p.crowding_distance, reverse=True)
+
+                pareto_front.pop(0)
+
+            survivors += pareto_front
+
+        for rank in range(1, rank_iter + 1):
+            self._crowding_distance(
+                population=survivors, rank_iter=rank)
+
+        return survivors
+
+    def _select_final_population_SMS_EMOA(self):
+        """
+
+        Args:
+            - None
+
+        Returns:
+            - survivors: List[Program]
+                The list of programs that will propagate to the next generation
+        """
+
+        _ = self._compute_nadir_point(population=self.population)
+
+        survivors = []
+
+        rank_iter = 1
+        pareto_front: List[Program] = self.extract_pareto_front(
+            population=self.population, rank=rank_iter)
+
+        while (len(survivors)+len(pareto_front) <= self.population_size) and pareto_front:
+            survivors += pareto_front
+            rank_iter += 1
+            pareto_front = self.extract_pareto_front(
+                population=self.population, rank=rank_iter)
+
+        if not pareto_front or (len(survivors) == self.population_size):
+            return survivors
+
+        else:
+            while (len(survivors)+len(pareto_front) > self.population_size):
+                self._exclusive_hypervolume(
+                    population=pareto_front, rank=rank_iter)
+
+                pareto_front.sort(
+                    key=lambda p: p.exclusive_hypervolume, reverse=False)
+
+                pareto_front.pop(0)
+
+            survivors += pareto_front
+
+        for rank in range(1, rank_iter + 1):
+            self._exclusive_hypervolume(population=survivors, rank=rank)
+
+        return survivors
 
     def spearman_diversity(self, data: Union[dict, pd.Series, pd.DataFrame]) -> float:
         """
