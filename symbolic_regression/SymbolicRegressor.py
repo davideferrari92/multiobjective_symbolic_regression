@@ -476,6 +476,10 @@ class SymbolicRegressor:
             population=population, rank=rank_iter)
 
         while pareto_front:  # Exits when extract_pareto_front return an empty list
+            
+            for p in pareto_front:
+                p.crowding_distance = 0
+
             for ftn in self.fitness_functions:
 
                 fitness_label = ftn.label
@@ -492,12 +496,12 @@ class SymbolicRegressor:
 
                 for index, program in enumerate(pareto_front):
                     if index == 0 or index == len(pareto_front) - 1:
-                        program.crowding_distance = float('inf')
+                        delta = float('inf')
                     else:
                         delta = pareto_front[index - 1].fitness[fitness_label] - \
                             pareto_front[index + 1].fitness[fitness_label]
 
-                        program.crowding_distance = delta / norm
+                    program.crowding_distance += delta / norm
 
             rank_iter += 1
             pareto_front = self.extract_pareto_front(
