@@ -12,8 +12,8 @@ from pytexit import py2tex
 
 from symbolic_regression.multiobjective.fitness.Base import BaseFitness
 from symbolic_regression.multiobjective.hypervolume import _HyperVolume
-from symbolic_regression.multiobjective.optimization import (ADAM, ADAM2FOLD, SCIPY,
-                                                             SGD)
+from symbolic_regression.multiobjective.optimization import (ADAM, ADAM2FOLD,
+                                                             SCIPY, SGD)
 from symbolic_regression.Node import (FeatureNode, InvalidNode, Node,
                                       OperationNode)
 from symbolic_regression.operators import (OPERATOR_ADD, OPERATOR_MUL,
@@ -801,7 +801,7 @@ class Program:
         # Reset the hash to force the re-computation
         self._hash = None
 
-    def is_duplicate(self, other: 'Program') -> bool:
+    def is_duplicate(self, other: 'Program', delta_fitness: float = 0.01, drop_by_similarity: bool = False) -> bool:
         """ Determines whether two programs are equivalent based on equal fitnesses
 
         If the fitness of two programs are identical, we assume they are equivalent to each other.
@@ -815,10 +815,15 @@ class Program:
             - bool
                 True if the two programs are equivalent, False otherwise.
         """
+
+        if drop_by_similarity and self.similarity(other) > 0.99:
+             return True
+
         for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
                                                       other.fitness.items()):
+
             # One difference is enough for them not to be identical
-            if round(a_fit, 3) != round(b_fit, 3):
+            if abs(a_fit-b_fit) / abs(a_fit) > delta_fitness:
                 return False
 
         return True

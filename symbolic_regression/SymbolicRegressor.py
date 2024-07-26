@@ -36,7 +36,9 @@ class SymbolicRegressor:
                  parsimony=0.8, parsimony_decay=0.85, population_size: int = 300,
                  tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1},
                  callbacks: List[MOSRCallbackBase] = list(), genetic_algorithm: str = 'NSGA-II',
-                 offspring_timeout_condition: tuple = None) -> None:
+                 offspring_timeout_condition: tuple = None,
+                 duplicate_drop_by_similarity: bool = False, duplicates_delta_fitness: float = 1e-2,
+                 ) -> None:
         """ This class implements the basic features for training a Symbolic Regression algorithm
 
         Args:
@@ -88,6 +90,12 @@ class SymbolicRegressor:
                 per second below which the condition is True. If the condition is True the offspring
                 generation is stopped and the training goes to the next generation
 
+            - duplicate_drop_by_similarity: bool (default: False)
+                this is a boolean that set if the duplicates are dropped by similarity
+
+            - duplicates_delta_fitness: float (default: 1e-2)
+                this is the delta fitness to consider two programs as duplicates
+
         Returns:
             - None
         """
@@ -108,6 +116,8 @@ class SymbolicRegressor:
         self.parsimony: float = parsimony
         self.parsimony_decay: float = parsimony_decay
         self.tournament_size: int = tournament_size
+        self.duplicates_delta_fitness: float = duplicates_delta_fitness
+        self.duplicates_drop_by_similarity: bool = duplicate_drop_by_similarity
 
         # Training Configuration
         self.data_shape: tuple = None
@@ -611,7 +621,7 @@ class SymbolicRegressor:
             [p.complexity for p in self.population])
 
         for index, complexity_index in enumerate(complexities_index):
-            p = self.population[complexity_index]
+            p: 'Program' = self.population[complexity_index]
 
             if p.is_valid and not p._is_duplicated:
 
@@ -621,7 +631,11 @@ class SymbolicRegressor:
                 for j in other_indices:
                     p_confront = self.population[j]
                     if p_confront.is_valid and not p_confront._is_duplicated:
-                        p_confront._is_duplicated = p.is_duplicate(p_confront)
+                        p_confront._is_duplicated = p.is_duplicate(
+                            other=p_confront,
+                            delta_fitness=self.duplicates_delta_fitness,
+                            drop_by_similarity=self.duplicates_drop_by_similarity,
+                        )
 
         if inplace:
             self.population: Population = Population(
