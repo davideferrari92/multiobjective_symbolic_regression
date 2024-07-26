@@ -465,6 +465,24 @@ class Program:
 
         self.program_hypervolume = _HyperVolume(references).compute(points)
 
+    def from_string(self, string: str) -> None:
+        """ This function allow to create a program from a string.
+
+        The string must be a valid mathematical formula that can be parsed by the sympy library.
+
+        Args:
+            - string: str
+                The string representing the mathematical formula
+
+        Returns:
+            - Program
+        """
+
+        self.program: 'Node' = self.simplify(
+            inject=string, inplace=False).program
+
+        return self
+
     def predict(self, data: Union[dict, pd.Series, pd.DataFrame], logistic: bool = False, threshold: float = None) -> Union[int, float]:
         """ This function predict the value of the program on the given data.
         The data can be a dictionary, a pandas Series or a pandas DataFrame.
@@ -884,8 +902,8 @@ class Program:
         n_constants = len(self.get_constants(return_objects=False))
         n_features_used = len(self.features_used)
         
-        if n_constants > 100:
-            logging.debug('Program has more than 100 constants. Optimizing using ADAM')
+        if n_constants > 40:
+            logging.debug('Program has more than 40 constants. Optimizing using ADAM')
             constants_optimization = 'ADAM'
             constants_optimization_conf = {
                 'task': task,

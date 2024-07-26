@@ -6,6 +6,7 @@ import multiprocessing
 import os
 import pickle
 import random
+import re
 import time
 import traceback
 import zlib
@@ -31,7 +32,11 @@ backend_parallel = 'loky'
 
 class SymbolicRegressor:
 
-    def __init__(self, client_name: str, const_range: tuple = (0, 1), parsimony=0.8, parsimony_decay=0.85, population_size: int = 300, tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1}, callbacks: List[MOSRCallbackBase] = list(), genetic_algorithm: str = 'NSGA-II') -> None:
+    def __init__(self, client_name: str, const_range: tuple = (0, 1), random_state: int = 42,
+                 parsimony=0.8, parsimony_decay=0.85, population_size: int = 300,
+                 tournament_size: int = 3, genetic_operators_frequency: dict = {'crossover': 1, 'mutation': 1},
+                 callbacks: List[MOSRCallbackBase] = list(), genetic_algorithm: str = 'NSGA-II',
+                 offspring_timeout_condition: tuple = None) -> None:
         """ This class implements the basic features for training a Symbolic Regression algorithm
 
         Args:
@@ -40,6 +45,9 @@ class SymbolicRegressor:
 
             - const_range: tuple (default: (0, 1))
                 this is the range of values from which to generate constants in the program
+
+            - random_state: int (default: 42)
+                the random state to be used in the training
 
             - parsimony: float (default: 0.8)
                 the ratio to which a new operation is chosen instead of a terminal node in program generations
@@ -73,6 +81,13 @@ class SymbolicRegressor:
                 the genetic algorithm to be used in the training. Can be 'NSGA-II' or 'SMS-EMOEA'
                 If none of the two is provided, the default is 'NSGA-II'
 
+            - offspring_timeout_condition: tuple (default: None)
+                this is a tuple that set the condition to stop the training
+                The tuple is in the form (int, float) where the first element is the number of seconds
+                after which the condition is checked and the second element is the number of offsprings
+                per second below which the condition is True. If the condition is True the offspring
+                generation is stopped and the training goes to the next generation
+
         Returns:
             - None
         """
@@ -80,8 +95,11 @@ class SymbolicRegressor:
         # Regressor Configuration
         self.client_name: str = client_name
         self.features: List = None
+        self.offspring_timeout_condition: tuple = offspring_timeout_condition
         self.operations: List = None
         self.population_size: int = population_size
+        self.random_state: int = random_state
+        random.seed(self.random_state)
 
         # Population Configuration
         self.population: Population = Population()
@@ -111,6 +129,7 @@ class SymbolicRegressor:
         # Statistics
         self.best_history: Dict = dict()
         self.first_pareto_front_history: Dict = dict()
+        self.population_history: Dict = dict()
         self.fpf_hypervolume: float = None
         self.fpf_hypervolume_reference: float = None
         self.fpf_tree_diversity: float = None
@@ -799,6 +818,7 @@ class SymbolicRegressor:
                     repeat(copy.deepcopy(self.fitness_functions),
                            self.population_size),
                     repeat(self.const_range, self.population_size),
+                    repeat(self.random_state, self.population_size),
                     repeat(self.parsimony, self.population_size),
                     repeat(self.parsimony_decay, self.population_size),
                     repeat(copy.deepcopy(val_data), self.population_size),
@@ -839,6 +859,7 @@ class SymbolicRegressor:
                         repeat(self.fitness_functions,
                                new_individuals),
                         repeat(self.const_range, new_individuals),
+                        repeat(self.random_state, new_individuals),
                         repeat(self.parsimony, new_individuals),
                         repeat(self.parsimony_decay, new_individuals),
                         repeat(val_data, new_individuals),
@@ -962,8 +983,8 @@ class SymbolicRegressor:
 
             while q_size < self.population_size and not too_long:
                 q_size = queue.qsize()
-                
-                if _elapsed_s > 1800 and q_size/_elapsed_s < 0.15:
+
+                if isinstance(self.offspring_timeout_condition, tuple) and _elapsed_s > self.offspring_timeout_condition[0] and q_size/_elapsed_s < self.offspring_timeout_condition[1]:
                     too_long = True
 
                 # Make sure at least some processes are alive
@@ -974,7 +995,7 @@ class SymbolicRegressor:
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
 
                     print(
-                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}   ', end='\r', flush=True)
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}', end='\r', flush=True)
                 time.sleep(.2)
 
             else:
@@ -990,18 +1011,12 @@ class SymbolicRegressor:
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
                     print(
                         f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
-                # for p in self.procs:
-                #     if p.is_alive():
-                #         p.join(timeout=.1)
 
-            for _ in range(self.population_size):
+            for i in range(min(self.population_size, q_size)):
                 offsprings.append(queue.get())
 
             for proc in self.procs:
-                try:
-                    proc.kill()
-                except:
-                    pass
+                proc.kill()
 
             self.procs = list()
 
@@ -1088,6 +1103,7 @@ class SymbolicRegressor:
                             self.operations,
                             self.fitness_functions,
                             self.const_range,
+                            self.random_state,
                             self.parsimony,
                             self.parsimony_decay,
                             int(1.5 * max(os.cpu_count(), missing_elements/jobs)),
@@ -1317,7 +1333,11 @@ class SymbolicRegressor:
                 print(f"Training terminated by callback")
                 return
 
-    def generate_individual(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> Program:
+    def generate_individual(self,
+                            data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict],
+                            fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), random_state: int = 42,
+                            parsimony: float = 0.8, parsimony_decay: float = 0.85,
+                            val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> Program:
         """
         This method generates a new individual for the population
 
@@ -1333,6 +1353,8 @@ class SymbolicRegressor:
             - const_range: tuple
                 The range of the constants to be used in the generation. There will then be
                 adapted during the optimization process.
+            - random_state: int (default 42)
+                The random state to be used in the generation
             - fitness_functions: List[BaseFitness]
                 The list of fitness functions to be used in the generation
             - parsimony: float (default 0.8)
@@ -1351,6 +1373,9 @@ class SymbolicRegressor:
                 The generated program
 
         """
+        if isinstance(random_state, int):
+            random.seed(random_state)
+
         new_p = Program(features=features, operations=operations, const_range=const_range,
                         parsimony=parsimony, parsimony_decay=parsimony_decay)
         new_p.init_program()
@@ -1363,7 +1388,11 @@ class SymbolicRegressor:
 
         return new_p
 
-    def generate_individual_batch(self, data: Union[dict, pd.DataFrame, pd.Series], features: List[str], operations: List[dict], fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), parsimony: float = 0.8, parsimony_decay: float = 0.85, batch_size: int = 1000, queue: Queue = None, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> Program:
+    def generate_individual_batch(self, data: Union[dict, pd.DataFrame, pd.Series],
+                                  features: List[str], operations: List[dict],
+                                  fitness_functions: List[BaseFitness], const_range: tuple = (0, 1), random_state: int = 42,
+                                  parsimony: float = 0.8, parsimony_decay: float = 0.85, batch_size: int = 1000,
+                                  queue: Queue = None, val_data: Union[dict, pd.DataFrame, pd.Series] = None) -> Program:
         """
         This method generates a new individual for the population
 
@@ -1379,6 +1408,8 @@ class SymbolicRegressor:
             - const_range: tuple
                 The range of the constants to be used in the generation. There will then be
                 adapted during the optimization process.
+            - random_state: int (default 42)
+                The random state to be used in the generation
             - fitness_functions: List[BaseFitness]
                 The list of fitness functions to be used in the generation
             - parsimony: float (default 0.8)
@@ -1402,6 +1433,9 @@ class SymbolicRegressor:
 
         """
 
+        if isinstance(random_state, int):
+            random.seed(random_state)
+
         new_ps: List[Program] = list()
 
         submitted = 0
@@ -1411,7 +1445,7 @@ class SymbolicRegressor:
                 return
 
             new_p = self.generate_individual(data=data, features=features, operations=operations,
-                                             fitness_functions=fitness_functions, const_range=const_range,
+                                             fitness_functions=fitness_functions, const_range=const_range, random_state=random_state,
                                              parsimony=parsimony, parsimony_decay=parsimony_decay, val_data=val_data)
 
             if new_p._has_incomplete_fitness:
@@ -1959,7 +1993,7 @@ class SymbolicRegressor:
 
         return fig
 
-    def plot_compare_fitness(self, perf_x: str, perf_y: str, pf_rank: int = 1, generation: int = None, on_val: bool = False,
+    def plot_compare_fitness(self, perf_x: str, perf_y: str, pf_rank: Union[int, str] = 1, generation: int = None, on_val: bool = False,
                              marker_dict: Dict[str, Any] = dict(size=5, color='grey'), highlight_best: bool = True,
                              xlim: Tuple[float, float] = None, ylim: Tuple[float, float] = None,
                              xlog: bool = False, ylog: bool = False,
@@ -1972,7 +2006,7 @@ class SymbolicRegressor:
                 The name of the first performance metric to plot
             - perf_y: str
                 The name of the second performance metric to plot
-            - pf_rank: int (default 1)
+            - pf_rank: Union[int, str] (default 1)
                 The rank of the pareto front to plot
             - generation: int (default None)
                 The generation to plot. If -1, the last generation is plotted
@@ -2005,15 +2039,23 @@ class SymbolicRegressor:
         generation = max(self.first_pareto_front_history.keys()
                          ) if not generation else generation
 
-        if not generation:
+        if isinstance(pf_rank, int):
             iterate_over = self.extract_pareto_front(
                 population=self.population, rank=pf_rank)
-        else:
-            if not self.first_pareto_front_history.get(generation):
-                raise ValueError(
-                    f"Generation {generation} not found in the history. Please use one of the following: {', '.join([str(g) for g in self.first_pareto_front_history.keys()])}")
+        elif pf_rank == 'all':
+            iterate_over = self.population
+        elif re.match(r'^\d+-\d+$', pf_rank):
+            rank_start, rank_end = map(int, pf_rank.split('-'))
+            iterate_over = []
+            for r in range(rank_start, rank_end+1):
+                iterate_over.extend(self.extract_pareto_front(
+                    population=self.population, rank=r))
 
-            iterate_over = self.first_pareto_front_history[generation]
+        if not self.first_pareto_front_history.get(generation):
+            raise ValueError(
+                f"Generation {generation} not found in the history. Please use one of the following: {', '.join([str(g) for g in self.first_pareto_front_history.keys()])}")
+
+        # iterate_over = self.first_pareto_front_history[generation]
 
         try:
             iterate_over = decompress(iterate_over)
@@ -2157,6 +2199,31 @@ class SymbolicRegressor:
                     print(f'\t{p.fitness_validation}')
                 print()
 
+    def load_population_from_summary(self, summary: pd.DataFrame):
+        """
+        This method loads the population from a summary DataFrame
+
+        Args:
+            - summary: pd.DataFrame
+                The summary DataFrame from which to load the population
+        Returns:
+            - None
+        """
+
+        new_population: List = list()
+
+        for index, row in summary.iterrows():
+            p = Program(operations=self.operations, features=self.features).from_string(
+                row['Info Program'])
+            p.fitness = {k.replace("Train ", ""): v for k,
+                         v in row.items() if k.startswith('Train ')}
+            p.fitness_validation = {
+                k.replace("Validation ", ""): v for k, v in row.items() if k.startswith('Validation ')}
+
+            new_population.append(p)
+
+        self.population = new_population
+
     def spearman_diversity(self, data: Union[dict, pd.Series, pd.DataFrame]) -> float:
         """
         This method computes the diversity of the first pareto front using the spearman correlation
@@ -2176,8 +2243,9 @@ class SymbolicRegressor:
             diversities = list()
             for index, program in enumerate(self.first_pareto_front):
                 for other_program in self.first_pareto_front[index + 1:]:
-                    diversities.append(spearmanr(program.evaluate(
-                        data), other_program.evaluate(data)))
+                    stats, _ = spearmanr(program.evaluate(
+                        data), other_program.evaluate(data))
+                    diversities.append(stats)
 
             self.fpf_spearman_diversity = np.mean(1 - np.array(diversities))
 
@@ -2205,7 +2273,7 @@ class SymbolicRegressor:
             p: 'Program'
             row = dict()
             row["Info Index"] = index + 1
-            row["Info Program"] = p.program
+            row["Info Program"] = str(p.program)
             row["Info Complexity"] = p.complexity
             row["Info Rank"] = p.rank
 
