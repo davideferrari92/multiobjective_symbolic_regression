@@ -417,33 +417,44 @@ class SymbolicRegressor:
         """
         pareto_front = list()
 
-        # Loop over the entire matrix, can be optimised to do only the triangular matrix
-        for p1 in self.population:
+        for index_p, p in enumerate(self.population):
+            p.programs_dominates = list()
+            p.programs_dominated_by = list()
+        
+        for index_p1, p1 in enumerate(self.population):
+            if self.verbose > 1:
+                print(f"\tPareto Fronts: computing dominance {(index_p1+1)/len(self.population):.1%}", end='\r')
+            
             p1.rank = np.inf
 
             if not p1.is_valid:
                 continue
-            p1.programs_dominates = list()
-            p1.programs_dominated_by = list()
-
-            for p2 in self.population:
+            for p2 in self.population[index_p1 + 1:]:
                 if p1 == p2 or not p2.is_valid:
                     continue
 
                 if self.dominance(p1, p2):
                     p1.programs_dominates.append(p2)
+                    p2.programs_dominated_by.append(p1)
                 elif self.dominance(p2, p1):
                     p1.programs_dominated_by.append(p2)
+                    p2.programs_dominates.append(p1)
 
             if len(p1.programs_dominated_by) == 0:
                 p1.rank = 1
                 pareto_front.append(p1)
+
+        if self.verbose > 1:
+            print(f"\tPareto Fronts: computing dominance {(index_p1+1)/len(self.population):.1%}. Completed!", end='\n')
 
         i = 1
 
         # Set the belonging pareto front to every element of the population
 
         while pareto_front:
+
+            if self.verbose > 1:
+                print(f"\tPareto Fronts: computing rank {i}", end='\r')
             next_pareto_front = list()
 
             for p1 in pareto_front:
@@ -452,6 +463,7 @@ class SymbolicRegressor:
                 for p2 in p1.programs_dominates:
                     if not p2.is_valid:
                         continue
+
                     p2.programs_dominated_by.remove(p1)
 
                     if len(p2.programs_dominated_by) == 0:
@@ -461,6 +473,9 @@ class SymbolicRegressor:
             i += 1
 
             pareto_front = next_pareto_front
+        
+        if self.verbose > 1:
+            print(f"\tPareto Fronts: computing rank {i}. Completed!", end='\n')
 
     def _crowding_distance(self, population: Population, rank_iter: int = 1):
         """
@@ -553,9 +568,6 @@ class SymbolicRegressor:
                     references).exclusive(points.copy().tolist())
             except ValueError:
                 hypervolume = [np.inf] * len(pareto_front)
-                # logging.warning(
-                #     f"ValueError computing hypervolume for rank {rank}")
-
             for program, hypervolume in zip(pareto_front, hypervolume):
                 program.exclusive_hypervolume = hypervolume
 
@@ -1015,13 +1027,13 @@ class SymbolicRegressor:
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
 
                     print(
-                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}', end='\r', flush=True)
+                        f'Offsprings generated: {q_size+self.population_size}/{self.population_size*2} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}', end='\r', flush=True)
                 time.sleep(.2)
 
             else:
                 if too_long:
                     logging.warning(
-                        f"Offsprings generation got too slow and was interrupted: {_elapsed}. {q_size}/{self.population_size} offsprings generated.")
+                        f"Offsprings generation got too slow and was interrupted: {_elapsed}. {q_size+self.population_size}/{self.population_size*2} offsprings generated.")
                     was_limited_str = ' (was limited by time)'
 
                 q_size = queue.qsize()
@@ -1030,7 +1042,7 @@ class SymbolicRegressor:
                         1, int(round(time.perf_counter() - before)))
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
                     print(
-                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
+                        f'Offsprings generated: {q_size+self.population_size}/{self.population_size*2} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
 
             for i in range(min(self.population_size, q_size)):
                 offsprings.append(queue.get())
@@ -1213,7 +1225,7 @@ class SymbolicRegressor:
                 self.population = self._select_final_population_NSGAII()
 
             elif self.genetic_algorithm == 'SMS-EMOEA':
-                self.population = self._select_final_population_SMS_EMOA()
+                self.population = self._select_final_population_SMS_EMOEA()
 
             self.times.loc[self.generation,
                            "time_second_selection_criterion_computation"] = time.perf_counter() - before
@@ -2290,7 +2302,7 @@ class SymbolicRegressor:
 
         return survivors
 
-    def _select_final_population_SMS_EMOA(self):
+    def _select_final_population_SMS_EMOEA(self):
         """
 
         Args:
@@ -2309,17 +2321,26 @@ class SymbolicRegressor:
         pareto_front: List[Program] = self.extract_pareto_front(
             population=self.population, rank=rank_iter)
 
+        perc_prog = 0
         while (len(survivors)+len(pareto_front) <= self.population_size) and pareto_front:
             survivors += pareto_front
             rank_iter += 1
             pareto_front = self.extract_pareto_front(
                 population=self.population, rank=rank_iter)
+            
+            perc_prog = len(survivors)/self.population_size
+            if self.verbose > 1:
+                print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}", end="\r")
 
         if not pareto_front or (len(survivors) == self.population_size):
             return survivors
 
         else:
-            while (len(survivors)+len(pareto_front) > self.population_size):
+            to_add = len(survivors)+len(pareto_front) - self.population_size
+            perc_to_fill = 1 - perc_prog
+            step = perc_to_fill/to_add
+
+            while len(survivors) + len(pareto_front) > self.population_size:
                 self._exclusive_hypervolume(
                     population=pareto_front, rank=rank_iter)
 
@@ -2327,12 +2348,27 @@ class SymbolicRegressor:
                     key=lambda p: p.exclusive_hypervolume, reverse=False)
 
                 pareto_front.pop(0)
+                perc_prog += step
+                if self.verbose > 1:
+                    print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}", end="\r")
 
             survivors += pareto_front
 
+            perc_prog = len(survivors)/self.population_size
+            if self.verbose > 1:
+                print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}", end="\r")
+
+        if self.verbose > 1:
+            print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}. Completed!", end="\n")
+
         for rank in range(1, rank_iter + 1):
+            if self.verbose > 1:
+                print(f"\tSelecting Final Population: finalizing {rank/(rank_iter):.1%}", end="\r")
             self._exclusive_hypervolume(population=survivors, rank=rank)
 
+        if self.verbose > 1:
+            print(f"\tSelecting Final Population: finalizing {rank/(rank_iter):.1%}. Completed!", end="\n")
+            
         return survivors
 
     def spearman_diversity(self, data: Union[dict, pd.Series, pd.DataFrame]) -> float:
