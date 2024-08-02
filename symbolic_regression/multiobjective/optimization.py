@@ -4,10 +4,11 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import sympy as sym
-from sympy.utilities.lambdify import lambdify
 from scipy.optimize import minimize
+from sympy.utilities.lambdify import lambdify
 
-from symbolic_regression.multiobjective.fitness.Regression import create_regression_weights
+from symbolic_regression.multiobjective.fitness.Regression import \
+    create_regression_weights
 
 warnings.filterwarnings("ignore")
 
@@ -52,8 +53,21 @@ def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weight
         - list
             List of the accuracy values
     '''
+    if task == 'regression:cox':
+        batch_size = data.shape[0]
+        status = constants_optimization_conf['status']
+        unique_target = np.sort(
+            data[target].loc[data[status] == True].unique())
+        powers = [len(np.where(data[target] == unique_target[el])[0])
+                  for el in range(len(unique_target))]
+        RJs_indices = [np.where(data[target] >= unique_target[el])[
+            0] for el in range(len(unique_target))]
+        DJs_indices = [np.where((data[target] == unique_target[el]) *
+                                (data[status] == True))[0] for el in range(len(unique_target))]
+    else:
+        batch_size = constants_optimization_conf['batch_size']
+
     learning_rate = constants_optimization_conf['learning_rate']
-    batch_size = constants_optimization_conf['batch_size']
     epochs = constants_optimization_conf['epochs']
     gradient_clip = constants_optimization_conf.get('gradient_clip', None)
     l1_param = constants_optimization_conf.get('l1_param', 0)
@@ -162,6 +176,26 @@ def SGD(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weight
                     np.nanmean(w_batch[i] * (sigma - y_batch[i]) * g)
                     for g in num_grad
                 ])
+            elif task == 'regression:cox':
+                DFs = [np.sum(y_pred[els]) for els in DJs_indices]
+                MEs = [np.mean(np.exp(y_pred)[els]) for els in DJs_indices]
+                REs = [np.sum(np.exp(y_pred)[els]) for els in RJs_indices]
+                EGs = [g*np.exp(y_pred) for g in num_grad]
+                MEGs = [np.array([np.mean(EG[els]) for EG in EGs])
+                        for els in DJs_indices]
+                REGs = [np.array([np.sum(EG[els]) for EG in EGs])
+                        for els in RJs_indices]
+                DGs = [np.array([np.sum((g*np.ones_like(y_pred))[els])
+                                for g in num_grad]) for els in DJs_indices]
+                F_TIDES = [np.sum(np.log((REs[el] -
+                                         np.expand_dims(np.arange(powers[el]), 1)*MEs[el]))) for el in range(len(powers))]
+                av_loss = - \
+                    np.sum(np.array([DFs[el]-F_TIDES[el]
+                           for el in range(len(powers))]))
+                TIDEs = [np.sum((REGs[el]-np.expand_dims(np.arange(powers[el]), 1) * MEGs[el]) /
+                                (REs[el]-np.expand_dims(np.arange(powers[el]), 1)*MEs[el]), 0) for el in range(len(powers))]
+                av_grad = -np.sum(np.array([DGs[el]-TIDEs[el]
+                                  for el in range(len(powers))]), 0)
 
             # try with new constants if loss is nan
             if np.isnan(av_loss):
@@ -226,9 +260,21 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
         - log: list
             The constants at each epoch
     '''
+    if task == 'regression:cox':
+        batch_size = data.shape[0]
+        status = constants_optimization_conf['status']
+        unique_target = np.sort(
+            data[target].loc[data[status] == True].unique())
+        powers = [len(np.where(data[target] == unique_target[el])[0])
+                  for el in range(len(unique_target))]
+        RJs_indices = [np.where(data[target] >= unique_target[el])[
+            0] for el in range(len(unique_target))]
+        DJs_indices = [np.where((data[target] == unique_target[el]) *
+                                (data[status] == True))[0] for el in range(len(unique_target))]
+    else:
+        batch_size = constants_optimization_conf['batch_size']
 
     learning_rate = constants_optimization_conf['learning_rate']
-    batch_size = constants_optimization_conf['batch_size']
     epochs = constants_optimization_conf['epochs']
     gradient_clip = constants_optimization_conf['gradient_clip']
     beta_1 = constants_optimization_conf['beta_1']
@@ -261,7 +307,7 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
 
     if weights:
         if bootstrap:
-            if task == 'regression:wmse' or task == 'regression:wrrmse' or task == 'regression:cox':
+            if task == 'regression:wmse' or task == 'regression:wrrmse':
                 w = create_regression_weights(
                     data=data, target=target, bins=10)
             elif task == 'binary:logistic':
@@ -353,6 +399,26 @@ def ADAM(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weigh
                     np.nanmean(w_batch[i] * (sigma - y_batch[i]) * g)
                     for g in num_grad
                 ])
+            elif task == 'regression:cox':
+                DFs = [np.sum(y_pred[els]) for els in DJs_indices]
+                MEs = [np.mean(np.exp(y_pred)[els]) for els in DJs_indices]
+                REs = [np.sum(np.exp(y_pred)[els]) for els in RJs_indices]
+                EGs = [g*np.exp(y_pred) for g in num_grad]
+                MEGs = [np.array([np.mean(EG[els]) for EG in EGs])
+                        for els in DJs_indices]
+                REGs = [np.array([np.sum(EG[els]) for EG in EGs])
+                        for els in RJs_indices]
+                DGs = [np.array([np.sum((g*np.ones_like(y_pred))[els])
+                                for g in num_grad]) for els in DJs_indices]
+                F_TIDES = [np.sum(np.log((REs[el] -
+                                         np.expand_dims(np.arange(powers[el]), 1)*MEs[el]))) for el in range(len(powers))]
+                av_loss = - \
+                    np.sum(np.array([DFs[el]-F_TIDES[el]
+                           for el in range(len(powers))]))
+                TIDEs = [np.sum((REGs[el]-np.expand_dims(np.arange(powers[el]), 1) * MEGs[el]) /
+                                (REs[el]-np.expand_dims(np.arange(powers[el]), 1)*MEs[el]), 0) for el in range(len(powers))]
+                av_grad = -np.sum(np.array([DGs[el]-TIDEs[el]
+                                  for el in range(len(powers))]), 0)
 
             # try with new constants if loss is nan
             if np.isnan(av_loss):
@@ -613,7 +679,7 @@ def SCIPY(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weig
 
     if weights:
         if bootstrap:
-            if task == 'regression:wmse' or task == 'regression:wrrmse' or task == 'regression:cox':
+            if task == 'regression:wmse' or task == 'regression:wrrmse':
                 w = create_regression_weights(
                     data=data, target=target, bins=10)
             elif task == 'binary:logistic':
@@ -649,15 +715,48 @@ def SCIPY(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weig
         if weights is not None:
             return -np.mean(weights*(y*np.log(sigma+1e-20) + (1.-y)*np.log(1.-sigma+1e-20)))
         return -np.mean(y*np.log(sigma+1e-20) + (1.-y)*np.log(1.-sigma+1e-20))
-        
-    if task == 'regression:wmse' or task == 'regression:wrrmse' or task == 'regression:cox':
+
+    def nll_min_CoxEfron(c, y, X, pyf_prog, DJs_indices, powers, RJs_indices):
+        n_features = X.shape[1]
+        n_constants = len(c)
+        split_X = np.split(X, n_features, 1)
+        split_c = np.split(c*np.ones_like(y), n_constants, 1)
+        y_pred = pyf_prog(tuple(split_X), tuple(split_c))
+        DFs = [np.sum(y_pred[els]) for els in DJs_indices]
+        MEs = [np.mean(np.exp(y_pred)[els]) for els in DJs_indices]
+        REs = [np.sum(np.exp(y_pred)[els]) for els in RJs_indices]
+        F_TIDES = [np.sum(np.log((REs[el]
+                                  - np.expand_dims(np.arange(powers[el]), 1)*MEs[el]))) for el in range(len(powers))]
+        LogLikelihood = np.sum(
+            np.array([DFs[el]-F_TIDES[el] for el in range(len(powers))]))
+
+        nll = -LogLikelihood
+        return nll
+
+    if task == 'regression:wmse' or task == 'regression:wrrmse':
         res = minimize(nll_min_regression, x0=constants, args=(
             y_true, X_data, pyf_prog, w), method='L-BFGS-B')
         constants = res.x
-    
+
     elif task == 'binary:logistic':
         res = minimize(nll_min_binary, x0=constants, args=(
             y_true, X_data, pyf_prog, w), method='L-BFGS-B')
         constants = res.x
+
+    elif task == 'regression:cox':
+        status = constants_optimization_conf['status']
+        unique_target = np.sort(
+            data[target].loc[data[status] == True].unique())
+        powers = [len(np.where(data[target] == unique_target[el])[0])
+                  for el in range(len(unique_target))]
+        RJs_indices = [np.where(data[target] >= unique_target[el])[
+            0] for el in range(len(unique_target))]
+        DJs_indices = [np.where((data[target] == unique_target[el]) *
+                                (data[status] == True))[0] for el in range(len(unique_target))]
+        res = minimize(nll_min_CoxEfron, x0=constants, args=(
+            y_true, X_data, pyf_prog, DJs_indices, powers, RJs_indices), method='L-BFGS-B')
+        constants = res.x
+
+    print(constants)
 
     return constants, None, None
