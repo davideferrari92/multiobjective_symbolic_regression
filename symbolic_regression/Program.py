@@ -371,12 +371,8 @@ class Program:
                 self.simplify(inplace=True)
             except ValueError:
                 self._override_is_valid = False
-                if validation:
-                    self.fitness_validation = {
-                        ftn.label: np.inf for ftn in self.fitness_functions}
-                elif not validation:
-                    self.fitness = {
-                        ftn.label: np.inf for ftn in self.fitness_functions}
+                self.fitness = {
+                    ftn.label: np.inf for ftn in self.fitness_functions}
                 return
 
         _converged: List[bool] = list()
@@ -396,14 +392,10 @@ class Program:
                 else:
                     fitness_value = ftn.evaluate(
                         program=self, data=data, pred=_export.get('pred'), validation=validation or validation_federated, inject=_export)
-                
+
                 fitness_value = round(fitness_value, 5) if not pd.isna(
                     fitness_value) else fitness_value
 
-            except KeyError:
-                import traceback
-                print(traceback.format_exc())
-                fitness_value = np.inf
             except Exception:
                 import traceback
                 print(traceback.format_exc())
@@ -494,7 +486,7 @@ class Program:
                 If True, the program will be evaluated using the logistic function
             - threshold: float  (default: None)
                 The threshold to use for the logistic function
-            
+
 
         Returns:
             - int, float
@@ -817,13 +809,13 @@ class Program:
         """
 
         if drop_by_similarity and self.similarity(other) > 0.99:
-             return True
+            return True
 
         for (a_label, a_fit), (b_label, b_fit) in zip(self.fitness.items(),
                                                       other.fitness.items()):
 
             # One difference is enough for them not to be identical
-            if abs(a_fit-b_fit) / abs(a_fit) > delta_fitness:
+            if abs(a_fit-b_fit) / abs(a_fit + 1e-8) > delta_fitness:
                 return False
 
         return True
@@ -902,13 +894,14 @@ class Program:
         """
         if not constants_optimization or not self.is_valid:
             return self
-        
+
         task = constants_optimization_conf['task']
         n_constants = len(self.get_constants(return_objects=False))
         n_features_used = len(self.features_used)
-        
+
         if n_constants > 40:
-            logging.debug('Program has more than 40 constants. Optimizing using ADAM')
+            logging.debug(
+                'Program has more than 40 constants. Optimizing using ADAM')
             constants_optimization = 'ADAM'
             constants_optimization_conf = {
                 'task': task,
@@ -965,11 +958,11 @@ class Program:
 
             def handler(signum, frame):
                 raise TimeoutError("Operation timed out")
-            
+
             class TimeoutError(Exception):
                 def __str__(self):
                     return ""
-            
+
             signal.signal(signal.SIGALRM, handler)
             signal.alarm(60)
 
