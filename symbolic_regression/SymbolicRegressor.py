@@ -639,6 +639,9 @@ class SymbolicRegressor:
             [p.complexity for p in self.population])
 
         for index, complexity_index in enumerate(complexities_index):
+            if self.verbose > 1:
+                print(
+                    f"\tDuplicates: computing duplicates {(index+1)/len(complexities_index):.1%}", end='\r')
             p: 'Program' = self.population[complexity_index]
 
             if p.is_valid and not p._is_duplicated:
@@ -654,6 +657,10 @@ class SymbolicRegressor:
                             delta_fitness=self.duplicates_delta_fitness,
                             drop_by_similarity=self.duplicates_drop_by_similarity,
                         )
+
+        if self.verbose > 1:
+            print(
+                f"\tDuplicates: computing duplicates {(index+1)/len(complexities_index):.1%}. Completed!", end='\n')
 
         if inplace:
             self.population: Population = Population(
@@ -674,6 +681,8 @@ class SymbolicRegressor:
             - inplace: bool (default False)
                 If True the population is updated, if False a new list is returned
         """
+        if self.verbose > 1:
+            print(f"\tInvalids: Removing invalids. Completed!", end='\r')
         if inplace:
             self.population: Population = Population(
                 filter(lambda p: p.is_valid == True, self.population))
@@ -1027,13 +1036,13 @@ class SymbolicRegressor:
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
 
                     print(
-                        f'Offsprings generated: {q_size+self.population_size}/{self.population_size*2} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}', end='\r', flush=True)
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s) {was_limited_str}', end='\r', flush=True)
                 time.sleep(.2)
 
             else:
                 if too_long:
                     logging.warning(
-                        f"Offsprings generation got too slow and was interrupted: {_elapsed}. {q_size+self.population_size}/{self.population_size*2} offsprings generated.")
+                        f"Offsprings generation got too slow and was interrupted: {_elapsed}. {q_size}/{self.population_size} offsprings generated.")
                     was_limited_str = ' (was limited by time)'
 
                 q_size = queue.qsize()
@@ -1042,7 +1051,7 @@ class SymbolicRegressor:
                         1, int(round(time.perf_counter() - before)))
                     _elapsed = datetime.timedelta(seconds=_elapsed_s)
                     print(
-                        f'Offsprings generated: {q_size+self.population_size}/{self.population_size*2} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
+                        f'Offsprings generated: {q_size}/{self.population_size} ({_elapsed}, {round(q_size/_elapsed_s, 2)} /s). Completed!  {was_limited_str}   ', flush=True)
 
             for i in range(min(self.population_size, q_size)):
                 offsprings.append(queue.get())
@@ -2187,13 +2196,15 @@ class SymbolicRegressor:
                     print(f'\t{p.fitness_validation}')
                 print()
 
-    def load_population_from_summary(self, summary: pd.DataFrame):
+    def load_population_from_summary(self, summary: pd.DataFrame, inplace=True):
         """
         This method loads the population from a summary DataFrame
 
         Args:
             - summary: pd.DataFrame
                 The summary DataFrame from which to load the population
+            - inplace: bool (default True)
+                Whether to load the population in place or to return a new instance
         Returns:
             - None
         """
@@ -2210,7 +2221,11 @@ class SymbolicRegressor:
 
             new_population.append(p)
 
-        self.population = new_population
+        if inplace:
+            self.population = new_population
+            return self.population
+        
+        return new_population
 
     def _select_final_population_NSGAII(self):
         """
@@ -2232,13 +2247,21 @@ class SymbolicRegressor:
         pareto_front: List[Program] = self.extract_pareto_front(
             population=self.population, rank=rank_iter)
 
+        perc_prog = 0
         while (len(survivors)+len(pareto_front) <= self.population_size) and pareto_front:
             survivors += pareto_front
             rank_iter += 1
             pareto_front = self.extract_pareto_front(
                 population=self.population, rank=rank_iter)
+            
+            perc_prog = len(survivors)/self.population_size
+            if self.verbose > 1:
+                print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}", end="\r")
 
         if not pareto_front or (len(survivors) == self.population_size):
+            if self.verbose > 1:
+                print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}. Completed!", end="\r")
+
             return survivors
 
         else:
@@ -2249,11 +2272,23 @@ class SymbolicRegressor:
                 key=lambda p: p.crowding_distance, reverse=False)
 
             survivors += pareto_front[:self.population_size-len(survivors)]
+            perc_prog = len(survivors)/self.population_size
+            if self.verbose > 1:
+                print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}", end="\r")
+
+        if self.verbose > 1:
+            print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}. Completed!", end="\n")
 
         for rank in range(1, rank_iter + 1):
+            if self.verbose > 1:
+                print(f"\tSelecting Final Population: computing crowding distance {rank/(rank_iter):.1%}", end="\r")
+            
             self._crowding_distance(
                 population=survivors, rank_iter=rank)
 
+        if self.verbose > 1:
+            print(f"\tSelecting Final Population: computing crowding distance {rank/(rank_iter):.1%}. Completed!", end="\n")
+        
         return survivors
 
     def _select_final_population_NSGAII_iterative(self):
@@ -2333,6 +2368,9 @@ class SymbolicRegressor:
                 print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}", end="\r")
 
         if not pareto_front or (len(survivors) == self.population_size):
+            if self.verbose > 1:
+                print(f"\tSelecting Final Population: composing the population {perc_prog:.1%}. Completed!", end="\r")
+
             return survivors
 
         else:
@@ -2363,11 +2401,11 @@ class SymbolicRegressor:
 
         for rank in range(1, rank_iter + 1):
             if self.verbose > 1:
-                print(f"\tSelecting Final Population: finalizing {rank/(rank_iter):.1%}", end="\r")
+                print(f"\tSelecting Final Population: computing hypervolume {rank/(rank_iter):.1%}", end="\r")
             self._exclusive_hypervolume(population=survivors, rank=rank)
 
         if self.verbose > 1:
-            print(f"\tSelecting Final Population: finalizing {rank/(rank_iter):.1%}. Completed!", end="\n")
+            print(f"\tSelecting Final Population: computing hypervolume {rank/(rank_iter):.1%}. Completed!", end="\n")
             
         return survivors
 
