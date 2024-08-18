@@ -13,19 +13,30 @@ class SymbolicEnsembler:
     def __init__(self, programs_selection: List[Program]) -> None:
         self.programs_selection = programs_selection
 
-    def predict(self, data, threshold: float = None, logistic: bool = False, voting_threshold: float = None):
+    def predict(self,
+                data,
+                logistic: bool = False,
+                raw: bool = False,
+                threshold: float = None,
+                voting_threshold: float = None,
+                min_proba: float = None,
+                ):
         """
         Predicts the output for the given input data using the ensemble of programs.
 
         Parameters:
         - data: Union[pd.DataFrame, pd.Series, Dict]
             The input data for which predictions need to be made.
-        - threshold: float  (default=None)
-            The threshold value to be used for binary classification. If None, regression predictions are made.
         - logistic: bool (default=False)
             If True, the logistic function is applied to the predictions.
+        - raw: bool (default=False)
+            If True, the raw predictions of each program are returned.
+        - threshold: float  (default=None)
+            The threshold value to be used for binary classification. If None, regression predictions are made.
         - voting_threshold: float (default=None)
             The threshold value to be used for voting. If None, regression predictions are made.
+        - min_proba: float (default=None)
+            The minimum odd value to be used for voting. If None, regression predictions are made
 
         Returns:
         - predictions: pd.Series
@@ -41,24 +52,52 @@ class SymbolicEnsembler:
             else:
                 predictions[index] = program.predict(data)
 
-        if isinstance(threshold, float) and 0 <= threshold <= 1:
+        if raw:
+            return predictions
+        if threshold is None:
+            predictions = predictions.mean(axis=1)
+            if min_proba is not None:
+                predictions[(predictions >= (1 - min_proba)) & (predictions <= min_proba)] = np.nan
+            return predictions
+
+        if not isinstance(threshold, float):
+            raise TypeError(
+                'Invalid threshold. Threshold should be a float.')
+
+        if not 0 <= threshold <= 1:
+            raise ValueError(
+                'Invalid threshold. Threshold should be between 0 and 1.')
+
+        if voting_threshold is None:
+            predictions = (predictions.mean(axis=1) > threshold).astype(int)
+            return predictions
+        else:
             predictions = (predictions > threshold).astype(int)
 
-            predictions = predictions.mean(axis=1)
-            if isinstance(voting_threshold, float) and 0 <= voting_threshold <= 1:
-                predictions = predictions.apply(lambda x: 1 if x >= voting_threshold else (0 if x <= (1 - voting_threshold) else np.nan))
-            
+        if not isinstance(voting_threshold, float):
+            raise TypeError(
+                'Invalid voting threshold. Voting threshold should be a float.')
+
+        def cutoff(x, threshold):
+            if x >= threshold:
+                return 1
+            elif x <= (1 - threshold):
+                return 0
+            else:
+                return np.nan
+
+        if 0.5 <= voting_threshold <= 1:
+            # return predictions.mean(axis=1)
+            predictions = predictions.mean(axis=1).apply(
+                cutoff, threshold=voting_threshold)
+            return predictions
+
         else:
-            predictions = predictions.mean(axis=1)
+            raise ValueError(
+                'Invalid voting threshold. Voting threshold should be between 0.5 and 1.')
 
-            if isinstance(voting_threshold, float) and 0 <= voting_threshold <= 1:
-                predictions = predictions.apply(lambda x: 1 if x >= voting_threshold else (0 if x <= (1 - voting_threshold) else np.nan))
-            
-        return predictions
-
-
-    def evaluate(self, data, threshold: float = None, logistic: bool = False, voting_threshold: float = None):
-        return self.predict(data, threshold, logistic, voting_threshold)
+    def evaluate(self, data, threshold: float = None, logistic: bool = False, voting_threshold: float = None, raw: bool = False, min_proba: float = None):
+        return self.predict(data, threshold, logistic, voting_threshold, raw, min_proba)
 
     def compute_fitness(self, data: Union[pd.DataFrame, pd.Series, Dict], fitness_functions: List[BaseFitness], validation: bool = False):
         """
