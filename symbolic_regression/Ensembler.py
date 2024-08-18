@@ -97,6 +97,30 @@ class SymbolicEnsembler:
             raise ValueError(
                 'Invalid voting threshold. Voting threshold should be between 0.5 and 1.')
 
+    def predict_proba(self, data):
+        """
+        Predicts the probability of the output for the given input data using the ensemble of programs.
+
+        Parameters:
+        - data: Union[pd.DataFrame, pd.Series, Dict]
+            The input data for which predictions need to be made.
+
+        Returns:
+        - predictions: pd.Series
+            The predicted probability of the output for the given input data.
+
+        """
+
+        predictions = pd.DataFrame()
+        for index, program in enumerate(self.programs_selection):
+            predictions[index] = program.predict(data=data, logistic=True)
+
+        predicted = pd.DataFrame()
+        predicted['proba_0'] = predictions.mean(axis=1)
+        predicted['proba_1'] = 1 - predicted['proba_0']
+        return predicted
+
+
     def evaluate(self,
                  data,
                  logistic: bool = False,
