@@ -757,6 +757,4 @@ def SCIPY(program, data: Union[dict, pd.Series, pd.DataFrame], target: str, weig
             y_true, X_data, pyf_prog, DJs_indices, powers, RJs_indices), method='L-BFGS-B')
         constants = res.x
 
-    print(constants)
-
     return constants, None, None
