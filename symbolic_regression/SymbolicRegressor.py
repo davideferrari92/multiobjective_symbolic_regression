@@ -504,7 +504,7 @@ class SymbolicRegressor:
 
                 # Highest fitness first for each objective
                 pareto_front.sort(
-                    key=lambda p: p.fitness[fitness_label], reverse=True)
+                    key=lambda p: p.fitness[fitness_label], reverse=False)
 
                 norm = pareto_front[0].fitness[fitness_label] - \
                     pareto_front[-1].fitness[fitness_label] + 1e-20
@@ -641,7 +641,7 @@ class SymbolicRegressor:
         for index, complexity_index in enumerate(complexities_index):
             if self.verbose > 1:
                 print(
-                    f"\tDuplicates: computing duplicates {(index+1)/len(complexities_index):.1%}", end='\r')
+                    f"\tDuplicates: finding duplicates {(index+1)/len(complexities_index):.1%}", end='\r')
             p: 'Program' = self.population[complexity_index]
 
             if p.is_valid and not p._is_duplicated:
@@ -660,8 +660,8 @@ class SymbolicRegressor:
 
         if self.verbose > 1:
             print(
-                f"\tDuplicates: computing duplicates {(index+1)/len(complexities_index):.1%}. Completed!", end='\n')
-
+                f"\tDuplicates: finding duplicates {(index+1)/len(complexities_index):.1%}. Completed!", end='\n')
+            
         if inplace:
             self.population: Population = Population(
                 filter(lambda p: p._is_duplicated == False, self.population))
@@ -682,7 +682,7 @@ class SymbolicRegressor:
                 If True the population is updated, if False a new list is returned
         """
         if self.verbose > 1:
-            print(f"\tInvalids: Removing invalids. Completed!", end='\r')
+            print(f"\tInvalids: removing invalids. Completed!", end='\n')
         if inplace:
             self.population: Population = Population(
                 filter(lambda p: p.is_valid == True, self.population))
@@ -961,7 +961,7 @@ class SymbolicRegressor:
                 print("#" * len(timing_str))
             if self.verbose > 0:
                 print(
-                    f"{self.client_name}: starting generation {self.generation}/{self.generations_to_train}", end='\r' if self.verbose == 1 else '\n', flush=True)
+                    f"{self.client_name}: starting generation {self.generation}/{self.generations_to_train} ({self.genetic_algorithm})", end='\r' if self.verbose == 1 else '\n', flush=True)
 
             before = time.perf_counter()
 
