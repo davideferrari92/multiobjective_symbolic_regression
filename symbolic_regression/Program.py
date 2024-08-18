@@ -492,7 +492,7 @@ class Program:
             - int, float
                 The result of the prediction
         """
-        return self.evaluate(data=data)
+        return self.evaluate(data=data, logistic=logistic, threshold=threshold)
 
     def predict_proba(self, data: Union[dict, pd.Series, pd.DataFrame]) -> Union[int, float]:
         """ This function predict the value of the program on the given data.
@@ -506,7 +506,11 @@ class Program:
             - int, float
                 The result of the prediction
         """
-        return self.evaluate(data=data, logistic=True)
+        evaluated = pd.DataFrame()
+        evaluated['proba_0'] = self.to_logistic().evaluate(data=data, logistic=True)
+        evaluated['proba_1'] = 1 - evaluated['proba_0']
+
+        return evaluated
 
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame], logistic: bool = False, threshold: float = None) -> Union[int, float]:
         """ This function evaluate the program on the given data.
