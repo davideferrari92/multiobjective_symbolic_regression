@@ -510,7 +510,7 @@ class Program:
         evaluated['proba_1'] = self.to_logistic().evaluate(data=data, logistic=True)
         evaluated['proba_0'] = 1 - evaluated['proba_1']
 
-        return evaluated
+        return evaluated[['proba_0', 'proba_1']]
 
     def evaluate(self, data: Union[dict, pd.Series, pd.DataFrame], logistic: bool = False, threshold: float = None) -> Union[int, float]:
         """ This function evaluate the program on the given data.
