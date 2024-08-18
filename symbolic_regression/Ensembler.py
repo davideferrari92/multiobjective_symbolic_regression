@@ -57,7 +57,8 @@ class SymbolicEnsembler:
         if threshold is None:
             predictions = predictions.mean(axis=1)
             if min_proba is not None:
-                predictions[(predictions >= (1 - min_proba)) & (predictions <= min_proba)] = np.nan
+                predictions[(predictions >= (1 - min_proba)) &
+                            (predictions <= min_proba)] = np.nan
             return predictions
 
         if not isinstance(threshold, float):
@@ -96,8 +97,15 @@ class SymbolicEnsembler:
             raise ValueError(
                 'Invalid voting threshold. Voting threshold should be between 0.5 and 1.')
 
-    def evaluate(self, data, threshold: float = None, logistic: bool = False, voting_threshold: float = None, raw: bool = False, min_proba: float = None):
-        return self.predict(data, threshold, logistic, voting_threshold, raw, min_proba)
+    def evaluate(self,
+                 data,
+                 logistic: bool = False,
+                 raw: bool = False,
+                 threshold: float = None,
+                 voting_threshold: float = None,
+                 min_proba: float = None,
+                 ):
+        return self.predict(data=data, logistic=logistic, raw=raw, threshold=threshold, voting_threshold=voting_threshold, min_proba=min_proba)
 
     def compute_fitness(self, data: Union[pd.DataFrame, pd.Series, Dict], fitness_functions: List[BaseFitness], validation: bool = False):
         """
