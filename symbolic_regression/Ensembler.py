@@ -116,8 +116,8 @@ class SymbolicEnsembler:
             predictions[index] = program.predict(data=data, logistic=True)
 
         predicted = pd.DataFrame()
-        predicted['proba_0'] = predictions.mean(axis=1)
-        predicted['proba_1'] = 1 - predicted['proba_0']
+        predicted['proba_1'] = predictions.mean(axis=1)
+        predicted['proba_0'] = 1 - predicted['proba_1']
         return predicted
 
 

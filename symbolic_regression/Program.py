@@ -507,8 +507,8 @@ class Program:
                 The result of the prediction
         """
         evaluated = pd.DataFrame()
-        evaluated['proba_0'] = self.to_logistic().evaluate(data=data, logistic=True)
-        evaluated['proba_1'] = 1 - evaluated['proba_0']
+        evaluated['proba_1'] = self.to_logistic().evaluate(data=data, logistic=True)
+        evaluated['proba_0'] = 1 - evaluated['proba_1']
 
         return evaluated
 
