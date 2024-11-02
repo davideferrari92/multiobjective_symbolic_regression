@@ -111,15 +111,21 @@ class SymbolicEnsembler:
 
         """
 
-        predictions = pd.DataFrame()
+        probas = [pd.DataFrame()]
         for index, program in enumerate(self.programs_selection):
-            predictions[index] = program.predict(data=data, logistic=True)
+            # we iterate over program and append dataframe of probas
+            # TODO: reset index is necessary, maybe check if returned obj is a dataframe
+            proba = program.predict_proba(data=data).reset_index()
+            probas.append(proba)
+        
+        proba = pd.concat(probas)  # we concat every proba
+        # here using the row number of instance proba we aggregate over program probas
+        proba = proba.groupby(
+            level=list(range(len(proba.index.names))),
+            observed=True) \
+            .aggregate('mean')
 
-        predicted = pd.DataFrame()
-        predicted['proba_1'] = predictions.mean(axis=1)
-        predicted['proba_0'] = 1 - predicted['proba_1']
-        return predicted[['proba_0', 'proba_1']]
-
+        return proba[['proba_0', 'proba_1']]
 
     def evaluate(self,
                  data,
